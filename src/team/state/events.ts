@@ -1,18 +1,16 @@
 import { existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import type { TeamEvent } from './types.js';
+import { isWakeableTeamEventType } from '../contracts.js';
 import { teamEventLogPath, appendTeamEvent } from '../state.js';
 
-const CANONICAL_WAKE_EVENT_TYPES = new Set<TeamEvent['type']>([
-  'worker_state_changed',
-  'task_completed',
-  'task_failed',
-  'worker_stopped',
-  'message_received',
-  'leader_notification_deferred',
-  'all_workers_idle',
-  'team_leader_nudge',
-]);
+interface TeamEventReadOptions {
+  afterEventId?: string;
+  wakeableOnly?: boolean;
+  type?: TeamEvent['type'] | 'worker_idle';
+  worker?: string;
+  taskId?: string;
+}
 
 function asWorkerState(value: unknown): TeamEvent['state'] | undefined {
   return typeof value === 'string'
@@ -74,10 +72,23 @@ function isDuplicateNormalizedEvent(previous: TeamEvent | null, current: TeamEve
     && current.source_type === 'worker_idle';
 }
 
+function matchesEventType(event: TeamEvent, type: TeamEventReadOptions['type']): boolean {
+  if (!type) return true;
+  if (event.type === type) return true;
+  return type === 'worker_idle' && event.source_type === 'worker_idle';
+}
+
+function matchesEventQuery(event: TeamEvent, opts: TeamEventReadOptions): boolean {
+  if (!matchesEventType(event, opts.type)) return false;
+  if (opts.worker && event.worker !== opts.worker) return false;
+  if (opts.taskId && event.task_id !== opts.taskId) return false;
+  return true;
+}
+
 export async function readTeamEvents(
   teamName: string,
   cwd: string,
-  opts: { afterEventId?: string; wakeableOnly?: boolean } = {},
+  opts: TeamEventReadOptions = {},
 ): Promise<TeamEvent[]> {
   const path = teamEventLogPath(teamName, cwd);
   if (!existsSync(path)) return [];
@@ -105,7 +116,8 @@ export async function readTeamEvents(
     }
     if (isDuplicateNormalizedEvent(previous, normalized)) continue;
     previous = normalized;
-    if (opts.wakeableOnly && !CANONICAL_WAKE_EVENT_TYPES.has(normalized.type)) continue;
+    if (opts.wakeableOnly && !isWakeableTeamEventType(normalized.type)) continue;
+    if (!matchesEventQuery(normalized, opts)) continue;
     events.push(normalized);
   }
 
@@ -120,14 +132,28 @@ export async function getLatestTeamEventCursor(teamName: string, cwd: string): P
 export async function waitForTeamEvent(
   teamName: string,
   cwd: string,
-  opts: { afterEventId?: string; timeoutMs: number; pollMs?: number; wakeableOnly?: boolean },
+  opts: {
+    afterEventId?: string;
+    timeoutMs: number;
+    pollMs?: number;
+    wakeableOnly?: boolean;
+    type?: TeamEvent['type'] | 'worker_idle';
+    worker?: string;
+    taskId?: string;
+  },
 ): Promise<{ status: 'event' | 'timeout'; event?: TeamEvent; cursor: string }> {
   const deadline = Date.now() + Math.max(0, Math.floor(opts.timeoutMs));
   let pollMs = Math.max(25, Math.floor(opts.pollMs ?? 100));
   const baseline = opts.afterEventId ?? await getLatestTeamEventCursor(teamName, cwd);
 
   while (Date.now() <= deadline) {
-    const events = await readTeamEvents(teamName, cwd, { afterEventId: baseline, wakeableOnly: opts.wakeableOnly !== false });
+    const events = await readTeamEvents(teamName, cwd, {
+      afterEventId: baseline,
+      wakeableOnly: opts.wakeableOnly !== false,
+      type: opts.type,
+      worker: opts.worker,
+      taskId: opts.taskId,
+    });
     const event = events[0];
     if (event) {
       return { status: 'event', event, cursor: event.event_id };

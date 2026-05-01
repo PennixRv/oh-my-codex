@@ -1,7 +1,7 @@
 /**
- * Idle Pane Nudge for Team MCP Wait
+ * Idle Pane Nudge for team runtime monitoring.
  *
- * Detects idle teammate panes during omx_run_team_wait polling and sends
+ * Detects idle teammate panes during background team monitoring and sends
  * tmux send-keys continuation nudges. Only nudges worker panes (never the
  * leader) in the current team session.
  *
@@ -12,6 +12,7 @@
  */
 
 import { execFile } from 'child_process';
+import { buildCapturePaneArgv } from '../scripts/tmux-hook-engine.js';
 import { paneLooksReady, paneHasActiveTask, sendToWorker } from './tmux-session.js';
 
 // ---------------------------------------------------------------------------
@@ -30,7 +31,7 @@ export interface NudgeConfig {
 export const DEFAULT_NUDGE_CONFIG: NudgeConfig = {
   delayMs: 30_000,
   maxCount: 3,
-  message: 'Continue working on your assigned task.',
+  message: 'Next: read your inbox/mailbox, continue your assigned task now, and if blocked send the leader a concrete status update.',
 };
 
 // ---------------------------------------------------------------------------
@@ -40,7 +41,7 @@ export const DEFAULT_NUDGE_CONFIG: NudgeConfig = {
 /** Capture the last 80 lines of a tmux pane. Returns '' on error. */
 export function capturePane(paneId: string): Promise<string> {
   return new Promise((resolve) => {
-    execFile('tmux', ['capture-pane', '-t', paneId, '-p', '-S', '-80'], (err, stdout) => {
+    execFile('tmux', buildCapturePaneArgv(paneId, 80), (err, stdout) => {
       if (err) resolve('');
       else resolve(stdout ?? '');
     });

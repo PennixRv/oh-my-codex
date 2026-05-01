@@ -43,16 +43,24 @@ describe('isHookPluginsEnabled', () => {
     assert.equal(isHookPluginsEnabled({ [HOOK_PLUGIN_ENABLE_ENV]: '0' }), false);
   });
 
-  it('returns false for empty string', () => {
-    assert.equal(isHookPluginsEnabled({ [HOOK_PLUGIN_ENABLE_ENV]: '' }), false);
+  it('returns true for empty string', () => {
+    assert.equal(isHookPluginsEnabled({ [HOOK_PLUGIN_ENABLE_ENV]: '' }), true);
   });
 
-  it('returns false when env var is missing', () => {
-    assert.equal(isHookPluginsEnabled({}), false);
+  it('returns true when env var is missing', () => {
+    assert.equal(isHookPluginsEnabled({}), true);
   });
 
-  it('returns false for arbitrary string', () => {
-    assert.equal(isHookPluginsEnabled({ [HOOK_PLUGIN_ENABLE_ENV]: 'enabled' }), false);
+  it('returns true for arbitrary string', () => {
+    assert.equal(isHookPluginsEnabled({ [HOOK_PLUGIN_ENABLE_ENV]: 'enabled' }), true);
+  });
+
+  it('returns false for "false"', () => {
+    assert.equal(isHookPluginsEnabled({ [HOOK_PLUGIN_ENABLE_ENV]: 'false' }), false);
+  });
+
+  it('returns false for "no"', () => {
+    assert.equal(isHookPluginsEnabled({ [HOOK_PLUGIN_ENABLE_ENV]: 'no' }), false);
   });
 });
 

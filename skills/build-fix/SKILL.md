@@ -17,12 +17,12 @@ This skill activates when:
 
 ## What It Does
 
-## GPT-5.4 Guidance Alignment
+## GPT-5.5 Guidance Alignment
 
-- Default to concise, evidence-dense progress and completion reporting unless the user or risk level requires more detail.
+- Default to outcome-first progress and completion reporting: state the target result, evidence, validation status, and stop condition before adding process detail.
 - Treat newer user task updates as local overrides for the active workflow branch while preserving earlier non-conflicting constraints.
-- If correctness depends on additional inspection, retrieval, execution, or verification, keep using the relevant tools until the build-fix workflow is grounded.
-- Continue through clear, low-risk, reversible next steps automatically; ask only when the next step is materially branching, destructive, or preference-dependent.
+- If correctness depends on additional inspection, retrieval, execution, or verification, keep using the relevant tools until the build-fix workflow is grounded; stop once enough evidence exists.
+- Continue through clear, low-risk, reversible next steps automatically; ask only when the next step is materially branching, destructive, credentialed, external-production, or preference-dependent.
 
 Delegates to the `build-fixer` agent (STANDARD tier) to:
 
@@ -48,6 +48,12 @@ Delegates to the `build-fixer` agent (STANDARD tier) to:
    - Run the project's type check command after each fix
    - Ensure no new errors introduced
    - Stop when build passes
+
+## Command Guidance
+
+- Prefer `omx sparkshell` for noisy build/typecheck runs, repository search/listing, and bounded read-only inspection when summary output is enough.
+- Use raw shell when exact stdout/stderr, shell composition, dependency installation, or low-level debugging fidelity is required.
+- If `omx sparkshell` returns incomplete, ambiguous, or `summary unavailable` output, retry with a more precise command or the raw shell immediately.
 
 ## Agent Delegation
 

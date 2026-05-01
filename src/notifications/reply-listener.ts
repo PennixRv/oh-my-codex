@@ -30,7 +30,14 @@ import {
   removeMessagesByPane,
   pruneStale,
 } from './session-registry.js';
+import {
+  NO_TRACKED_SESSION_MESSAGE,
+  buildDiscordSessionStatusReply,
+  isDiscordStatusCommand,
+} from './session-status.js';
 import { parseMentionAllowedMentions } from './config.js';
+import { parseTmuxTail } from './formatter.js';
+import { spawnPlatformCommandSync } from '../utils/platform-command.js';
 import type { ReplyConfig } from './types.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -63,6 +70,10 @@ const DEFAULT_REPLY_RATE_LIMIT_PER_MINUTE = 10;
 const MIN_REPLY_MAX_MESSAGE_LENGTH = 1;
 const MAX_REPLY_MAX_MESSAGE_LENGTH = 4_000;
 const DEFAULT_REPLY_MAX_MESSAGE_LENGTH = 500;
+const REPLY_ACK_CAPTURE_LINES = 200;
+const REPLY_ACK_SUMMARY_MAX_CHARS = 700;
+const REPLY_ACK_PREFIX = 'Injected into Codex CLI session.';
+const REPLY_ACK_FALLBACK = 'Recent output summary unavailable.';
 
 export interface ReplyListenerState {
   isRunning: boolean;
@@ -265,18 +276,36 @@ const DAEMON_IDENTITY_MARKER = 'pollLoop';
  * inspecting its command line for the daemon identity marker. Returns false if
  * the process cannot be positively identified (safe default).
  */
-export function isReplyListenerProcess(pid: number): boolean {
+export function isReplyListenerProcess(
+  pid: number,
+  options: {
+    platform?: NodeJS.Platform;
+    env?: NodeJS.ProcessEnv;
+    existsImpl?: typeof existsSync;
+    spawnImpl?: typeof spawnSync;
+  } = {},
+): boolean {
   try {
-    if (process.platform === 'linux') {
+    const platform = options.platform ?? process.platform;
+    if (platform === 'linux') {
       // NUL-separated argv available without spawning a subprocess
       const cmdline = readFileSync(`/proc/${pid}/cmdline`, 'utf-8');
       return cmdline.includes(DAEMON_IDENTITY_MARKER);
     }
+    if (process.platform === 'win32') return false;
     // macOS and other POSIX systems
-    const result = spawnSync('ps', ['-p', String(pid), '-o', 'args='], {
-      encoding: 'utf-8',
-      timeout: 3000,
-    });
+    const { result } = spawnPlatformCommandSync(
+      'ps',
+      ['-p', String(pid), '-o', 'args='],
+      {
+        encoding: 'utf-8',
+        timeout: 3000,
+      },
+      platform,
+      options.env,
+      options.existsImpl,
+      options.spawnImpl,
+    );
     if (result.status !== 0 || result.error) return false;
     return (result.stdout ?? '').includes(DAEMON_IDENTITY_MARKER);
   } catch {
@@ -321,7 +350,12 @@ export function sanitizeReplyInput(text: string): string {
 // Rate Limiting
 // ============================================================================
 
-class RateLimiter {
+export interface ReplyListenerRateLimiter {
+  canProceed(): boolean;
+  reset(): void;
+}
+
+export class RateLimiter implements ReplyListenerRateLimiter {
   private timestamps: number[] = [];
   private readonly windowMs = 60 * 1000;
 
@@ -340,9 +374,94 @@ class RateLimiter {
   }
 }
 
+
 // ============================================================================
 // Injection
 // ============================================================================
+
+interface ReplyAcknowledgementDeps {
+  capturePaneContentImpl?: typeof capturePaneContent;
+  parseTmuxTailImpl?: typeof parseTmuxTail;
+}
+
+export interface ReplyListenerDiscordPollDeps {
+  fetchImpl?: typeof fetch;
+  lookupByMessageIdImpl?: typeof lookupByMessageId;
+  injectReplyImpl?: typeof injectReply;
+  captureReplyAcknowledgementSummaryImpl?: typeof captureReplyAcknowledgementSummary;
+  formatReplyAcknowledgementImpl?: typeof formatReplyAcknowledgement;
+  writeDaemonStateImpl?: typeof writeDaemonState;
+  logImpl?: typeof log;
+}
+
+export interface ReplyListenerTelegramPollDeps {
+  httpsRequestImpl?: typeof httpsRequest;
+  lookupByMessageIdImpl?: typeof lookupByMessageId;
+  injectReplyImpl?: typeof injectReply;
+  captureReplyAcknowledgementSummaryImpl?: typeof captureReplyAcknowledgementSummary;
+  formatReplyAcknowledgementImpl?: typeof formatReplyAcknowledgement;
+  writeDaemonStateImpl?: typeof writeDaemonState;
+  logImpl?: typeof log;
+}
+
+export interface ReplyListenerPollDeps {
+  fetchImpl?: typeof fetch;
+  httpsRequestImpl?: typeof httpsRequest;
+  injectReplyImpl?: typeof injectReply;
+  buildSessionStatusReplyImpl?: typeof buildDiscordSessionStatusReply;
+  captureReplyAcknowledgementSummaryImpl?: typeof captureReplyAcknowledgementSummary;
+  lookupByMessageIdImpl?: typeof lookupByMessageId;
+  writeDaemonStateImpl?: typeof writeDaemonState;
+  parseMentionAllowedMentionsImpl?: typeof parseMentionAllowedMentions;
+  logImpl?: typeof log;
+}
+
+const SENSITIVE_KEY_PATTERN = /(["']?(?:api[_-]?key|token|secret|password|credentials?|authorization)["']?\s*[=:]\s*)(?:"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|[^\n]+)/gi;
+const SENSITIVE_TOKEN_PATTERNS: RegExp[] = [
+  /(?:sk-(?:proj-|live-|test-)?|ghp_|gho_|ghs_|ghu_|github_pat_|xox[bpsar]-|glpat-|AKIA[A-Z0-9])\S+/g,
+];
+
+export function redactSensitiveTokens(text: string): string {
+  const withoutKeyedSecrets = text.replace(SENSITIVE_KEY_PATTERN, (match, prefix: string) => {
+    const value = match.slice(prefix.length).trimStart();
+    const quote = value.startsWith('"') ? '"' : value.startsWith('\'') ? '\'' : '';
+    return `${prefix}${quote}[REDACTED]${quote}`;
+  });
+  return SENSITIVE_TOKEN_PATTERNS.reduce(
+    (t, re) => t.replace(re, '[REDACTED]'),
+    withoutKeyedSecrets,
+  );
+}
+
+export function captureReplyAcknowledgementSummary(
+  paneId: string,
+  deps: ReplyAcknowledgementDeps = {},
+): string | null {
+  const capturePaneContentImpl = deps.capturePaneContentImpl ?? capturePaneContent;
+  const parseTmuxTailImpl = deps.parseTmuxTailImpl ?? parseTmuxTail;
+  const raw = capturePaneContentImpl(paneId, REPLY_ACK_CAPTURE_LINES);
+  if (!raw) return null;
+
+  const summary = redactSensitiveTokens(
+    parseTmuxTailImpl(raw)
+      .replace(/\r/g, '')
+      .replace(/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/g, '')
+      .trim(),
+  );
+
+  if (!summary) return null;
+  if (summary.length <= REPLY_ACK_SUMMARY_MAX_CHARS) return summary;
+
+  return `${summary.slice(0, REPLY_ACK_SUMMARY_MAX_CHARS - 1).trimEnd()}…`;
+}
+
+export function formatReplyAcknowledgement(summary: string | null): string {
+  if (!summary) {
+    return `${REPLY_ACK_PREFIX}\n\n${REPLY_ACK_FALLBACK}`;
+  }
+
+  return `${REPLY_ACK_PREFIX}\n\nRecent output:\n${summary}`;
+}
 
 function injectReply(
   paneId: string,
@@ -373,27 +492,84 @@ function injectReply(
   return success;
 }
 
+async function postDiscordReplyMessage(
+  config: ReplyListenerDaemonConfig,
+  replyToMessageId: string,
+  content: string,
+  deps: {
+    fetchImpl: typeof fetch;
+    logImpl: typeof log;
+  },
+): Promise<void> {
+  try {
+    const response = await deps.fetchImpl(
+      `https://discord.com/api/v10/channels/${config.discordChannelId}/messages`,
+      {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bot ${config.discordBotToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          content,
+          message_reference: { message_id: replyToMessageId },
+          allowed_mentions: { parse: [] as string[] },
+        }),
+        signal: AbortSignal.timeout(5000),
+      },
+    );
+
+    if (!response.ok) {
+      deps.logImpl(`WARN: Failed to send Discord reply message: HTTP ${response.status}`);
+    }
+  } catch (error) {
+    deps.logImpl(`WARN: Failed to send Discord reply message: ${error}`);
+  }
+}
+
 // ============================================================================
 // Discord Polling
 // ============================================================================
 
 let discordBackoffUntil = 0;
 
+export function resetReplyListenerTransientState(): void {
+  discordBackoffUntil = 0;
+}
+
 async function pollDiscord(
   config: ReplyListenerDaemonConfig,
   state: ReplyListenerState,
-  rateLimiter: RateLimiter,
+  rateLimiter: ReplyListenerRateLimiter,
+): Promise<void> {
+  return pollDiscordOnce(config, state, rateLimiter);
+}
+
+export async function pollDiscordOnce(
+  config: ReplyListenerDaemonConfig,
+  state: ReplyListenerState,
+  rateLimiter: ReplyListenerRateLimiter,
+  deps: ReplyListenerPollDeps = {},
 ): Promise<void> {
   if (config.discordEnabled === false) return;
   if (!config.discordBotToken || !config.discordChannelId) return;
   if (config.authorizedDiscordUserIds.length === 0) return;
   if (Date.now() < discordBackoffUntil) return;
 
+  const fetchImpl = deps.fetchImpl ?? fetch;
+  const injectReplyImpl = deps.injectReplyImpl ?? injectReply;
+  const buildSessionStatusReplyImpl = deps.buildSessionStatusReplyImpl ?? buildDiscordSessionStatusReply;
+  const captureReplyAcknowledgementSummaryImpl = deps.captureReplyAcknowledgementSummaryImpl ?? captureReplyAcknowledgementSummary;
+  const lookupByMessageIdImpl = deps.lookupByMessageIdImpl ?? lookupByMessageId;
+  const writeDaemonStateImpl = deps.writeDaemonStateImpl ?? writeDaemonState;
+  const parseMentionAllowedMentionsImpl = deps.parseMentionAllowedMentionsImpl ?? parseMentionAllowedMentions;
+  const logImpl = deps.logImpl ?? log;
+
   try {
     const after = state.discordLastMessageId ? `?after=${state.discordLastMessageId}&limit=10` : '?limit=10';
     const url = `https://discord.com/api/v10/channels/${config.discordChannelId}/messages${after}`;
 
-    const response = await fetch(url, {
+    const response = await fetchImpl(url, {
       method: 'GET',
       headers: { 'Authorization': `Bot ${config.discordBotToken}` },
       signal: AbortSignal.timeout(10000),
@@ -405,11 +581,11 @@ async function pollDiscord(
       const parsed = reset ? parseFloat(reset) : Number.NaN;
       const resetTime = Number.isFinite(parsed) ? parsed * 1000 : Date.now() + 10_000;
       discordBackoffUntil = resetTime;
-      log(`WARN: Discord rate limit low (remaining: ${remaining}), backing off until ${new Date(resetTime).toISOString()}`);
+      logImpl(`WARN: Discord rate limit low (remaining: ${remaining}), backing off until ${new Date(resetTime).toISOString()}`);
     }
 
     if (!response.ok) {
-      log(`Discord API error: HTTP ${response.status}`);
+      logImpl(`Discord API error: HTTP ${response.status}`);
       return;
     }
 
@@ -425,42 +601,56 @@ async function pollDiscord(
     const sorted = [...messages].reverse();
 
     for (const msg of sorted) {
+      const isStatusCommand = isDiscordStatusCommand(msg.content ?? '');
+
       if (!msg.message_reference?.message_id) {
         state.discordLastMessageId = msg.id;
-        writeDaemonState(state);
+        writeDaemonStateImpl(state);
         continue;
       }
 
       if (!config.authorizedDiscordUserIds.includes(msg.author.id)) {
         state.discordLastMessageId = msg.id;
-        writeDaemonState(state);
+        writeDaemonStateImpl(state);
         continue;
       }
 
-      const mapping = lookupByMessageId('discord-bot', msg.message_reference.message_id);
+      const mapping = lookupByMessageIdImpl('discord-bot', msg.message_reference.message_id);
+      state.discordLastMessageId = msg.id;
+      writeDaemonStateImpl(state);
+
       if (!mapping) {
-        state.discordLastMessageId = msg.id;
-        writeDaemonState(state);
+        if (isStatusCommand) {
+          await postDiscordReplyMessage(config, msg.id, NO_TRACKED_SESSION_MESSAGE, {
+            fetchImpl,
+            logImpl,
+          });
+        }
         continue;
       }
 
       if (!rateLimiter.canProceed()) {
-        log(`WARN: Rate limit exceeded, dropping Discord message ${msg.id}`);
-        state.discordLastMessageId = msg.id;
-        writeDaemonState(state);
+        logImpl(`WARN: Rate limit exceeded, dropping Discord message ${msg.id}`);
         state.errors++;
         continue;
       }
 
-      state.discordLastMessageId = msg.id;
-      writeDaemonState(state);
+      if (isStatusCommand) {
+        const statusMessage = await buildSessionStatusReplyImpl(mapping);
+        await postDiscordReplyMessage(config, msg.id, statusMessage, {
+          fetchImpl,
+          logImpl,
+        });
+        continue;
+      }
 
-      const success = injectReply(mapping.tmuxPaneId, msg.content, 'discord', config);
+      const success = injectReplyImpl(mapping.tmuxPaneId, msg.content, 'discord', config);
       if (success) {
         state.messagesInjected++;
+        const acknowledgement = formatReplyAcknowledgement(captureReplyAcknowledgementSummaryImpl(mapping.tmuxPaneId));
         // Add ✅ reaction to the user's reply
         try {
-          await fetch(
+          await fetchImpl(
             `https://discord.com/api/v10/channels/${config.discordChannelId}/messages/${msg.id}/reactions/%E2%9C%85/@me`,
             {
               method: 'PUT',
@@ -469,15 +659,15 @@ async function pollDiscord(
             }
           );
         } catch (e) {
-          log(`WARN: Failed to add confirmation reaction: ${e}`);
+          logImpl(`WARN: Failed to add confirmation reaction: ${e}`);
         }
 
         // Send injection notification as a reply to the user's message (non-critical)
         try {
           const feedbackAllowedMentions = config.discordMention
-            ? parseMentionAllowedMentions(config.discordMention)
+            ? parseMentionAllowedMentionsImpl(config.discordMention)
             : { parse: [] as string[] };
-          await fetch(
+          await fetchImpl(
             `https://discord.com/api/v10/channels/${config.discordChannelId}/messages`,
             {
               method: 'POST',
@@ -486,7 +676,7 @@ async function pollDiscord(
                 'Content-Type': 'application/json',
               },
               body: JSON.stringify({
-                content: 'Injected into Codex CLI session.',
+                content: acknowledgement,
                 message_reference: { message_id: msg.id },
                 allowed_mentions: feedbackAllowedMentions,
               }),
@@ -494,7 +684,7 @@ async function pollDiscord(
             }
           );
         } catch (e) {
-          log(`WARN: Failed to send injection channel notification: ${e}`);
+          logImpl(`WARN: Failed to send injection channel notification: ${e}`);
         }
       } else {
         state.errors++;
@@ -503,7 +693,7 @@ async function pollDiscord(
   } catch (error) {
     state.errors++;
     state.lastError = error instanceof Error ? error.message : String(error);
-    log(`Discord polling error: ${state.lastError}`);
+    logImpl(`Discord polling error: ${state.lastError}`);
   }
 }
 
@@ -514,17 +704,33 @@ async function pollDiscord(
 async function pollTelegram(
   config: ReplyListenerDaemonConfig,
   state: ReplyListenerState,
-  rateLimiter: RateLimiter,
+  rateLimiter: ReplyListenerRateLimiter,
+): Promise<void> {
+  return pollTelegramOnce(config, state, rateLimiter);
+}
+
+export async function pollTelegramOnce(
+  config: ReplyListenerDaemonConfig,
+  state: ReplyListenerState,
+  rateLimiter: ReplyListenerRateLimiter,
+  deps: ReplyListenerPollDeps = {},
 ): Promise<void> {
   if (config.telegramEnabled === false) return;
   if (!config.telegramBotToken || !config.telegramChatId) return;
+
+  const httpsRequestImpl = deps.httpsRequestImpl ?? httpsRequest;
+  const injectReplyImpl = deps.injectReplyImpl ?? injectReply;
+  const captureReplyAcknowledgementSummaryImpl = deps.captureReplyAcknowledgementSummaryImpl ?? captureReplyAcknowledgementSummary;
+  const lookupByMessageIdImpl = deps.lookupByMessageIdImpl ?? lookupByMessageId;
+  const writeDaemonStateImpl = deps.writeDaemonStateImpl ?? writeDaemonState;
+  const logImpl = deps.logImpl ?? log;
 
   try {
     const offset = state.telegramLastUpdateId ? state.telegramLastUpdateId + 1 : 0;
     const path = `/bot${config.telegramBotToken}/getUpdates?offset=${offset}&timeout=0`;
 
     const updates = await new Promise<any[]>((resolve, reject) => {
-      const req = httpsRequest(
+      const req = httpsRequestImpl(
         {
           hostname: 'api.telegram.org',
           path,
@@ -563,59 +769,60 @@ async function pollTelegram(
       const msg = update.message;
       if (!msg) {
         state.telegramLastUpdateId = update.update_id;
-        writeDaemonState(state);
+        writeDaemonStateImpl(state);
         continue;
       }
 
       if (!msg.reply_to_message?.message_id) {
         state.telegramLastUpdateId = update.update_id;
-        writeDaemonState(state);
+        writeDaemonStateImpl(state);
         continue;
       }
 
       if (String(msg.chat.id) !== config.telegramChatId) {
         state.telegramLastUpdateId = update.update_id;
-        writeDaemonState(state);
+        writeDaemonStateImpl(state);
         continue;
       }
 
-      const mapping = lookupByMessageId('telegram', String(msg.reply_to_message.message_id));
+      const mapping = lookupByMessageIdImpl('telegram', String(msg.reply_to_message.message_id));
       if (!mapping) {
         state.telegramLastUpdateId = update.update_id;
-        writeDaemonState(state);
+        writeDaemonStateImpl(state);
         continue;
       }
 
       const text = msg.text || '';
       if (!text) {
         state.telegramLastUpdateId = update.update_id;
-        writeDaemonState(state);
+        writeDaemonStateImpl(state);
         continue;
       }
 
       if (!rateLimiter.canProceed()) {
-        log(`WARN: Rate limit exceeded, dropping Telegram message ${msg.message_id}`);
+        logImpl(`WARN: Rate limit exceeded, dropping Telegram message ${msg.message_id}`);
         state.telegramLastUpdateId = update.update_id;
-        writeDaemonState(state);
+        writeDaemonStateImpl(state);
         state.errors++;
         continue;
       }
 
       state.telegramLastUpdateId = update.update_id;
-      writeDaemonState(state);
+      writeDaemonStateImpl(state);
 
-      const success = injectReply(mapping.tmuxPaneId, text, 'telegram', config);
+      const success = injectReplyImpl(mapping.tmuxPaneId, text, 'telegram', config);
       if (success) {
         state.messagesInjected++;
+        const acknowledgement = formatReplyAcknowledgement(captureReplyAcknowledgementSummaryImpl(mapping.tmuxPaneId));
         try {
           const replyBody = JSON.stringify({
             chat_id: config.telegramChatId,
-            text: 'Injected into Codex CLI session.',
+            text: acknowledgement,
             reply_to_message_id: msg.message_id,
           });
 
           await new Promise<void>((resolve) => {
-            const replyReq = httpsRequest(
+            const replyReq = httpsRequestImpl(
               {
                 hostname: 'api.telegram.org',
                 path: `/bot${config.telegramBotToken}/sendMessage`,
@@ -643,7 +850,7 @@ async function pollTelegram(
             replyReq.end();
           });
         } catch (e) {
-          log(`WARN: Failed to send confirmation reply: ${e}`);
+          logImpl(`WARN: Failed to send confirmation reply: ${e}`);
         }
       } else {
         state.errors++;
@@ -652,7 +859,7 @@ async function pollTelegram(
   } catch (error) {
     state.errors++;
     state.lastError = error instanceof Error ? error.message : String(error);
-    log(`Telegram polling error: ${state.lastError}`);
+    logImpl(`Telegram polling error: ${state.lastError}`);
   }
 }
 
@@ -780,6 +987,7 @@ export function startReplyListener(config: ReplyListenerDaemonConfig): DaemonRes
     const child = spawn('node', ['-e', daemonScript], {
       detached: true,
       stdio: 'ignore',
+      windowsHide: true,
       cwd: process.cwd(),
       env: createMinimalDaemonEnv(),
     });

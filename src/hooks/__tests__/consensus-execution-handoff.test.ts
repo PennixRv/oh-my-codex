@@ -2,7 +2,7 @@
  * Consensus mode execution handoff regression tests
  *
  * Verifies that the plan skill's consensus mode (ralplan) mandates:
- * 1. Structured AskUserQuestion for approval (not plain text)
+ * 1. Structured question UI for approval (not plain text)
  * 2. Explicit $ralph invocation on approval
  * 3. Prohibition of direct implementation from the planning agent
  * 4. User feedback step after Planner but before Architect/Critic
@@ -49,12 +49,12 @@ function extractSection(content: string, heading: string): string | undefined {
 }
 
 describe('Consensus mode execution handoff (plan/SKILL.md)', () => {
-  it('should mandate AskUserQuestion for the approval step', () => {
+  it('should mandate structured question UI for the approval step', () => {
     const consensusSection = extractSection(planSkill, 'Consensus Mode');
     assert.ok(consensusSection, 'Consensus Mode section should exist');
     assert.ok(
-      consensusSection.includes('AskUserQuestion'),
-      'Consensus mode should mandate AskUserQuestion'
+      consensusSection.includes('structured question UI'),
+      'Consensus mode should mandate structured question UI'
     );
   });
 
@@ -136,6 +136,16 @@ describe('Consensus mode execution handoff (plan/SKILL.md)', () => {
     assert.ok(consensusSection.includes('**Follow-ups**'), 'ADR should include Follow-ups');
   });
 
+  it('should require available-agent-types roster and staffing guidance in handoff output', () => {
+    const consensusSection = extractSection(planSkill, 'Consensus Mode');
+    assert.ok(consensusSection, 'Consensus Mode section should exist');
+    assert.match(consensusSection, /available-agent-types roster/i);
+    assert.match(consensusSection, /staffing guidance|role allocation/i);
+    assert.match(consensusSection, /reasoning levels? by lane|suggested reasoning/i);
+    assert.match(consensusSection, /omx team|launch hint/i);
+    assert.match(consensusSection, /team verification path/i);
+  });
+
   it('should mention deliberate mode requirements in consensus mode', () => {
     const consensusSection = extractSection(planSkill, 'Consensus Mode');
     assert.ok(consensusSection, 'Consensus Mode section should exist');
@@ -164,12 +174,12 @@ describe('User feedback step between Planner and Architect/Critic (plan/SKILL.md
     assert.ok(architectIdx > feedbackIdx, 'Architect should come after User feedback');
   });
 
-  it('should mandate AskUserQuestion for the user feedback step', () => {
+  it('should mandate structured question UI for the user feedback step', () => {
     const consensusSection = extractSection(planSkill, 'Consensus Mode');
     assert.ok(consensusSection, 'Consensus Mode section should exist');
     assert.ok(
-      /User feedback.*MUST.*AskUserQuestion/s.test(consensusSection),
-      'User feedback step should mandate AskUserQuestion'
+      /User feedback.*MUST.*structured question UI/s.test(consensusSection),
+      'User feedback step should mandate structured question UI'
     );
   });
 
@@ -219,6 +229,14 @@ describe('User feedback step between Planner and Architect/Critic (plan/SKILL.md
   });
 });
 
+
+
+  it('should require adaptive step sizing instead of a fixed five-step template', () => {
+    assert.match(planSkill, /adaptive step count|right-sized to task scope/i);
+    assert.match(planSkill, /do not default to exactly five steps|not a fixed five-step template/i);
+    assert.match(ralplanSkill, /do not default to exactly five steps/i);
+  });
+
 describe('RALPLAN-DR in ralplan/SKILL.md', () => {
   it('should contain RALPLAN-DR structured deliberation description', () => {
     assert.ok(
@@ -262,6 +280,14 @@ describe('RALPLAN-DR in ralplan/SKILL.md', () => {
       'ralplan/SKILL.md should reference ADR requirement'
     );
   });
+
+  it('should document roster-aware team and ralph follow-up guidance', () => {
+    assert.match(ralplanSkill, /available-agent-types roster/i);
+    assert.match(ralplanSkill, /staffing guidance|role\/staffing allocation/i);
+    assert.match(ralplanSkill, /reasoning levels? by lane|reasoning-by-lane/i);
+    assert.match(ralplanSkill, /omx team|launch hints?/i);
+    assert.match(ralplanSkill, /team verification/i);
+  });
 });
 
 describe('Architect prompt RALPLAN-DR sections', () => {
@@ -291,6 +317,16 @@ describe('Architect prompt RALPLAN-DR sections', () => {
       architectPrompt.includes('ralplan'),
       'architect.md should reference ralplan consensus reviews'
     );
+  });
+});
+
+describe('Planner prompt follow-up staffing guidance', () => {
+  it('should require roster-aware staffing guidance for team and ralph handoff', () => {
+    assert.match(plannerPrompt, /available-agent-types roster/i);
+    assert.match(plannerPrompt, /team and ralph follow-up paths/i);
+    assert.match(plannerPrompt, /reasoning levels? by lane|suggested reasoning/i);
+    assert.match(plannerPrompt, /launch hints?/i);
+    assert.match(plannerPrompt, /team verification path/i);
   });
 });
 

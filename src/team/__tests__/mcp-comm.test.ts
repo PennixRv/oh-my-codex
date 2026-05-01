@@ -1,4 +1,4 @@
-import { describe, it } from 'node:test';
+import { afterEach, beforeEach, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtemp, rm, readFile } from 'fs/promises';
 import { join } from 'path';
@@ -15,6 +15,17 @@ import {
   queueBroadcastMailboxMessage,
 } from '../mcp-comm.js';
 
+const ORIGINAL_OMX_TEAM_STATE_ROOT = process.env.OMX_TEAM_STATE_ROOT;
+
+beforeEach(() => {
+  delete process.env.OMX_TEAM_STATE_ROOT;
+});
+
+afterEach(() => {
+  if (typeof ORIGINAL_OMX_TEAM_STATE_ROOT === 'string') process.env.OMX_TEAM_STATE_ROOT = ORIGINAL_OMX_TEAM_STATE_ROOT;
+  else delete process.env.OMX_TEAM_STATE_ROOT;
+});
+
 describe('mcp-comm', () => {
   it('queueInboxInstruction writes inbox before notifying', async () => {
     const cwd = await mkdtemp(join(tmpdir(), 'omx-mcp-comm-'));
@@ -28,6 +39,7 @@ describe('mcp-comm', () => {
         workerIndex: 1,
         inbox: '# hi',
         triggerMessage: 'trigger',
+        intent: 'followup-relaunch',
         cwd,
         notify: async () => {
           events.push('notify');
@@ -41,6 +53,8 @@ describe('mcp-comm', () => {
       assert.equal(outcome.transport, 'tmux_send_keys');
       assert.ok(outcome.request_id);
       assert.deepEqual(events, ['notify']);
+      const requests = await listDispatchRequests('alpha', cwd, { kind: 'inbox' });
+      assert.equal(requests[0]?.intent, 'followup-relaunch');
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -58,6 +72,7 @@ describe('mcp-comm', () => {
         toWorkerIndex: 2,
         body: 'hello',
         triggerMessage: 'check mailbox',
+        intent: 'pending-mailbox-review',
         cwd,
         notify: async () => ({ ok: true, transport: 'tmux_send_keys', reason: 'sent' }),
       });
@@ -72,6 +87,7 @@ describe('mcp-comm', () => {
       const requests = await listDispatchRequests('alpha', cwd, { kind: 'mailbox' });
       assert.equal(requests.length, 1);
       assert.equal(requests[0]?.message_id, mailbox[0]?.message_id);
+      assert.equal(requests[0]?.intent, 'pending-mailbox-review');
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -106,6 +122,53 @@ describe('mcp-comm', () => {
       assert.equal(mailbox.length, 1);
       assert.equal(mailbox[0]?.body, 'hello leader');
       assert.equal(mailbox[0]?.notified_at, undefined);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+
+  it('queueDirectMailboxMessage does not create a new dispatch for an already-notified identical message', async () => {
+    const cwd = await mkdtemp(join(tmpdir(), 'omx-mcp-comm-'));
+    try {
+      await initTeamState('alpha-dedupe', 'task', 'executor', 1, cwd);
+
+      const first = await queueDirectMailboxMessage({
+        teamName: 'alpha-dedupe',
+        fromWorker: 'worker-1',
+        toWorker: 'leader-fixed',
+        body: 'same-body',
+        triggerMessage: 'check mailbox',
+        cwd,
+        transportPreference: 'transport_direct',
+        fallbackAllowed: false,
+        notify: async () => ({ ok: true, transport: 'mailbox', reason: 'leader_mailbox_notified' }),
+      });
+
+      assert.equal(first.ok, true);
+      assert.equal(first.reason, 'leader_mailbox_notified');
+
+      const second = await queueDirectMailboxMessage({
+        teamName: 'alpha-dedupe',
+        fromWorker: 'worker-1',
+        toWorker: 'leader-fixed',
+        body: 'same-body',
+        triggerMessage: 'check mailbox',
+        cwd,
+        transportPreference: 'transport_direct',
+        fallbackAllowed: false,
+        notify: async () => {
+          throw new Error('should_not_notify_twice');
+        },
+      });
+
+      assert.equal(second.ok, true);
+      assert.equal(second.reason, 'existing_message_already_notified');
+
+      const mailbox = await listMailboxMessages('alpha-dedupe', 'leader-fixed', cwd);
+      assert.equal(mailbox.length, 1);
+
+      const requests = await listDispatchRequests('alpha-dedupe', cwd, { kind: 'mailbox', to_worker: 'leader-fixed' });
+      assert.equal(requests.length, 1);
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }

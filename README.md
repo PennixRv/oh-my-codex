@@ -3,483 +3,361 @@
 <p align="center">
   <img src="https://yeachan-heo.github.io/oh-my-codex-website/omx-character-nobg.png" alt="oh-my-codex character" width="280">
   <br>
-  <em>Your codex is not alone.</em>
+  <em>Start Codex stronger, then let OMX add better prompts, workflows, and runtime help when the work grows.</em>
 </p>
 
 [![npm version](https://img.shields.io/npm/v/oh-my-codex)](https://www.npmjs.com/package/oh-my-codex)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Node.js](https://img.shields.io/badge/node-%3E%3D20-brightgreen)](https://nodejs.org)
+[![Discord](https://img.shields.io/discord/1452487457085063218?color=5865F2&logo=discord&logoColor=white&label=Discord)](https://discord.gg/PUwSMR9XNk)
 
-> **[Website](https://yeachan-heo.github.io/oh-my-codex-website/)** | **[Documentation](https://yeachan-heo.github.io/oh-my-codex-website/docs.html)** | **[CLI Reference](https://yeachan-heo.github.io/oh-my-codex-website/docs.html#cli-reference)** | **[Workflows](https://yeachan-heo.github.io/oh-my-codex-website/docs.html#workflows)** | **[OpenClaw Integration Guide](./docs/openclaw-integration.md)** | **[GitHub](https://github.com/Yeachan-Heo/oh-my-codex)** | **[npm](https://www.npmjs.com/package/oh-my-codex)**
+**Website:** https://yeachan-heo.github.io/oh-my-codex-website/
 
-Multi-agent orchestration layer for [OpenAI Codex CLI](https://github.com/openai/codex).
+**Docs:** [Getting Started](./docs/getting-started.html) · [Agents](./docs/agents.html) · [Skills](./docs/skills.html) · [Integrations](./docs/integrations.html) · [Demo](./DEMO.md) · [OpenClaw guide](./docs/openclaw-integration.md)
 
-## Featured Guides
+**Community:** [Discord](https://discord.gg/PUwSMR9XNk) — shared OMX/community server for oh-my-codex and related tooling.
 
-- [OpenClaw / Generic Notification Gateway Integration Guide](./docs/openclaw-integration.md)
+OMX is a workflow layer for [OpenAI Codex CLI](https://github.com/openai/codex).
 
-## Languages
+<table>
+<tr>
+<td><strong>🚨 CAUTION — RECOMMENDED DEFAULT ONLY: macOS or Linux with Codex CLI.</strong><br><br><strong>OMX is primarily designed and actively tuned for that path.</strong><br><strong>Native Windows and Codex App are not the default experience, may break or behave inconsistently, and currently receive less support.</strong></td>
+</tr>
+</table>
 
-- [English](./README.md)
-- [한국어 (Korean)](./README.ko.md)
-- [日本語 (Japanese)](./README.ja.md)
-- [简体中文 (Chinese Simplified)](./README.zh.md)
-- [繁體中文 (Chinese Traditional)](./README.zh-TW.md)
-- [Tiếng Việt (Vietnamese)](./README.vi.md)
-- [Español (Spanish)](./README.es.md)
-- [Português (Portuguese)](./README.pt.md)
-- [Русский (Russian)](./README.ru.md)
-- [Türkçe (Turkish)](./README.tr.md)
-- [Deutsch (German)](./README.de.md)
-- [Français (French)](./README.fr.md)
-- [Italiano (Italian)](./README.it.md)
+It keeps Codex as the execution engine and makes it easier to:
+- start a stronger Codex session by default
+- run one consistent workflow from clarification to completion
+- invoke the canonical skills with `$deep-interview`, `$ralplan`, `$team`, and `$ralph`
+- keep project guidance, plans, logs, and state in `.omx/`
 
+## Core Maintainers
 
-OMX turns Codex from a single-session agent into a coordinated system with:
-- Role prompts (`/prompts:name`) for specialized agents
-- Workflow skills (`$name`) for repeatable execution modes
-- Team orchestration (`omx team`, `$team`) with tmux interactive mode (default) or non-tmux prompt mode
-- Persistent state + memory via MCP servers
+| Role | Name | GitHub |
+| --- | --- | --- |
+| Creator & Lead | Yeachan Heo | [@Yeachan-Heo](https://github.com/Yeachan-Heo) |
+| Maintainer | HaD0Yun | [@HaD0Yun](https://github.com/HaD0Yun) |
 
-## Why OMX
+## Ambassadors
 
-Codex CLI is strong for direct tasks. OMX adds structure for larger work:
-- Decomposition and staged execution (`team-plan -> team-prd -> team-exec -> team-verify -> team-fix`)
-- Persistent mode lifecycle state (`.omx/state/`)
-- Memory + notepad surfaces for long-running sessions
-- Operational controls for launch, verification, and cancellation
+| Name | GitHub |
+| --- | --- |
+| Sigrid Jin | [@sigridjineth](https://github.com/sigridjineth) |
 
-OMX is an add-on, not a fork. It uses Codex-native extension points.
+## Top Collaborators
 
-## Positioning: CLI-first orchestration, MCP-backed state
+| Name | GitHub |
+| --- | --- |
+| HaD0Yun | [@HaD0Yun](https://github.com/HaD0Yun) |
+| Junho Yeo | [@junhoyeo](https://github.com/junhoyeo) |
+| JiHongKim98 | [@JiHongKim98](https://github.com/JiHongKim98) |
+| Lor | [@gobylor](https://github.com/gobylor) |
+| HyunjunJeon | [@HyunjunJeon](https://github.com/HyunjunJeon) |
 
-OMX is best used as an **outer CLI orchestration layer**:
-- **Control plane (CLI/runtime):** `omx team`, tmux workers, lifecycle commands
-- **Capability/state plane (MCP):** task state, mailbox, memory, diagnostics tools
+## Recommended default flow
 
-Practical mode split:
-- **`$team` / `omx team`**: durable, inspectable, resumable multi-worker execution
-- **`$ultrawork`**: lightweight parallel fanout for independent tasks (component mode)
-
-Low-token team profile example:
+If you want the default OMX experience, start here:
 
 ```bash
-OMX_TEAM_WORKER_CLI=codex \
-OMX_TEAM_WORKER_LAUNCH_ARGS='--model gpt-5.3-codex-spark -c model_reasoning_effort="low"' \
-omx team 2:explore "short scoped analysis task"
+npm install -g @openai/codex oh-my-codex
+omx --madmax --high
 ```
 
-## Requirements
+On a real `oh-my-codex` version bump, the global npm install now prints an explicit reminder instead of launching `omx setup` automatically. When you're ready, run `omx setup` manually or use `omx update` to check npm and then run the same setup refresh path.
 
-- Node.js >= 20 (CI validates Node 20 and current LTS, currently Node 22)
-- Codex CLI installed (`npm install -g @openai/codex`)
-- Codex auth configured
+**Codex plugin install note:** this repo also ships an official Codex plugin layout at `plugins/oh-my-codex` with marketplace metadata in `.agents/plugins/marketplace.json`. That plugin bundles the mirrored skill surface plus plugin-scoped companion metadata for MCP servers and apps. Native/runtime hooks still stay on the setup/runtime side rather than the installable plugin manifest. It is still **not** a replacement for `npm install -g oh-my-codex` plus `omx setup`: legacy setup mode installs native agents and prompts, while plugin setup mode relies on plugin discovery for bundled skills and archives/removes legacy OMX-managed prompts/native-agent TOMLs so stale role files cannot shadow plugin behavior.
 
-### Platform & tmux
+Then work normally inside Codex:
 
-OMX features like `omx team` require **tmux**:
+```text
+$deep-interview "clarify the authentication change"
+$ralplan "approve the auth plan and review tradeoffs"
+$ralph "carry the approved plan to completion"
+$team 3:executor "execute the approved plan in parallel"
+```
 
-| Platform       | tmux provider                                            | Install                |
-| -------------- | -------------------------------------------------------- | ---------------------- |
-| macOS          | [tmux](https://github.com/tmux/tmux)                    | `brew install tmux`    |
-| Ubuntu/Debian  | tmux                                                     | `sudo apt install tmux`|
-| Fedora         | tmux                                                     | `sudo dnf install tmux`|
-| Arch           | tmux                                                     | `sudo pacman -S tmux`  |
-| Windows        | [psmux](https://github.com/marlocarlo/psmux) (native)   | `winget install psmux` |
-| Windows (WSL2) | tmux (inside WSL)                                        | `sudo apt install tmux`|
+That is the main path.
+Before you treat the runtime as ready, run the quick-start smoke test below: `omx doctor` verifies the install shape, while `omx exec` proves the active Codex runtime can actually authenticate and complete a model call from the current environment.
+Start OMX strongly, clarify first when needed, approve the plan, then choose `$team` for coordinated parallel execution or `$ralph` for the persistent completion loop.
 
-> **Windows users:** [psmux](https://github.com/marlocarlo/psmux) provides a native `tmux` binary for Windows with 76 tmux-compatible commands. No WSL required.
+## What OMX is for
 
-## Quickstart (3 minutes)
+Use OMX if you already like Codex and want a better day-to-day runtime around it:
+- a standard workflow built around `$deep-interview`, `$ralplan`, `$team`, and `$ralph`
+- specialist roles and supporting skills when the task needs them
+- project guidance through scoped `AGENTS.md`
+- durable state under `.omx/` for plans, logs, memory, and mode tracking
+
+If you want plain Codex with no extra workflow layer, you probably do not need OMX.
+
+## Quick start
+
+### Requirements
+
+- Node.js 20+
+- Codex CLI installed: `npm install -g @openai/codex`
+- Codex auth configured and visible in the same shell/profile that will run OMX
+- `tmux` on macOS/Linux if you want the recommended durable team runtime
+- `psmux` on native Windows only if you intentionally want the less-supported Windows team path
+
+### A good first session
+
+After install, check both boundaries:
 
 ```bash
-npm install -g oh-my-codex
-omx setup
 omx doctor
+codex login status
+omx exec --skip-git-repo-check -C . "Reply with exactly OMX-EXEC-OK"
 ```
 
-Recommended trusted-environment launch profile:
+`omx doctor` catches missing OMX files, hooks, and runtime prerequisites. The real smoke test catches auth, profile, and provider/base-URL problems that only appear when Codex performs an actual request.
+
+Launch OMX the recommended way:
 
 ```bash
-omx --xhigh --madmax
+omx --madmax --high
 ```
 
-## New in v0.5.0
+On macOS/Linux interactive terminals with `tmux` available, this starts the
+leader in OMX-managed detached tmux by default so the HUD/runtime panes can be
+created and recovered.
 
-- **Scope-aware setup** with `omx setup --scope user|project` for flexible install modes.
-- **Spark worker routing** via `--spark` / `--madmax-spark` so team workers can use `gpt-5.3-codex-spark` without forcing the leader model.
-- **Catalog consolidation** — removed deprecated prompts (`deep-executor`, `scientist`) and 9 deprecated skills for a leaner surface.
-- **Notifier verbosity levels** for fine-grained CCNotifier output control.
+If you want a one-off launch with no OMX tmux/HUD management, use `--direct`:
 
-## First Session
+```bash
+omx --direct --yolo
+```
 
-Inside Codex:
+For a persistent shell/profile preference, set an environment policy:
+
+```bash
+OMX_LAUNCH_POLICY=direct omx --yolo
+```
+
+Return to the auto/default behavior with:
+
+```bash
+unset OMX_LAUNCH_POLICY
+```
+
+CLI policy flags win over the environment, and the last CLI policy flag before
+`--` wins:
+
+```bash
+OMX_LAUNCH_POLICY=direct omx --tmux --yolo
+```
+
+Use `OMX_LAUNCH_POLICY=direct|tmux|detached-tmux|auto`. This iteration only
+adds CLI and environment controls; it intentionally does not add a config-file
+setting. If you run `--direct` from inside an existing tmux pane, OMX will not
+create HUD splits, enable mouse mode, or wrap extended-key handling, but the
+process still runs inside that already-open terminal pane.
+
+Then try the canonical workflow:
 
 ```text
-/prompts:architect "analyze current auth boundaries"
-/prompts:executor "implement input validation in login"
-$plan "ship OAuth callback safely"
-$team 3:executor "fix all TypeScript errors"
+$deep-interview "clarify the authentication change"
+$ralplan "approve the safest implementation path"
+$ralph "carry the approved plan to completion"
+$team 3:executor "execute the approved plan in parallel"
 ```
 
-From terminal:
+Use `$team` when the approved plan needs coordinated parallel work, or `$ralph` when one persistent owner should keep pushing to completion.
+
+## A simple mental model
+
+OMX does **not** replace Codex.
+
+It adds a better working layer around it:
+- **Codex** does the actual agent work
+- **OMX role keywords** make useful roles reusable
+- **OMX skills** make common workflows reusable
+- **`.omx/`** stores plans, logs, memory, and runtime state
+
+Most users should think of OMX as **better task routing + better workflow + better runtime**, not as a command surface to operate manually all day.
+
+## Start here if you are new
+
+1. Install or update OMX with `npm install -g @openai/codex oh-my-codex`
+2. After install or real OMX version bumps, run `omx setup` yourself when you're ready, or use `omx update` when you also want npm to check for and install the latest build before refreshing setup
+3. Run `omx doctor`
+4. Run a real execution smoke test: `codex login status` and `omx exec --skip-git-repo-check -C . "Reply with exactly OMX-EXEC-OK"`
+5. Launch with `omx --madmax --high`
+6. Use `$deep-interview "..."` when the request or boundaries are still unclear
+7. Use `$ralplan "..."` to approve the plan and review tradeoffs
+8. Choose `$team` for coordinated parallel execution or `$ralph` for persistent completion loops
+
+## Recommended workflow
+
+1. `$deep-interview` — clarify scope when the request or boundaries are still vague.
+2. `$ralplan` — turn that clarified scope into an approved architecture and implementation plan.
+3. `$team` or `$ralph` — use `$team` for coordinated parallel execution, or `$ralph` when you want a persistent completion loop with one owner.
+
+## Common in-session surfaces
+
+| Surface | Use it for |
+| --- | --- |
+| `$deep-interview "..."` | clarifying intent, boundaries, and non-goals |
+| `$ralplan "..."` | approving the implementation plan and tradeoffs |
+| `$ralph "..."` | persistent completion and verification loops |
+| `$team "..."` | coordinated parallel execution when the work is big enough |
+| `/skills` | browsing installed skills and supporting helpers |
+
+## Advanced / operator surfaces
+
+These are useful, but they are not the main onboarding path.
+
+### Team runtime
+
+Use the team runtime when you specifically need durable tmux/worktree coordination, not as the default way to begin using OMX. In Codex App or plain outside-tmux sessions, treat `omx team` as a tmux-runtime shell surface rather than a directly available in-app workflow; launch OMX CLI from shell first if you actually want team execution.
 
 ```bash
-omx team 4:executor "parallelize a multi-module refactor"
-omx team status <team-name>
-omx team shutdown <team-name>
-```
-
-## Core Model
-
-OMX installs and wires these layers:
-
-```text
-User
-  -> Codex CLI
-    -> AGENTS.md (orchestration brain)
-    -> ~/.codex/prompts/*.md (agent prompt catalog)
-    -> ~/.agents/skills/*/SKILL.md (skill catalog)
-    -> ~/.codex/config.toml (features, notify, MCP)
-    -> .omx/ (runtime state, memory, plans, logs)
-```
-
-## Experimental: posture-aware routing
-
-This branch includes an experimental routing layer that separates:
-
-- `role`: agent responsibility (`executor`, `planner`, `architect`)
-- `tier`: reasoning depth / cost (`LOW`, `STANDARD`, `THOROUGH`)
-- `posture`: operating style (`frontier-orchestrator`, `deep-worker`, `fast-lane`)
-
-Current intent of the experiment:
-
-- **Frontier-orchestrator**: leader/router posture for steerable frontier models
-- **Deep-worker**: implementation-first posture for executor-style roles
-- **Fast-lane**: lightweight triage/search posture for fast models
-
-This is designed to make OMX's initial routing behavior more Sisyphus-like without removing the existing Hephaestus-like execution lane.
-
-### How to test this experiment
-
-1. Build the project:
-
-```bash
-npm run build
-```
-
-2. Reinstall native agent configs:
-
-```bash
-node bin/omx.js setup
-```
-
-3. Inspect generated native agent configs in `~/.omx/agents/` and confirm they now include:
-   - `## OMX Posture Overlay`
-   - `## Model-Class Guidance`
-   - `## OMX Agent Metadata`
-
-4. Spot-check representative roles:
-   - `planner` / `architect` / `critic` -> `frontier-orchestrator`
-   - `executor` / `build-fixer` / `test-engineer` -> `deep-worker`
-   - `explore` / `writer` -> `fast-lane`
-
-5. Run focused tests:
-
-```bash
-node --test dist/agents/__tests__/definitions.test.js dist/agents/__tests__/native-config.test.js
-```
-
-This experiment currently changes native prompt generation and metadata, not the full prose of every prompt file.
-
-## Main Commands
-
-```bash
-omx                # Launch Codex (+ HUD in tmux when available)
-omx setup          # Install prompts/skills/config by scope + project AGENTS.md/.omx
-omx doctor         # Installation/runtime diagnostics
-omx doctor --team  # Team/swarm diagnostics
-omx ask ...        # Ask local provider advisor (claude|gemini), writes .omx/artifacts/*
-omx team ...       # Start/status/resume/shutdown team workers (interactive tmux by default)
-omx ralph          # Launch Codex with ralph persistence mode active
-omx status         # Show active modes
-omx cancel         # Cancel active execution modes
-omx reasoning <mode> # low|medium|high|xhigh
-omx tmux-hook ...  # init|status|validate|test
-omx hooks ...      # init|status|validate|test (plugin extension workflow)
-omx hud ...        # --watch|--json|--preset
-omx version        # Show version information
-omx help           # Show help message
-```
-
-Ask command examples:
-
-```bash
-omx ask claude "review this diff"
-omx ask gemini "brainstorm alternatives"
-omx ask claude --agent-prompt executor "implement feature X with tests"
-omx ask gemini --agent-prompt=planner --prompt "draft a rollout plan"
-# underlying provider flags from CLI help:
-# claude -p|--print "<prompt>"
-# gemini -p|--prompt "<prompt>"
-```
-
-Non-tmux team launch (advanced):
-
-```bash
-OMX_TEAM_WORKER_LAUNCH_MODE=prompt omx team 2:executor "task"
-```
-
-## Hooks Extension (Additive Surface)
-
-OMX now includes `omx hooks` for plugin scaffolding and validation.
-
-- `omx tmux-hook` remains supported and unchanged.
-- `omx hooks` is additive and does not replace tmux-hook workflows.
-- Plugin files live at `.omx/hooks/*.mjs`.
-- Plugins are off by default; enable with `OMX_HOOK_PLUGINS=1`.
-
-See `docs/hooks-extension.md` for the full extension workflow and event model.
-
-## Launch Flags
-
-```bash
---yolo              # Launch Codex in yolo mode
---high              # High reasoning effort (shorthand for -c model_reasoning_effort="high")
---xhigh             # xhigh reasoning effort (shorthand for -c model_reasoning_effort="xhigh")
---madmax            # DANGEROUS: bypass Codex approvals and sandbox
---spark             # Use Codex spark model for team workers only (~1.3x faster)
---madmax-spark      # spark model for workers + bypass approvals for leader and workers
--w, --worktree[=<name>]  # Launch Codex in a git worktree (detached when no name given)
---force             # Enable destructive maintenance (for example stale/deprecated skill cleanup)
---dry-run           # Show what would be done without doing it
---keep-config       # Skip config.toml cleanup during uninstall
---purge             # Remove .omx/ cache directory during uninstall
---verbose           # Show detailed output
---scope <user|project>  # setup only
-```
-
-`--madmax` maps to Codex `--dangerously-bypass-approvals-and-sandbox`.
-Use it only in trusted/external sandbox environments.
-
-### MCP workingDirectory policy (optional hardening)
-
-By default, MCP state/memory/trace tools accept caller-provided `workingDirectory`.
-To constrain this, set an allowlist of roots:
-
-```bash
-export OMX_MCP_WORKDIR_ROOTS="/path/to/project:/path/to/another-root"
-```
-
-When set, `workingDirectory` values outside these roots are rejected.
-
-## Codex-First Prompt Control
-
-By default, OMX injects:
-
-```text
--c model_instructions_file="<cwd>/AGENTS.md"
-```
-
-This layers project `AGENTS.md` guidance into Codex launch instructions.
-It extends Codex behavior, but does not replace/bypass Codex core system policies.
-
-Controls:
-
-```bash
-OMX_BYPASS_DEFAULT_SYSTEM_PROMPT=0 omx     # disable AGENTS.md injection
-OMX_MODEL_INSTRUCTIONS_FILE=/path/to/instructions.md omx
-```
-
-## Team Mode
-
-Use team mode for broad work that benefits from parallel workers.
-
-Lifecycle:
-
-```text
-start -> assign scoped lanes -> monitor -> verify terminal tasks -> shutdown
-```
-
-Operational commands:
-
-```bash
-omx team <args>
-omx team --help
-omx team api --help
+omx team 3:executor "fix the failing tests with verification"
 omx team status <team-name>
 omx team resume <team-name>
 omx team shutdown <team-name>
 ```
 
-Important rule: do not shutdown while tasks are still `in_progress` unless aborting.
+### Setup, doctor, and HUD
 
-### Ralph Cleanup Policy
+These are operator/support surfaces:
+- Codex plugin marketplace install/discovery can cache the plugin under `${CODEX_HOME:-~/.codex}/plugins/cache/$MARKETPLACE_NAME/oh-my-codex/$VERSION/` (local installs may use `local` as the version identifier); that packaged plugin now includes plugin-scoped companion metadata for MCP servers and apps, while native/runtime hooks remain setup-owned, so it is still not the full OMX runtime setup
+- `omx setup` installs prompts, skills, AGENTS scaffolding, `.codex/config.toml`, and OMX-managed native Codex hooks in `.codex/hooks.json`
+  - setup refresh preserves non-OMX hook entries in `.codex/hooks.json` and only rewrites OMX-managed wrappers
+  - `omx setup --merge-agents` preserves existing `AGENTS.md` guidance while inserting or refreshing generated OMX sections between `<!-- OMX:AGENTS:START -->` / `<!-- OMX:AGENTS:END -->`; without `--merge-agents` or `--force`, non-interactive setup keeps skipping existing `AGENTS.md` files
+  - `omx uninstall` removes OMX-managed wrappers from `.codex/hooks.json` but keeps the file when user hooks remain
+- `omx update` checks npm immediately, installs the newest global OMX build, then reruns the same interactive setup refresh path
+- fresh OMX-managed `gpt-5.5` config seeding now recommends `model_context_window = 250000` and `model_auto_compact_token_limit = 200000`, but only when those keys are missing
+- `.omx-config.json` model/env routing is documented in [the model/env routing reference](./docs/reference/omx-config-schema-routing.md); only edit keys supported by your installed OMX version
+- `omx doctor` verifies the install when something seems wrong; it does not prove that the active Codex profile can make an authenticated model call
+- `omx hud --watch` is a monitoring/status surface, not the primary user workflow
 
-When a team runs in ralph mode (`omx team ralph ...`), the shutdown cleanup
-applies a dedicated policy that differs from the normal path:
+For non-team sessions, native Codex hooks are now the canonical lifecycle surface:
+- `.codex/hooks.json` = native Codex hook registrations
+- `.omx/hooks/*.mjs` = OMX plugin hooks
+- `omx tmux-hook` / notify-hook / derived watcher = tmux + runtime fallback paths
 
-| Behavior | Normal team | Ralph team |
-|---|---|---|
-| Force shutdown on failure | Throws `shutdown_gate_blocked` | Bypasses gate, logs `ralph_cleanup_policy` event |
-| Auto branch deletion | Deletes worktree branches on rollback | Preserves branches (`skipBranchDeletion`) |
-| Completion logging | Standard `shutdown_gate` event | Additional `ralph_cleanup_summary` event with task breakdown |
+See [Codex native hook mapping](./docs/codex-native-hooks.md) for the current native / fallback matrix.
 
-The ralph policy is auto-detected from team mode state (`linked_ralph`) or
-can be passed explicitly via `omx team shutdown <name> --ralph`.
 
-Worker CLI selection for team workers:
+### Troubleshooting false-green readiness
+
+A green `omx doctor` means the install and local runtime wiring look sane. If real execution still fails, check the environment Codex actually uses:
+
+- Run `codex login status` and `omx exec --skip-git-repo-check -C . "Reply with exactly OMX-EXEC-OK"` from the same shell/profile that will launch OMX.
+- In custom HOME, profile, container, or service shells, confirm the active `~/.codex` (or `CODEX_HOME`) is the one with the expected auth and config. Do not assume your normal user `~/.codex` is visible there.
+- If you depend on a local OpenAI-compatible proxy, confirm the active `~/.codex/config.toml` includes the expected `openai_base_url`; otherwise a proxy-issued key can be sent to the default endpoint and fail with `401 Unauthorized`, `Missing bearer or basic authentication in header`, or `Incorrect API key provided`.
+- If `omx doctor --team` or resume reports a stale team such as `resume_blocker` or a missing tmux session, clean the dead runtime state before retrying:
 
 ```bash
-OMX_TEAM_WORKER_CLI=auto    # default; uses claude when worker --model contains "claude"
-OMX_TEAM_WORKER_CLI=codex   # force Codex CLI workers
-OMX_TEAM_WORKER_CLI=claude  # force Claude CLI workers
-OMX_TEAM_WORKER_CLI_MAP=codex,codex,claude,claude  # per-worker CLI mix (len=1 or worker count)
-OMX_TEAM_AUTO_INTERRUPT_RETRY=0  # optional: disable adaptive queue->resend fallback
+omx team shutdown <team-name> --force --confirm-issues
+omx cancel
+omx doctor --team
 ```
 
-Notes:
-- Worker launch args are still shared via `OMX_TEAM_WORKER_LAUNCH_ARGS`.
-- `OMX_TEAM_WORKER_CLI_MAP` overrides `OMX_TEAM_WORKER_CLI` for per-worker selection.
-- Trigger submission uses adaptive retries by default (queue/submit, then safe clear-line+resend fallback when needed).
-- In Claude worker mode, OMX spawns workers as plain `claude` (no extra launch args) and ignores explicit `--model` / `--config` / `--effort` overrides so Claude uses default `settings.json`.
+Only use the forced team shutdown for a team you have confirmed is dead or intentionally abandoned.
 
-## What `omx setup` writes
+If `Shift+Enter` still submits instead of inserting a newline inside an OMX-managed tmux session, see [Troubleshooting execution readiness](./docs/troubleshooting.md#shiftenter-submits-instead-of-inserting-a-newline-in-tmux-backed-omx-sessions). Current OMX already enables tmux extended-key forwarding around its own Codex launch paths, so a persistent failure is usually a tmux terminal-capability/discoverability problem rather than a net-new OMX feature gap.
 
-- `.omx/setup-scope.json` (persisted setup scope)
-- Scope-dependent installs:
-  - `user`: `~/.codex/prompts/`, `~/.agents/skills/`, `~/.codex/config.toml`, `~/.omx/agents/`
-  - `project`: `./.codex/prompts/`, `./.agents/skills/`, `./.codex/config.toml`, `./.omx/agents/`
-- Launch behavior: if persisted scope is `project`, `omx` launch auto-uses `CODEX_HOME=./.codex` (unless `CODEX_HOME` is already set).
-- Managed OMX artifacts refresh by default in both interactive and non-interactive runs: prompts, skills, native agent configs, project `AGENTS.md`, and the managed OMX portion of `config.toml`
-- If a managed file differs and will be overwritten, setup creates a backup first under `.omx/backups/setup/<timestamp>/...` (project scope) or `~/.omx/backups/setup/<timestamp>/...` (user scope)
-- Active-session safety still blocks `AGENTS.md` overwrite while an OMX session is running
-- `config.toml` updates (for both scopes):
-  - `notify = ["node", "..."]`
-  - `model_reasoning_effort = "high"`
-  - `developer_instructions = "..."`
-  - `model = "gpt-5.4"` when root `model` is absent
-  - if the existing root model is `gpt-5.3-codex`, interactive `omx setup` asks whether to upgrade it to `gpt-5.4`; non-interactive runs preserve the existing model
-  - `model_context_window = 1000000` and `model_auto_compact_token_limit = 900000` only when the effective root model is `gpt-5.4` and both context keys are absent
-  - `[features] multi_agent = true, child_agents_md = true`
-  - MCP server entries (`omx_state`, `omx_memory`, `omx_code_intel`, `omx_trace`)
-  - `[tui] status_line`
-- Project `AGENTS.md`
-- `.omx/` runtime directories and HUD config
-- Default setup output includes a compact per-category refresh summary; `--verbose` adds changed-file detail
-- `--force` is reserved for stronger maintenance behavior such as stale/deprecated skill cleanup; it is no longer required for ordinary refresh
-- The 1M GPT-5.4 context settings are experimental and can increase usage because requests beyond the standard context budget may count more heavily
+### Explore and sparkshell
 
-## Agents and Skills
-
-- Prompts: `prompts/*.md` (installed to `~/.codex/prompts/` for `user`, `./.codex/prompts/` for `project`)
-- Skills: `skills/*/SKILL.md` (installed to `~/.agents/skills/` for `user`, `./.agents/skills/` for `project`)
-
-Examples:
-- Agents: `architect`, `planner`, `executor`, `debugger`, `verifier`, `security-reviewer`
-- Skills: `autopilot`, `plan`, `team`, `ralph`, `ultrawork`, `cancel`
-
-### Notification Setup Skill (`$configure-notifications`)
-
-Use `$configure-notifications` as the unified entry point for notification setup:
-
-- Discord (webhook/bot)
-- Telegram (bot)
-- Slack (webhook)
-- OpenClaw / custom webhook / custom CLI command
+- `omx explore --prompt "..."` is for read-only repository lookup
+- `omx sparkshell <command>` is for shell-native inspection and bounded verification
+- when `.omx/wiki/` exists, `omx explore` can inject wiki-first context before falling back to broader repository search
+- fallback boundaries are explicit: sparkshell-backend fallback is reported on stderr, and spark-model fallback emits stderr metadata plus an `## OMX Explore fallback` notice in stdout so users can see when cost/behavior may differ from the low-cost path
 
 Examples:
 
-```text
-$configure-notifications "configure discord notifications"
-$configure-notifications "configure slack notifications"
-$configure-notifications "configure openclaw notifications"
+```bash
+omx explore --prompt "find where team state is written"
+omx sparkshell git status
+omx sparkshell --tmux-pane %12 --tail-lines 400
 ```
 
-For OpenClaw with **clawdbot agent turns** (instead of direct message forwarding),
-configure a command gateway using `clawdbot agent --deliver --reply-channel ... --reply-to ...`
-and map hook events (`session-start`, `session-idle`, `ask-user-question`, `session-stop`, `session-end`).
+### Wiki
 
-For dev teams using `#omc-dev`, the OpenClaw guide includes a dedicated runbook for:
-- Korean-only hook responses
-- `sessionId` + `tmuxSession` tracing
-- `SOUL.md`-based follow-up workflow
+- `omx wiki` is the CLI parity surface for the OMX wiki MCP server
+- wiki data lives locally under `.omx/wiki/`
+- the wiki is markdown-first and search-first, not vector-first
 
-See: `docs/openclaw-integration.md` (Dev Guide section).
-
-Required env gates for OpenClaw command mode:
+Examples:
 
 ```bash
-export OMX_OPENCLAW=1
-export OMX_OPENCLAW_COMMAND=1
+omx wiki list --json
+omx wiki query --input '{"query":"session-start lifecycle"}' --json
+omx wiki lint --json
+omx wiki refresh --json
 ```
 
-### Visual QA Loop (`$visual-verdict`)
+### Platform notes for team mode
 
-Use `$visual-verdict` when a task depends on visual fidelity (reference image(s) + generated screenshot).
+`omx team` works best on macOS/Linux with `tmux`.
+Native Windows remains a secondary path, and WSL2 is generally the better choice if you want a Windows-hosted setup.
+On native Windows, OMX accepts `psmux` as the tmux-compatible binary for the existing tmux-backed paths it already uses.
 
-- Return structured JSON: `score`, `verdict`, `category_match`, `differences[]`, `suggestions[]`, `reasoning`
-- Recommended pass threshold: **90+**
-- For visual tasks, run `$visual-verdict` every iteration before the next edit
-- Use pixel diff / pixelmatch overlays as **secondary debugging aids** (not the primary pass/fail signal)
+| Platform | Install |
+| --- | --- |
+| macOS | `brew install tmux` |
+| Ubuntu/Debian | `sudo apt install tmux` |
+| Fedora | `sudo dnf install tmux` |
+| Arch | `sudo pacman -S tmux` |
+| Windows | `winget install psmux` |
+| Windows (WSL2) | `sudo apt install tmux` |
 
-## Project Layout
+## Known issues
 
-```text
-oh-my-codex/
-  bin/omx.js
-  src/
-    cli/
-    team/
-    mcp/
-    hooks/
-    hud/
-    config/
-    modes/
-    notifications/
-    verification/
-  prompts/
-  skills/
-  templates/
-  scripts/
-```
+### Intel Mac: high `syspolicyd` / `trustd` CPU during startup
 
-## Development
+On some Intel Macs, OMX startup — especially with `--madmax --high` — can spike `syspolicyd` / `trustd` CPU usage while macOS Gatekeeper validates many concurrent process launches.
 
-```bash
-git clone https://github.com/Yeachan-Heo/oh-my-codex.git
-cd oh-my-codex
-npm install
-npm run lint
-npm run build
-npm test
-```
+If this happens, try:
+- `xattr -dr com.apple.quarantine $(which omx)`
+- adding your terminal app to the Developer Tools allowlist in macOS Security settings
+- using lower concurrency (for example, avoid `--madmax --high`)
 
 ## Documentation
 
-- **[Full Documentation](https://yeachan-heo.github.io/oh-my-codex-website/docs.html)** - Complete guide
-- **[CLI Reference](https://yeachan-heo.github.io/oh-my-codex-website/docs.html#cli-reference)** - All `omx` commands, flags, and tools
-- **[Notifications Guide](https://yeachan-heo.github.io/oh-my-codex-website/docs.html#notifications)** - Discord, Telegram, Slack, OpenClaw, and custom command/webhook setup
-- **[Recommended Workflows](https://yeachan-heo.github.io/oh-my-codex-website/docs.html#workflows)** - Battle-tested skill chains for common tasks
-- **[Release Notes](https://yeachan-heo.github.io/oh-my-codex-website/docs.html#release-notes)** - What's new in each version
+- [Getting Started](./docs/getting-started.html)
+- [Demo guide](./DEMO.md)
+- [Wiki feature](./docs/wiki-feature.md)
+- [Agent catalog](./docs/agents.html)
+- [Skills reference](./docs/skills.html)
+- [Codex native hook mapping](./docs/codex-native-hooks.md)
+- [Integrations](./docs/integrations.html)
+- [Troubleshooting execution readiness](./docs/troubleshooting.md)
+- [OpenClaw / notification gateway guide](./docs/openclaw-integration.md)
+- [Contributing](./CONTRIBUTING.md)
+- [Changelog](./CHANGELOG.md)
 
-## Notes
+## Languages
 
-- Full changelog: `CHANGELOG.md`
-- Migration guide (post-v0.4.4 mainline): `docs/migration-mainline-post-v0.4.4.md`
-- Coverage and parity notes: `COVERAGE.md`
-- Hook extension workflow: `docs/hooks-extension.md`
-- OpenClaw integration examples: `docs/openclaw-integration.md`
-- Setup and contribution details: `CONTRIBUTING.md`
+- [English](./README.md)
+- [한국어](./docs/readme/README.ko.md)
+- [日本語](./docs/readme/README.ja.md)
+- [简体中文](./docs/readme/README.zh.md)
+- [繁體中文](./docs/readme/README.zh-TW.md)
+- [Tiếng Việt](./docs/readme/README.vi.md)
+- [Español](./docs/readme/README.es.md)
+- [Português](./docs/readme/README.pt.md)
+- [Русский](./docs/readme/README.ru.md)
+- [Türkçe](./docs/readme/README.tr.md)
+- [Deutsch](./docs/readme/README.de.md)
+- [Français](./docs/readme/README.fr.md)
+- [Italiano](./docs/readme/README.it.md)
+- [Ελληνικά](./docs/readme/README.el.md)
+- [Polski](./docs/readme/README.pl.md)
+- [Українська](./docs/readme/README.uk.md)
 
-## Maintainers
+## Contributors
 
-- [Yeachan-Heo](https://github.com/Yeachan-Heo)
-- [HaD0Yun](https://github.com/HaD0Yun)
+| Role | Name | GitHub |
+| --- | --- | --- |
+| Creator & Lead | Yeachan Heo | [@Yeachan-Heo](https://github.com/Yeachan-Heo) |
+| Maintainer | HaD0Yun | [@HaD0Yun](https://github.com/HaD0Yun) |
 
-## Acknowledgments
+## Star History
 
-Inspired by [oh-my-claudecode](https://github.com/Yeachan-Heo/oh-my-claudecode), adapted for Codex CLI.
+[![Star History Chart](https://api.star-history.com/svg?repos=Yeachan-Heo/oh-my-codex&type=date&legend=top-left)](https://www.star-history.com/#Yeachan-Heo/oh-my-codex&type=date&legend=top-left)
 
 ## License
 

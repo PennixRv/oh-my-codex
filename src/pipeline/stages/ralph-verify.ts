@@ -6,8 +6,22 @@
  */
 
 import type { PipelineStage, StageContext, StageResult } from '../types.js';
+import {
+  buildFollowupStaffingPlan,
+  resolveAvailableAgentTypes,
+} from '../../team/followup-planner.js';
 
 export interface RalphVerifyStageOptions {
+  /** Stage name. Strict Autopilot uses 'ralph'; legacy pipeline adapters use 'ralph-verify'. */
+  stageName?: string;
+
+  /**
+   * Ordered artifact keys used as Ralph execution input.
+   * Legacy ralph-verify keeps reading prior ralph/team-exec output; strict Autopilot
+   * Ralph reads ralplan first so implementation starts from approved planning.
+   */
+  executionArtifactKeys?: readonly string[];
+
   /**
    * Maximum number of ralph verification iterations.
    * Defaults to 10.
@@ -19,8 +33,8 @@ export interface RalphVerifyStageOptions {
  * Create a ralph-verify pipeline stage.
  *
  * This stage wraps the ralph persistence loop for the verification phase
- * of the pipeline. It takes the execution results from team-exec and
- * orchestrates architect-verified completion.
+ * of legacy pipelines. Strict Autopilot uses `createRalphStage()` for the
+ * implementation/verification phase before code-review.
  *
  * The iteration count is configurable, addressing issue #396 requirement
  * for configurable ralph iteration count.
@@ -29,14 +43,19 @@ export function createRalphVerifyStage(options: RalphVerifyStageOptions = {}): P
   const maxIterations = options.maxIterations ?? 10;
 
   return {
-    name: 'ralph-verify',
+    name: options.stageName ?? 'ralph-verify',
 
     async run(ctx: StageContext): Promise<StageResult> {
       const startTime = Date.now();
 
       try {
-        // Extract execution context from previous stage
-        const teamArtifacts = ctx.artifacts['team-exec'] as Record<string, unknown> | undefined;
+        // Extract execution context from previous stage.
+        const executionArtifactKeys = options.executionArtifactKeys ?? ['ralph', 'team-exec'];
+        const executionArtifacts = pickFirstArtifact(ctx.artifacts, executionArtifactKeys);
+        const availableAgentTypes = await resolveAvailableAgentTypes(ctx.cwd);
+        const staffingPlan = buildFollowupStaffingPlan('ralph', ctx.task, availableAgentTypes, {
+          workerCount: Math.min(maxIterations, 3),
+        });
 
         // Build ralph verification descriptor
         const verifyDescriptor: RalphVerifyDescriptor = {
@@ -44,7 +63,9 @@ export function createRalphVerifyStage(options: RalphVerifyStageOptions = {}): P
           maxIterations,
           cwd: ctx.cwd,
           sessionId: ctx.sessionId,
-          executionArtifacts: teamArtifacts ?? {},
+          availableAgentTypes,
+          staffingPlan,
+          executionArtifacts: executionArtifacts ?? {},
         };
 
         return {
@@ -52,6 +73,8 @@ export function createRalphVerifyStage(options: RalphVerifyStageOptions = {}): P
           artifacts: {
             verifyDescriptor,
             maxIterations,
+            availableAgentTypes,
+            staffingPlan,
             stage: 'ralph-verify',
             instruction: buildRalphInstruction(verifyDescriptor),
           },
@@ -81,6 +104,8 @@ export interface RalphVerifyDescriptor {
   maxIterations: number;
   cwd: string;
   sessionId?: string;
+  availableAgentTypes: string[];
+  staffingPlan: ReturnType<typeof buildFollowupStaffingPlan>;
   executionArtifacts: Record<string, unknown>;
 }
 
@@ -88,5 +113,27 @@ export interface RalphVerifyDescriptor {
  * Build the ralph CLI instruction from a descriptor.
  */
 export function buildRalphInstruction(descriptor: RalphVerifyDescriptor): string {
-  return `ralph verify (max ${descriptor.maxIterations} iterations): ${descriptor.task.slice(0, 200)}`;
+  return `${descriptor.staffingPlan.launchHints.shellCommand} # max_iterations=${descriptor.maxIterations} # staffing=${descriptor.staffingPlan.staffingSummary} # verify=${descriptor.staffingPlan.verificationPlan.summary}`;
+}
+
+function pickFirstArtifact(
+  artifacts: Record<string, unknown>,
+  keys: readonly string[],
+): Record<string, unknown> | undefined {
+  for (const key of keys) {
+    const artifact = artifacts[key];
+    if (artifact && typeof artifact === 'object') {
+      return artifact as Record<string, unknown>;
+    }
+  }
+  return undefined;
+}
+
+/** Create the strict Autopilot Ralph phase adapter. */
+export function createRalphStage(options: RalphVerifyStageOptions = {}): PipelineStage {
+  return createRalphVerifyStage({
+    ...options,
+    stageName: 'ralph',
+    executionArtifactKeys: options.executionArtifactKeys ?? ['ralplan', 'team-exec'],
+  });
 }

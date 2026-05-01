@@ -1,11 +1,14 @@
 import type { TeamPhase, TerminalPhase } from '../orchestrator.js';
-import type { TeamTaskStatus, TeamEventType } from '../contracts.js';
+import type { TeamDispatchRequestStatus, TeamEventType, TeamTaskStatus } from '../contracts.js';
+import type { TeamReminderIntent } from '../reminder-intents.js';
+import type { WorktreeMode } from '../worktree.js';
 
 export interface TeamConfig {
   name: string;
   task: string;
   agent_type: string;
   worker_launch_mode: 'interactive' | 'prompt';
+  lifecycle_profile: 'default';
   worker_count: number;
   max_workers: number;
   workers: WorkerInfo[];
@@ -15,6 +18,7 @@ export interface TeamConfig {
   leader_cwd?: string;
   team_state_root?: string;
   workspace_mode?: 'single' | 'worktree';
+  worktree_mode?: WorktreeMode;
   leader_pane_id: string | null;
   hud_pane_id: string | null;
   resize_hook_name: string | null;
@@ -31,9 +35,11 @@ export interface WorkerInfo {
   pid?: number;
   pane_id?: string;
   working_dir?: string;
+  worktree_repo_root?: string;
   worktree_path?: string;
   worktree_branch?: string;
   worktree_detached?: boolean;
+  worktree_created?: boolean;
   team_state_root?: string;
 }
 
@@ -49,6 +55,28 @@ export interface WorkerStatus {
   current_task_id?: string;
   reason?: string;
   updated_at: string;
+}
+
+export type TeamTaskDelegationMode = 'none' | 'optional' | 'auto' | 'required';
+export type TeamTaskChildModelPolicy = 'standard' | 'fast' | 'inherit' | 'frontier';
+
+export interface TeamTaskDelegationComplianceEvidence {
+  status: 'spawned' | 'skipped';
+  source: 'terminal_result';
+  detail: string;
+  recorded_at: string;
+}
+
+export interface TeamTaskDelegationPlan {
+  mode: TeamTaskDelegationMode;
+  max_parallel_subtasks?: number;
+  required_parallel_probe?: boolean;
+  spawn_before_serial_search_threshold?: number;
+  child_model_policy?: TeamTaskChildModelPolicy;
+  child_model?: string;
+  subtask_candidates?: string[];
+  child_report_format?: 'bullets' | 'json';
+  skip_allowed_reason_required?: boolean;
 }
 
 export interface TeamTask {
@@ -67,6 +95,8 @@ export interface TeamTask {
   claim?: TeamTaskClaim;
   created_at: string;
   completed_at?: string;
+  delegation?: TeamTaskDelegationPlan;
+  delegation_compliance?: TeamTaskDelegationComplianceEvidence;
 }
 
 export interface TeamTaskClaim {
@@ -91,6 +121,13 @@ export interface TeamPolicy {
   worker_launch_mode: 'interactive' | 'prompt';
   dispatch_mode: 'hook_preferred_with_fallback' | 'transport_direct';
   dispatch_ack_timeout_ms: number;
+}
+
+/**
+ * Lifecycle/workflow guardrails persisted alongside the manifest, but kept
+ * separate from transport/runtime policy so each layer has a single owner.
+ */
+export interface TeamGovernance {
   delegation_only: boolean;
   plan_approval_required: boolean;
   nested_teams_allowed: boolean;
@@ -99,7 +136,6 @@ export interface TeamPolicy {
 }
 
 export type TeamDispatchRequestKind = 'inbox' | 'mailbox' | 'nudge';
-export type TeamDispatchRequestStatus = 'pending' | 'notified' | 'delivered' | 'failed';
 export type TeamDispatchTransportPreference = 'hook_preferred_with_fallback' | 'transport_direct' | 'prompt_stdin';
 
 export interface TeamDispatchRequest {
@@ -110,6 +146,7 @@ export interface TeamDispatchRequest {
   worker_index?: number;
   pane_id?: string;
   trigger_message: string;
+  intent?: TeamReminderIntent;
   message_id?: string;
   inbox_correlation_key?: string;
   transport_preference: TeamDispatchTransportPreference;
@@ -130,6 +167,7 @@ export interface TeamDispatchRequestInput {
   worker_index?: number;
   pane_id?: string;
   trigger_message: string;
+  intent?: TeamReminderIntent;
   message_id?: string;
   inbox_correlation_key?: string;
   transport_preference?: TeamDispatchTransportPreference;
@@ -149,7 +187,10 @@ export interface TeamManifestV2 {
   task: string;
   leader: TeamLeader;
   policy: TeamPolicy;
+  governance: TeamGovernance;
+  lifecycle_profile: 'default';
   permissions_snapshot: PermissionsSnapshot;
+  team_decomposition?: Record<string, unknown>;
   tmux_session: string;
   worker_count: number;
   workers: WorkerInfo[];
@@ -158,6 +199,7 @@ export interface TeamManifestV2 {
   leader_cwd?: string;
   team_state_root?: string;
   workspace_mode?: 'single' | 'worktree';
+  worktree_mode?: WorktreeMode;
   leader_pane_id: string | null;
   hud_pane_id: string | null;
   resize_hook_name: string | null;
@@ -169,6 +211,7 @@ export interface TeamWorkspaceMetadata {
   leader_cwd?: string;
   team_state_root?: string;
   workspace_mode?: 'single' | 'worktree';
+  worktree_mode?: WorktreeMode;
 }
 
 export interface TeamEvent {
@@ -179,6 +222,7 @@ export interface TeamEvent {
   task_id?: string;
   message_id?: string | null;
   reason?: string;
+  intent?: TeamReminderIntent;
   state?: WorkerStatus['state'];
   prev_state?: WorkerStatus['state'];
   worker_count?: number;
@@ -223,11 +267,15 @@ export type ClaimTaskResult =
 
 export type TransitionTaskResult =
   | { ok: true; task: TeamTaskV2 }
-  | { ok: false; error: 'claim_conflict' | 'invalid_transition' | 'task_not_found' | 'already_terminal' | 'lease_expired' };
+  | { ok: false; error: 'claim_conflict' | 'invalid_transition' | 'task_not_found' | 'already_terminal' | 'lease_expired' | 'missing_delegation_compliance_evidence' };
 
 export type ReleaseTaskClaimResult =
   | { ok: true; task: TeamTaskV2 }
   | { ok: false; error: 'claim_conflict' | 'task_not_found' | 'already_terminal' | 'lease_expired' };
+
+export type ReclaimTaskResult =
+  | { ok: true; task: TeamTaskV2; reclaimed: boolean }
+  | { ok: false; error: 'claim_conflict' | 'task_not_found' | 'already_terminal' | 'lease_active' };
 
 export interface TeamSummary {
   teamName: string;

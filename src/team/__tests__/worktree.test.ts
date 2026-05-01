@@ -51,6 +51,12 @@ describe('worktree parser', () => {
     assert.deepEqual(parsed.remainingArgs, ['team', '2:executor', 'task']);
   });
 
+  it('keeps team args flag-free so the CLI can apply automatic default worktrees', () => {
+    const parsed = parseWorktreeMode(['ralph', '2:executor', 'task']);
+    assert.deepEqual(parsed.mode, { enabled: false });
+    assert.deepEqual(parsed.remainingArgs, ['ralph', '2:executor', 'task']);
+  });
+
   // Regression tests for issue #203: branch name passed as separate arg must not
   // leak into the Codex shell as input.
   it('parses named branch from --worktree <name> (space-separated)', () => {
@@ -84,6 +90,27 @@ describe('worktree parser', () => {
   });
 });
 
+describe('worktree planning', () => {
+  it('plans dedicated autoresearch branch and path naming', async () => {
+    const repo = await initRepo();
+    try {
+      const planned = planWorktreeTarget({
+        cwd: repo,
+        scope: 'autoresearch' as never,
+        mode: { enabled: true, detached: false, name: 'demo-mission' },
+        worktreeTag: '20260314T000000Z',
+      });
+      assert.equal(planned.enabled, true);
+      if (!planned.enabled) return;
+
+      assert.equal(planned.branchName, 'autoresearch/demo-mission/20260314t000000z');
+      assert.match(planned.worktreePath.replace(/\\/g, '/'), /\.omx\/worktrees\/autoresearch-demo-mission-20260314t000000z$/);
+    } finally {
+      await rm(repo, { recursive: true, force: true });
+    }
+  });
+});
+
 describe('worktree ensure + rollback', () => {
   it('creates and reuses detached worktree idempotently', async () => {
     const repo = await initRepo();
@@ -107,6 +134,57 @@ describe('worktree ensure + rollback', () => {
       if (!reused.enabled) return;
       assert.equal(reused.reused, true);
       assert.equal(reused.created, false);
+    } finally {
+      await rm(repo, { recursive: true, force: true });
+    }
+  });
+
+  it('rejects reusing a dirty worktree', async () => {
+    const repo = await initRepo();
+    try {
+      const planned = planWorktreeTarget({
+        cwd: repo,
+        scope: 'launch',
+        mode: { enabled: true, detached: true, name: null },
+      });
+      assert.equal(planned.enabled, true);
+      if (!planned.enabled) return;
+
+      const created = ensureWorktree(planned);
+      assert.equal(created.enabled, true);
+      if (!created.enabled) return;
+
+      await writeFile(join(created.worktreePath, 'DIRTY.txt'), 'dirty\n', 'utf-8');
+      assert.throws(() => ensureWorktree(planned), /worktree_dirty/);
+    } finally {
+      await rm(repo, { recursive: true, force: true });
+    }
+  });
+
+  it('recreates a detached worktree when git worktree list still contains a missing stale path', async () => {
+    const repo = await initRepo();
+    try {
+      const planned = planWorktreeTarget({
+        cwd: repo,
+        scope: 'launch',
+        mode: { enabled: true, detached: true, name: null },
+      });
+      assert.equal(planned.enabled, true);
+      if (!planned.enabled) return;
+
+      const created = ensureWorktree(planned);
+      assert.equal(created.enabled, true);
+      if (!created.enabled) return;
+
+      await rm(created.worktreePath, { recursive: true, force: true });
+      assert.equal(existsSync(created.worktreePath), false);
+
+      const recreated = ensureWorktree(planned);
+      assert.equal(recreated.enabled, true);
+      if (!recreated.enabled) return;
+      assert.equal(recreated.created, true);
+      assert.equal(recreated.reused, false);
+      assert.equal(existsSync(recreated.worktreePath), true);
     } finally {
       await rm(repo, { recursive: true, force: true });
     }

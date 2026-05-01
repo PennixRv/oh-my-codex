@@ -1,8 +1,8 @@
 /**
  * Pipeline orchestrator for oh-my-codex
  *
- * Configurable pipeline that sequences: RALPLAN -> teams (codex workers) -> ralph verification.
- * Mirrors OMC #1130 pipeline design.
+ * Configurable pipeline that sequences: ralplan -> ralph -> code-review.
+ * This is the strict Autopilot loop; legacy team/ralph-verify adapters remain available.
  *
  * @module pipeline
  */
@@ -25,7 +25,10 @@ export {
 } from './orchestrator.js';
 
 export { createRalplanStage } from './stages/ralplan.js';
+export type { CreateRalplanStageOptions } from './stages/ralplan.js';
 export { createTeamExecStage, buildTeamInstruction } from './stages/team-exec.js';
 export type { TeamExecStageOptions, TeamExecDescriptor } from './stages/team-exec.js';
-export { createRalphVerifyStage, buildRalphInstruction } from './stages/ralph-verify.js';
+export { createRalphVerifyStage, createRalphStage, buildRalphInstruction } from './stages/ralph-verify.js';
 export type { RalphVerifyStageOptions, RalphVerifyDescriptor } from './stages/ralph-verify.js';
+export { createCodeReviewStage, buildCodeReviewInstruction } from './stages/code-review.js';
+export type { CodeReviewStageOptions, CodeReviewDescriptor, CodeReviewVerdict } from './stages/code-review.js';

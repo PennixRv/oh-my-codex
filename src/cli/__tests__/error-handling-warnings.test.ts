@@ -20,10 +20,30 @@ describe('error-handling warning guards', () => {
     assert.ok(!source.includes("await mkdir(join(cwd, '.omx', 'state'), { recursive: true }).catch(() => {});"));
     assert.ok(!source.includes('await unlink(pidPath).catch(() => {});'));
 
+    const esrchGuardCount =
+      source.match(/if \(!hasErrnoCode\(error, ['"]ESRCH['"]\)\)/g)?.length ?? 0;
+    assert.equal(esrchGuardCount, 1);
+    assert.match(source, /export async function reapStaleNotifyFallbackWatcher/);
+    assert.match(source, /failed to stop stale notify fallback watcher/);
     assert.match(source, /failed to write notify fallback watcher pid file/);
     assert.match(source, /failed to write hook-derived watcher pid file/);
     assert.match(source, /failed to remove notify fallback watcher pid file/);
     assert.match(source, /failed to remove hook-derived watcher pid file/);
+    assert.match(source, /buildWindowsMsysBackgroundHelperBootstrapScript/);
+    assert.match(source, /detached:\s*shouldDetachBackgroundHelper\(options\.env,\s*process\.platform\),\s+stdio: "ignore",\s+windowsHide: true,/);
+    assert.match(source, /stdio: "ignore",\s+timeout: 3000,\s+windowsHide: true,/);
+  });
+
+  it('hides Windows child windows for prompt and notification helpers', async () => {
+    const starPromptSource = await readSource('src/cli/star-prompt.ts');
+    const updateSource = await readSource('src/cli/update.ts');
+    const notifierSource = await readSource('src/notifications/notifier.ts');
+    const replyListenerSource = await readSource('src/notifications/reply-listener.ts');
+
+    assert.match(starPromptSource, /windowsHide: true/);
+    assert.match(updateSource, /windowsHide: true/);
+    assert.match(notifierSource, /execFileAsync\(cmd, args, \{ windowsHide: true \}\)/);
+    assert.match(replyListenerSource, /detached: true,\s+stdio: 'ignore',\s+windowsHide: true,/);
   });
 
   it('replaces silent log-write catches with warning logs', async () => {

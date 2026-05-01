@@ -16,6 +16,10 @@ function emptyCtx(): HudRenderContext {
     ralph: null,
     ultrawork: null,
     autopilot: null,
+    ralplan: null,
+    deepInterview: null,
+    autoresearch: null,
+    ultraqa: null,
     team: null,
     metrics: null,
     hudNotify: null,
@@ -25,6 +29,26 @@ function emptyCtx(): HudRenderContext {
 
 function flush(): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, 0));
+}
+
+function deferred(): { promise: Promise<void>; resolve: () => void } {
+  let resolve: () => void = () => {};
+  const promise = new Promise<void>((res) => {
+    resolve = res;
+  });
+  return { promise, resolve };
+}
+
+async function withTimeout(promise: Promise<void>, message: string, timeoutMs = 1000): Promise<void> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_resolve, reject) => {
+    timer = setTimeout(() => reject(new Error(message)), timeoutMs);
+  });
+  try {
+    await Promise.race([promise, timeout]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
 }
 
 afterEach(() => {
@@ -40,9 +64,9 @@ describe('runWatchMode', () => {
     const promise = runWatchMode('/tmp', WATCH_FLAGS, {
       isTTY: true,
       env: {},
-      readAllStateFn: async () => emptyCtx(),
-      readHudConfigFn: async () => ({ preset: 'focused' }),
-      renderHudFn: () => 'frame',
+      readAllStateFn: async (_cwd, config) => ({ ...emptyCtx(), gitBranch: config?.git.display ?? null }),
+      readHudConfigFn: async () => ({ preset: 'focused', git: { display: 'repo-branch' }, statusLine: { preset: 'focused' } }),
+      renderHudFn: (ctx) => `frame:${ctx.gitBranch}`,
       writeStdout: (text) => { writes.push(text); },
       writeStderr: () => {},
       registerSigint: (handler) => { sigintHandler = handler; },
@@ -59,6 +83,7 @@ describe('runWatchMode', () => {
     assert.equal(clearCount, 1);
     assert.ok(writes.some((chunk) => chunk.includes('\x1b[?25l')), 'cursor should be hidden in watch mode');
     assert.ok(writes.some((chunk) => chunk.includes('\x1b[?25h\x1b[2J\x1b[H')), 'cursor should be restored on SIGINT');
+    assert.ok(writes.some((chunk) => chunk.includes('frame:repo-branch')));
   });
 
   it('coalesces ticks so slow renders do not overlap', async () => {
@@ -69,28 +94,30 @@ describe('runWatchMode', () => {
     let callCount = 0;
     let inFlight = 0;
     let maxInFlight = 0;
-    let releaseFirstRender: (() => void) | undefined;
-    const firstRenderGate = new Promise<void>((resolve) => {
-      releaseFirstRender = resolve;
-    });
+    const firstRenderGate = deferred();
+    const firstReadStarted = deferred();
+    const secondReadStarted = deferred();
 
     const promise = runWatchMode('/tmp', WATCH_FLAGS, {
       isTTY: true,
       env: {},
-      readAllStateFn: async () => {
+      readAllStateFn: async (_cwd, config) => {
         callCount += 1;
         inFlight += 1;
         maxInFlight = Math.max(maxInFlight, inFlight);
         try {
           if (callCount === 1) {
-            await firstRenderGate;
+            firstReadStarted.resolve();
+            await firstRenderGate.promise;
+          } else if (callCount === 2) {
+            secondReadStarted.resolve();
           }
           return emptyCtx();
         } finally {
           inFlight -= 1;
         }
       },
-      readHudConfigFn: async () => ({ preset: 'focused' }),
+      readHudConfigFn: async () => ({ preset: 'focused', git: { display: 'repo-branch' }, statusLine: { preset: 'focused' } }),
       renderHudFn: () => 'frame',
       writeStdout: (text) => { writes.push(text); },
       writeStderr: () => {},
@@ -104,20 +131,48 @@ describe('runWatchMode', () => {
 
     await flush();
     assert.ok(timerTick, 'interval tick should be registered');
+    await withTimeout(firstReadStarted.promise, 'first render should start before exercising queued ticks');
 
-    // Trigger multiple ticks while first render is still blocked.
+    // Trigger multiple ticks while first render is deterministically blocked.
     timerTick?.();
     timerTick?.();
 
-    releaseFirstRender?.();
-    await flush();
-    await flush();
+    firstRenderGate.resolve();
+    await withTimeout(secondReadStarted.promise, 'queued rerender should start after first render is released');
 
     sigintHandler?.();
     await promise;
 
     assert.equal(maxInFlight, 1);
     assert.equal(callCount, 2, 'multiple overlapping ticks should collapse to one queued rerender');
+  });
+
+
+  it('runs authority tick after each rendered frame', async () => {
+    const writes: string[] = [];
+    let sigintHandler: (() => void) | undefined;
+    let authorityCalls = 0;
+
+    const promise = runWatchMode('/tmp', WATCH_FLAGS, {
+      isTTY: true,
+      env: {},
+      readAllStateFn: async () => emptyCtx(),
+      readHudConfigFn: async () => ({ preset: 'focused', git: { display: 'repo-branch' }, statusLine: { preset: 'focused' } }),
+      renderHudFn: () => 'frame',
+      writeStdout: (text) => { writes.push(text); },
+      writeStderr: () => {},
+      registerSigint: (handler) => { sigintHandler = handler; },
+      setIntervalFn: () => ({}) as ReturnType<typeof setInterval>,
+      clearIntervalFn: () => {},
+      runAuthorityTickFn: async ({ cwd }) => { authorityCalls += 1; assert.equal(cwd, '/tmp'); },
+    });
+
+    await flush();
+    sigintHandler?.();
+    await promise;
+
+    assert.equal(authorityCalls, 1);
+    assert.ok(writes.some((chunk) => chunk.includes('frame')));
   });
 
   it('handles render failures gracefully and restores terminal state', async () => {
@@ -128,10 +183,10 @@ describe('runWatchMode', () => {
     await runWatchMode('/tmp', WATCH_FLAGS, {
       isTTY: true,
       env: {},
-      readAllStateFn: async () => {
+      readAllStateFn: async (_cwd, config) => {
         throw new Error('boom');
       },
-      readHudConfigFn: async () => ({ preset: 'focused' }),
+      readHudConfigFn: async () => ({ preset: 'focused', git: { display: 'repo-branch' }, statusLine: { preset: 'focused' } }),
       renderHudFn: () => 'frame',
       writeStdout: (text) => { writes.push(text); },
       writeStderr: (text) => { errors.push(text); },

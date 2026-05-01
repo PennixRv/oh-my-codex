@@ -5,7 +5,6 @@
  */
 
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
-import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
@@ -15,7 +14,7 @@ import { readFile, readdir } from 'fs/promises';
 import { join, relative, extname, basename, resolve } from 'path';
 import { existsSync } from 'fs';
 import { promisify } from 'util';
-import { shouldAutoStartMcpServer } from './bootstrap.js';
+import { autoStartStdioMcpServer } from './bootstrap.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -83,18 +82,28 @@ async function findTsconfig(dir: string): Promise<string | null> {
   return null;
 }
 
-async function runTscDiagnostics(
+type ExecResult = { stdout: string; stderr: string };
+type ExecRunner = (
+  cmd: string,
+  args: string[],
+  options?: { cwd?: string; timeout?: number }
+) => Promise<ExecResult>;
+
+export async function runTscDiagnostics(
   target: string,
   projectDir: string,
-  severity?: string
+  severity?: string,
+  runCommand: ExecRunner = exec
 ): Promise<{ diagnostics: Diagnostic[]; command: string }> {
   const tsconfig = await findTsconfig(projectDir);
-  const args = ['--noEmit', '--pretty', 'false'];
-  if (tsconfig) {
-    args.push('--project', tsconfig);
+  if (!tsconfig) {
+    return { diagnostics: [], command: 'tsc skipped: no tsconfig found' };
   }
 
-  const { stdout, stderr } = await exec('npx', ['tsc', ...args], { cwd: projectDir, timeout: 60000 });
+  const args = ['--noEmit', '--pretty', 'false'];
+  args.push('--project', tsconfig);
+
+  const { stdout, stderr } = await runCommand('npx', ['tsc', ...args], { cwd: projectDir, timeout: 60000 });
   const output = stdout + '\n' + stderr;
   let diagnostics = parseTscOutput(output, projectDir);
 
@@ -311,8 +320,8 @@ const server = new Server(
   { capabilities: { tools: {} } }
 );
 
-server.setRequestHandler(ListToolsRequestSchema, async () => ({
-  tools: [
+export function buildCodeIntelServerTools() {
+  return [
     {
       name: 'lsp_diagnostics',
       description: 'Get diagnostics (errors, warnings) for a file. Uses tsc --noEmit for TypeScript projects.',
@@ -431,10 +440,16 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
         required: ['pattern', 'replacement', 'language'],
       },
     },
-  ],
+  ];
+}
+
+server.setRequestHandler(ListToolsRequestSchema, async () => ({
+  tools: buildCodeIntelServerTools(),
 }));
 
-server.setRequestHandler(CallToolRequestSchema, async (request) => {
+export async function handleCodeIntelToolCall(request: {
+  params: { name: string; arguments?: Record<string, unknown> };
+}) {
   const { name, arguments: args } = request.params;
   const a = (args || {}) as Record<string, unknown>;
 
@@ -657,9 +672,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     default:
       return { content: [{ type: 'text' as const, text: `Unknown tool: ${name}` }], isError: true };
   }
-});
-
-if (shouldAutoStartMcpServer('code_intel')) {
-  const transport = new StdioServerTransport();
-  server.connect(transport).catch(console.error);
 }
+
+server.setRequestHandler(CallToolRequestSchema, handleCodeIntelToolCall);
+
+autoStartStdioMcpServer('code_intel', server);

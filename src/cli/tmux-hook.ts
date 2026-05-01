@@ -3,6 +3,8 @@ import { mkdir, readFile, writeFile } from 'fs/promises';
 import { spawnSync } from 'child_process';
 import { join } from 'path';
 import { getPackageRoot } from '../utils/package.js';
+import { resolveCodexPane } from '../scripts/tmux-hook-engine.js';
+import { resolveTmuxBinaryForPlatform } from '../utils/platform-command.js';
 
 type TmuxTargetType = 'session' | 'pane';
 
@@ -206,7 +208,9 @@ async function loadConfigForCommand(
 }
 
 function runTmux(args: string[]): { ok: true; stdout: string } | { ok: false; stderr: string } {
-  const result = spawnSync('tmux', args, { encoding: 'utf-8' });
+  const result = spawnSync(resolveTmuxBinaryForPlatform() || 'tmux', args, { encoding: 'utf-8',
+      windowsHide: true,
+    });
   if (result.error) {
     return { ok: false, stderr: result.error.message };
   }
@@ -265,11 +269,11 @@ function detectActivePaneFromList(): InitialTargetDetection | null {
 }
 
 function detectInitialTarget(): InitialTargetDetection | null {
-  const tmuxPaneEnv = process.env.TMUX_PANE;
-  if (tmuxPaneEnv) {
-    const pane = runTmux(['display-message', '-p', '-t', tmuxPaneEnv, '#{pane_id}']);
+  const canonicalPane = resolveCodexPane();
+  if (canonicalPane) {
+    const pane = runTmux(['display-message', '-p', '-t', canonicalPane, '#{pane_id}']);
     if (pane.ok && pane.stdout) {
-      const session = runTmux(['display-message', '-p', '-t', tmuxPaneEnv, '#S']);
+      const session = runTmux(['display-message', '-p', '-t', canonicalPane, '#S']);
       return {
         target: { type: 'pane', value: pane.stdout },
         sessionName: session.ok && session.stdout ? session.stdout : undefined,
@@ -426,7 +430,7 @@ async function testTmuxHook(args: string[]): Promise<void> {
     console.log('Proceeding with placeholder target; notify-hook may log `invalid_config` skips.');
   }
   const pkgRoot = getPackageRoot();
-  const notifyHook = join(pkgRoot, 'scripts', 'notify-hook.js');
+  const notifyHook = join(pkgRoot, 'dist', 'scripts', 'notify-hook.js');
   if (!existsSync(notifyHook)) {
     throw new Error(`notify-hook.js not found at ${notifyHook}`);
   }
@@ -446,7 +450,8 @@ async function testTmuxHook(args: string[]): Promise<void> {
   const result = spawnSync(process.execPath, [notifyHook, JSON.stringify(payload)], {
     cwd,
     encoding: 'utf-8',
-  });
+      windowsHide: true,
+    });
   if (result.error) {
     throw new Error(`failed to run notify-hook: ${result.error.message}`);
   }

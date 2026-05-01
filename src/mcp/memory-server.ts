@@ -5,7 +5,6 @@
  */
 
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
-import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
@@ -14,7 +13,7 @@ import { readFile, writeFile, mkdir, rename } from 'fs/promises';
 import { join } from 'path';
 import { existsSync } from 'fs';
 import { parseNotepadPruneDaysOld } from './memory-validation.js';
-import { shouldAutoStartMcpServer } from './bootstrap.js';
+import { autoStartStdioMcpServer } from './bootstrap.js';
 import { resolveWorkingDirectoryForState } from './state-paths.js';
 
 function getMemoryPath(wd: string): string {
@@ -39,8 +38,8 @@ const server = new Server(
   { capabilities: { tools: {} } }
 );
 
-server.setRequestHandler(ListToolsRequestSchema, async () => ({
-  tools: [
+export function buildMemoryServerTools() {
+  return [
     // Project Memory tools
     {
       name: 'project_memory_read',
@@ -162,10 +161,16 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
         },
       },
     },
-  ],
+  ];
+}
+
+server.setRequestHandler(ListToolsRequestSchema, async () => ({
+  tools: buildMemoryServerTools(),
 }));
 
-server.setRequestHandler(CallToolRequestSchema, async (request) => {
+export async function handleMemoryToolCall(request: {
+  params: { name: string; arguments?: Record<string, unknown> };
+}) {
   const { name, arguments: args } = request.params;
   const a = (args || {}) as Record<string, unknown>;
   let wd: string;
@@ -413,7 +418,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     default:
       return { content: [{ type: 'text' as const, text: `Unknown tool: ${name}` }], isError: true };
   }
-});
+}
+
+server.setRequestHandler(CallToolRequestSchema, handleMemoryToolCall);
 
 function text(data: unknown) {
   return { content: [{ type: 'text' as const, text: JSON.stringify(data, null, 2) }] };
@@ -455,7 +462,4 @@ function appendToSection(content: string, section: string, entry: string): strin
   return content.slice(0, nextHeader) + entry + content.slice(nextHeader);
 }
 
-if (shouldAutoStartMcpServer('memory')) {
-  const transport = new StdioServerTransport();
-  server.connect(transport).catch(console.error);
-}
+autoStartStdioMcpServer('memory', server);

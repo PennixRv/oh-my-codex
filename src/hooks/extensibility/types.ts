@@ -3,9 +3,25 @@ export type HookEventSource = 'native' | 'derived';
 
 export type HookEventName =
   | 'session-start'
+  | 'stop'
   | 'session-end'
   | 'session-idle'
   | 'turn-complete'
+  | 'blocked'
+  | 'run.heartbeat'
+  | 'run.blocked_on_user'
+  | 'run.blocked_on_system'
+  | 'finished'
+  | 'failed'
+  | 'worker.assigned'
+  | 'worker.stalled'
+  | 'worker.recovered'
+  | 'retry-needed'
+  | 'pr-created'
+  | 'test-started'
+  | 'test-finished'
+  | 'test-failed'
+  | 'handoff-needed'
   | 'needs-input'
   | 'pre-tool-use'
   | 'post-tool-use'
@@ -66,6 +82,63 @@ export interface HookPluginTmuxSendKeysResult {
 export type HookPluginSendKeysOptions = HookPluginTmuxSendKeysOptions;
 export type HookPluginSendKeysResult = HookPluginTmuxSendKeysResult;
 
+export interface HookPluginOmxSessionState {
+  session_id: string;
+  native_session_id?: string;
+  started_at?: string;
+  cwd?: string;
+  pid?: number;
+  platform?: NodeJS.Platform;
+  pid_start_ticks?: number;
+  pid_cmdline?: string;
+  [key: string]: unknown;
+}
+
+export interface HookPluginOmxHudState {
+  last_turn_at?: string;
+  turn_count?: number;
+  last_agent_output?: string;
+  [key: string]: unknown;
+}
+
+export interface HookPluginOmxNotifyFallbackState {
+  pid?: number;
+  parent_pid?: number;
+  started_at?: string;
+  cwd?: string;
+  notify_script?: string;
+  poll_ms?: number;
+  pid_file?: string | null;
+  max_lifetime_ms?: number;
+  tracked_files?: number;
+  seen_turns?: number;
+  stop_reason?: string;
+  stop_signal?: string | null;
+  stopping?: boolean;
+  [key: string]: unknown;
+}
+
+export interface HookPluginOmxUpdateCheckState {
+  last_checked_at?: string;
+  last_seen_latest?: string;
+  [key: string]: unknown;
+}
+
+export interface HookPluginOmxSdk {
+  session: {
+    read: () => Promise<HookPluginOmxSessionState | null>;
+  };
+  hud: {
+    read: () => Promise<HookPluginOmxHudState | null>;
+  };
+  notifyFallback: {
+    read: () => Promise<HookPluginOmxNotifyFallbackState | null>;
+  };
+  updateCheck: {
+    read: () => Promise<HookPluginOmxUpdateCheckState | null>;
+  };
+}
+
 export interface HookPluginSdk {
   tmux: {
     sendKeys: (options: HookPluginTmuxSendKeysOptions) => Promise<HookPluginTmuxSendKeysResult>;
@@ -81,6 +154,7 @@ export interface HookPluginSdk {
     delete: (key: string) => Promise<void>;
     all: <T extends Record<string, unknown> = Record<string, unknown>>() => Promise<T>;
   };
+  omx: HookPluginOmxSdk;
 }
 
 export interface HookPluginModule {

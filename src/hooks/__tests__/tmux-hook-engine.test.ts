@@ -3,13 +3,19 @@ import assert from 'node:assert/strict';
 import {
   DEFAULT_ALLOWED_MODES,
   DEFAULT_MARKER,
+  normalizeTmuxCapture,
   normalizeTmuxHookConfig,
   pickActiveMode,
+  paneHasActiveTask,
+  paneIsBootstrapping,
+  paneShowsCodexViewport,
+  paneLooksReady,
   evaluateInjectionGuards,
   buildSendKeysArgv,
   buildPaneCurrentCommandArgv,
   isPaneRunningShell,
-} from '../../../scripts/tmux-hook-engine.js';
+  resolveCodexPane,
+} from '../../scripts/tmux-hook-engine.js';
 
 describe('normalizeTmuxHookConfig', () => {
   it('returns safe disabled defaults for missing config', () => {
@@ -295,5 +301,157 @@ describe('buildSendKeysArgv', () => {
       prompt: 'continue',
       dryRun: true,
     }), null);
+  });
+});
+
+describe('normalizeTmuxCapture', () => {
+  it('collapses whitespace and trims tmux capture text', () => {
+    assert.equal(normalizeTmuxCapture('  hello\r\n  world  \n'), 'hello world');
+  });
+});
+
+describe('paneIsBootstrapping', () => {
+  it('detects startup/loading markers', () => {
+    assert.equal(paneIsBootstrapping(['model: loading']), true);
+    assert.equal(paneIsBootstrapping(['Initializing workspace']), true);
+    assert.equal(paneIsBootstrapping(['connecting to agent']), true);
+  });
+
+  it('returns false for ready prompt content', () => {
+    assert.equal(paneIsBootstrapping(['› ready']), false);
+  });
+});
+
+describe('paneLooksReady', () => {
+  it('accepts explicit prompt lines', () => {
+    assert.equal(paneLooksReady('some output\n› '), true);
+    assert.equal(paneLooksReady('some output\n❯ '), true);
+  });
+
+  it('rejects status-only and bootstrapping captures', () => {
+    assert.equal(paneLooksReady('gpt-5 50% left'), false);
+    assert.equal(paneLooksReady('model: loading\n› '), false);
+  });
+
+  it('accepts Codex welcome-screen helper text', () => {
+    assert.equal(paneLooksReady('How can I help you today?'), true);
+  });
+
+  it('accepts Codex welcome-screen suggestion rows with a prompt glyph', () => {
+    assert.equal(paneLooksReady('› Explain this codebase'), true);
+  });
+
+  it('accepts issue-only prompts without a glyph', () => {
+    assert.equal(paneLooksReady('IND-123 only...'), true);
+  });
+
+  it('keeps viewport-only Codex captures non-ready when the prompt is below the fold', () => {
+    assert.equal(paneLooksReady(`╭────────────────────────────────────────────╮
+│ >_ OpenAI Codex (v0.118.0)                 │
+│                                            │
+│ model:     gpt-5.5 high   /model to change │
+│ directory: /tmp/demo                       │
+╰────────────────────────────────────────────╯
+
+⚠ MCP startup incomplete (failed: hf request)`), false);
+  });
+});
+
+describe('paneShowsCodexViewport', () => {
+  it('detects a live Codex viewport without requiring the prompt to remain visible', () => {
+    assert.equal(paneShowsCodexViewport(`╭────────────────────────────────────────────╮
+│ >_ OpenAI Codex (v0.118.0)                 │
+│                                            │
+│ model:     gpt-5.5 high   /model to change │
+│ directory: /tmp/demo                       │
+╰────────────────────────────────────────────╯
+
+⚠ MCP startup incomplete (failed: hf request)`), true);
+  });
+
+  it('rejects status-only and bootstrapping captures', () => {
+    assert.equal(paneShowsCodexViewport('gpt-5 50% left'), false);
+    assert.equal(paneShowsCodexViewport(`╭────────────────────────────────────────────╮
+│ >_ OpenAI Codex (v0.118.0)                 │
+│                                            │
+│ model: loading                             │
+│ directory: /tmp/demo                       │
+╰────────────────────────────────────────────╯`), false);
+  });
+});
+
+describe('paneHasActiveTask', () => {
+  it('detects Codex and Claude activity markers', () => {
+    assert.equal(paneHasActiveTask('• Running tests (3m 12s • esc to interrupt)'), true);
+    assert.equal(paneHasActiveTask('· Pollinating…'), true);
+    assert.equal(paneHasActiveTask('2 background terminal running'), true);
+  });
+
+  it('returns false for idle prompts', () => {
+    assert.equal(paneHasActiveTask('› ready for input'), false);
+  });
+});
+
+
+describe('resolveCodexPane', () => {
+  it('ignores HUD pane even when TMUX_PANE foreground command is node', async () => {
+    const { mkdtemp, writeFile, chmod, rm } = await import('node:fs/promises');
+    const { tmpdir } = await import('node:os');
+    const { join } = await import('node:path');
+
+    const fakeBinDir = await mkdtemp(join(tmpdir(), 'omx-resolve-codex-pane-'));
+    const fakeTmuxPath = join(fakeBinDir, 'tmux');
+    const previousPath = process.env.PATH;
+    const previousTmuxPane = process.env.TMUX_PANE;
+
+    try {
+      await writeFile(fakeTmuxPath, `#!/usr/bin/env bash
+set -eu
+cmd="$1"
+shift || true
+if [[ "$cmd" == "display-message" ]]; then
+  target=""
+  format=""
+  while (($#)); do
+    case "$1" in
+      -p) shift ;;
+      -t) target="$2"; shift 2 ;;
+      *) format="$1"; shift ;;
+    esac
+  done
+  if [[ "$format" == "#{pane_current_command}" && "$target" == "%2" ]]; then
+    echo "node"
+    exit 0
+  fi
+  if [[ "$format" == "#{pane_start_command}" && "$target" == "%2" ]]; then
+    echo "node /pkg/dist/cli/omx.js hud --watch"
+    exit 0
+  fi
+  if [[ "$format" == "#S" && "$target" == "%2" ]]; then
+    echo "devsess"
+    exit 0
+  fi
+  echo "bad display target: $target / $format" >&2
+  exit 1
+fi
+if [[ "$cmd" == "list-panes" ]]; then
+  printf "%%2\tnode\tnode /pkg/dist/cli/omx.js hud --watch\n%%42\tnode\tcodex --model gpt-5\n"
+  exit 0
+fi
+echo "unsupported" >&2
+exit 1
+`);
+      await chmod(fakeTmuxPath, 0o755);
+      process.env.PATH = `${fakeBinDir}:${previousPath || ''}`;
+      process.env.TMUX_PANE = '%2';
+
+      assert.equal(resolveCodexPane(), '%42');
+    } finally {
+      if (typeof previousPath === 'string') process.env.PATH = previousPath;
+      else delete process.env.PATH;
+      if (typeof previousTmuxPane === 'string') process.env.TMUX_PANE = previousTmuxPane;
+      else delete process.env.TMUX_PANE;
+      await rm(fakeBinDir, { recursive: true, force: true });
+    }
   });
 });

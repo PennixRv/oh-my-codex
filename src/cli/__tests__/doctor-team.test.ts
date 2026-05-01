@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdir, mkdtemp, rm, writeFile } from 'fs/promises';
 import { join, dirname } from 'path';
 import { tmpdir } from 'os';
-import { spawnSync } from 'child_process';
+import { spawn, spawnSync } from 'child_process';
 import { fileURLToPath } from 'url';
 
 function runOmx(
@@ -13,7 +13,7 @@ function runOmx(
 ): { status: number | null; stdout: string; stderr: string; error?: string } {
   const testDir = dirname(fileURLToPath(import.meta.url));
   const repoRoot = join(testDir, '..', '..', '..');
-  const omxBin = join(repoRoot, 'bin', 'omx.js');
+  const omxBin = join(repoRoot, 'dist', 'cli', 'omx.js');
   const r = spawnSync(process.execPath, [omxBin, ...argv], {
     cwd,
     encoding: 'utf-8',
@@ -24,6 +24,15 @@ function runOmx(
 
 function shouldSkipForSpawnPermissions(err?: string): boolean {
   return typeof err === 'string' && /(EPERM|EACCES)/i.test(err);
+}
+
+async function createFakeTmuxBin(wd: string, script: string): Promise<string> {
+  const fakeBin = join(wd, 'bin');
+  await mkdir(fakeBin, { recursive: true });
+  const tmuxPath = join(fakeBin, 'tmux');
+  await writeFile(tmuxPath, script);
+  spawnSync('chmod', ['+x', tmuxPath], { encoding: 'utf-8' });
+  return fakeBin;
 }
 
 describe('omx doctor --team', () => {
@@ -48,6 +57,51 @@ describe('omx doctor --team', () => {
       assert.equal(res.status, 1, res.stderr || res.stdout);
       assert.match(res.stdout, /resume_blocker/);
     } finally {
+      await rm(wd, { recursive: true, force: true });
+    }
+  });
+
+  it('warns without failing when a prompt worker pid is live but identity cannot be verified', async () => {
+    const wd = await mkdtemp(join(tmpdir(), 'omx-doctor-team-prompt-'));
+    const sleeper = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], {
+      stdio: 'ignore',
+      detached: false,
+    });
+    const sleeperPid = sleeper.pid ?? 0;
+
+    try {
+      const teamRoot = join(wd, '.omx', 'state', 'team', 'prompt-alpha');
+      await mkdir(join(teamRoot, 'workers', 'worker-1'), { recursive: true });
+      await writeFile(join(teamRoot, 'config.json'), JSON.stringify({
+        name: 'prompt-alpha',
+        worker_launch_mode: 'prompt',
+        tmux_session: 'prompt-team-alpha',
+        workers: [{ name: 'worker-1', pid: sleeperPid }],
+      }));
+      await writeFile(join(teamRoot, 'manifest.v2.json'), JSON.stringify({
+        name: 'prompt-alpha',
+        policy: { worker_launch_mode: 'prompt' },
+        tmux_session: 'prompt-team-alpha',
+        workers: [{ name: 'worker-1', pid: sleeperPid }],
+      }));
+
+      const fakeBin = await createFakeTmuxBin(wd, '#!/bin/sh\n# prompt-mode teams do not require tmux session checks\nexit 0\n');
+      const res = runOmx(wd, ['doctor', '--team'], { PATH: `${fakeBin}:${process.env.PATH || ''}` });
+      if (shouldSkipForSpawnPermissions(res.error)) return;
+      assert.equal(res.status, 0, res.stderr || res.stdout);
+      assert.match(res.stdout, /prompt_resume_unavailable/);
+      assert.match(res.stdout, /prompt-alpha\/worker-1/);
+      assert.match(res.stdout, new RegExp(String(sleeperPid)));
+      assert.match(res.stdout, /cannot verify that the PID still belongs/);
+      assert.match(res.stdout, /Results: 1 warnings, 0 failed/);
+    } finally {
+      if (sleeperPid > 0) {
+        try {
+          process.kill(sleeperPid, 'SIGKILL');
+        } catch {
+          // already exited
+        }
+      }
       await rm(wd, { recursive: true, force: true });
     }
   });
@@ -84,7 +138,8 @@ describe('omx doctor --team', () => {
       const requestedAt = new Date(Date.now() - 60_000).toISOString();
       await writeFile(join(workerDir, 'shutdown-request.json'), JSON.stringify({ requested_at: requestedAt }));
 
-      const res = runOmx(wd, ['doctor', '--team']);
+      const fakeBin = await createFakeTmuxBin(wd, '#!/bin/sh\n# list-sessions success with no sessions\nexit 0\n');
+      const res = runOmx(wd, ['doctor', '--team'], { PATH: `${fakeBin}:${process.env.PATH || ''}` });
       if (shouldSkipForSpawnPermissions(res.error)) return;
       assert.equal(res.status, 1, res.stderr || res.stdout);
       assert.match(res.stdout, /slow_shutdown/);
@@ -112,7 +167,8 @@ describe('omx doctor --team', () => {
         alive: true,
       }));
 
-      const res = runOmx(wd, ['doctor', '--team']);
+      const fakeBin = await createFakeTmuxBin(wd, '#!/bin/sh\n# list-sessions success with no sessions\nexit 0\n');
+      const res = runOmx(wd, ['doctor', '--team'], { PATH: `${fakeBin}:${process.env.PATH || ''}` });
       if (shouldSkipForSpawnPermissions(res.error)) return;
       assert.equal(res.status, 1, res.stderr || res.stdout);
       assert.match(res.stdout, /delayed_status_lag/);
@@ -196,6 +252,42 @@ describe('omx doctor --team', () => {
 
       const res = runOmx(wd, ['doctor', '--team'], { PATH: `${fakeBin}:${process.env.PATH || ''}` });
       if (shouldSkipForSpawnPermissions(res.error)) return;
+      assert.doesNotMatch(res.stdout, /stale_leader/);
+    } finally {
+      await rm(wd, { recursive: true, force: true });
+    }
+  });
+
+  it('does not emit stale_leader when leader recently checked team status', async () => {
+    const wd = await mkdtemp(join(tmpdir(), 'omx-doctor-team-'));
+    try {
+      const stateDir = join(wd, '.omx', 'state');
+      const teamRoot = join(stateDir, 'team', 'eta');
+      await mkdir(join(teamRoot, 'workers', 'worker-1'), { recursive: true });
+      await writeFile(join(teamRoot, 'config.json'), JSON.stringify({
+        name: 'eta',
+        tmux_session: 'omx-team-eta',
+      }));
+
+      await writeFile(join(stateDir, 'hud-state.json'), JSON.stringify({
+        last_turn_at: new Date(Date.now() - 300_000).toISOString(),
+        turn_count: 5,
+      }));
+      await writeFile(join(stateDir, 'leader-runtime-activity.json'), JSON.stringify({
+        last_activity_at: new Date(Date.now() - 5_000).toISOString(),
+        last_source: 'team_status',
+        last_team_name: 'eta',
+      }));
+
+      const fakeBin = join(wd, 'bin');
+      await mkdir(fakeBin, { recursive: true });
+      const tmuxPath = join(fakeBin, 'tmux');
+      await writeFile(tmuxPath, '#!/bin/sh\nif [ "$1" = "list-sessions" ]; then echo "omx-team-eta"; exit 0; fi\nexit 0\n');
+      spawnSync('chmod', ['+x', tmuxPath], { encoding: 'utf-8' });
+
+      const res = runOmx(wd, ['doctor', '--team'], { PATH: `${fakeBin}:${process.env.PATH || ''}` });
+      if (shouldSkipForSpawnPermissions(res.error)) return;
+      assert.equal(res.status, 0, res.stderr || res.stdout);
       assert.doesNotMatch(res.stdout, /stale_leader/);
     } finally {
       await rm(wd, { recursive: true, force: true });

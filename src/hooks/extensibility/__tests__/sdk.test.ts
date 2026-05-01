@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { existsSync } from 'node:fs';
 import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { describe, it } from 'node:test';
 import { createHookPluginSdk, clearHookPluginState } from '../sdk.js';
 import type { HookEventEnvelope } from '../types.js';
@@ -15,6 +15,13 @@ function makeEvent(event = 'session-start'): HookEventEnvelope {
     source: 'native',
     context: {},
   };
+}
+
+async function writeOmxStateFile(cwd: string, fileName: string, value: unknown): Promise<void> {
+  const stateDir = join(cwd, '.omx', 'state');
+  const targetPath = join(stateDir, fileName);
+  await mkdir(dirname(targetPath), { recursive: true });
+  await writeFile(targetPath, JSON.stringify(value, null, 2));
 }
 
 describe('createHookPluginSdk', () => {
@@ -208,6 +215,63 @@ describe('createHookPluginSdk', () => {
       }
     });
 
+
+    it('prefers non-HUD codex pane when targeting a tmux session', async () => {
+      const cwd = await mkdtemp(join(tmpdir(), 'omx-sdk-'));
+      const fakeBinDir = await mkdtemp(join(tmpdir(), 'omx-sdk-bin-'));
+      const fakeTmuxPath = join(fakeBinDir, 'tmux');
+      const previousPath = process.env.PATH;
+      try {
+        await writeFile(fakeTmuxPath, `#!/usr/bin/env bash
+set -eu
+cmd="$1"
+shift || true
+if [[ "$cmd" == "list-panes" ]]; then
+  printf "%%2	1	node /pkg/dist/cli/omx.js hud --watch
+%%42	0	codex --model gpt-5
+"
+  exit 0
+fi
+if [[ "$cmd" == "send-keys" ]]; then
+  exit 0
+fi
+if [[ "$cmd" == "display-message" ]]; then
+  target=""
+  format=""
+  while (($#)); do
+    case "$1" in
+      -p) shift ;;
+      -t) target="$2"; shift 2 ;;
+      *) format="$1"; shift ;;
+    esac
+  done
+  if [[ "$format" == "#{pane_id}" ]]; then
+    echo "$target"
+    exit 0
+  fi
+  exit 0
+fi
+exit 1
+`);
+        await import('node:fs/promises').then((fs) => fs.chmod(fakeTmuxPath, 0o755));
+        process.env.PATH = `${fakeBinDir}:${previousPath || ''}`;
+
+        const sdk = createHookPluginSdk({
+          cwd,
+          pluginName: 'test',
+          event: makeEvent(),
+          sideEffectsEnabled: true,
+        });
+        const result = await sdk.tmux.sendKeys({ text: 'hello', sessionName: 'devsess' });
+        assert.equal(result.ok, true);
+        assert.equal(result.target, '%42');
+      } finally {
+        if (typeof previousPath === 'string') process.env.PATH = previousPath;
+        else delete process.env.PATH;
+        await rm(cwd, { recursive: true, force: true });
+        await rm(fakeBinDir, { recursive: true, force: true });
+      }
+    });
     it('returns target_missing when no pane is resolvable', async () => {
       const cwd = await mkdtemp(join(tmpdir(), 'omx-sdk-'));
       const originalPane = process.env.TMUX_PANE;
@@ -226,6 +290,149 @@ describe('createHookPluginSdk', () => {
         if (originalPane !== undefined) {
           process.env.TMUX_PANE = originalPane;
         }
+        await rm(cwd, { recursive: true, force: true });
+      }
+    });
+  });
+
+  describe('omx', () => {
+    it('exposes only the explicit read-only omx readers', async () => {
+      const cwd = await mkdtemp(join(tmpdir(), 'omx-sdk-'));
+      try {
+        const sdk = createHookPluginSdk({ cwd, pluginName: 'test', event: makeEvent() });
+
+        assert.deepEqual(Object.keys(sdk.omx).sort(), ['hud', 'notifyFallback', 'session', 'updateCheck']);
+        assert.equal(typeof sdk.omx.session.read, 'function');
+        assert.equal(typeof sdk.omx.hud.read, 'function');
+        assert.equal(typeof sdk.omx.notifyFallback.read, 'function');
+        assert.equal(typeof sdk.omx.updateCheck.read, 'function');
+        assert.equal('pluginState' in sdk, false);
+        assert.equal('readJson' in sdk.omx, false);
+        assert.equal('list' in sdk.omx, false);
+        assert.equal('exists' in sdk.omx, false);
+        assert.equal('write' in sdk.omx.session, false);
+        assert.equal('delete' in sdk.omx.session, false);
+        assert.equal('write' in sdk.omx.hud, false);
+        assert.equal('delete' in sdk.omx.hud, false);
+        assert.equal('write' in sdk.omx.notifyFallback, false);
+        assert.equal('delete' in sdk.omx.notifyFallback, false);
+        assert.equal('write' in sdk.omx.updateCheck, false);
+        assert.equal('delete' in sdk.omx.updateCheck, false);
+      } finally {
+        await rm(cwd, { recursive: true, force: true });
+      }
+    });
+
+    it('reads session state from .omx/state/session.json', async () => {
+      const cwd = await mkdtemp(join(tmpdir(), 'omx-sdk-'));
+      try {
+        await writeOmxStateFile(cwd, 'session.json', {
+          session_id: 'session-123',
+          cwd,
+          started_at: '2026-01-01T00:00:00.000Z',
+        });
+
+        const sdk = createHookPluginSdk({ cwd, pluginName: 'test', event: makeEvent() });
+        const state = await sdk.omx.session.read();
+        assert.deepEqual(state, {
+          session_id: 'session-123',
+          cwd,
+          started_at: '2026-01-01T00:00:00.000Z',
+        });
+      } finally {
+        await rm(cwd, { recursive: true, force: true });
+      }
+    });
+
+    it('returns null for invalid session state without session_id', async () => {
+      const cwd = await mkdtemp(join(tmpdir(), 'omx-sdk-'));
+      try {
+        await writeOmxStateFile(cwd, 'session.json', {
+          started_at: '2026-01-01T00:00:00.000Z',
+        });
+
+        const sdk = createHookPluginSdk({ cwd, pluginName: 'test', event: makeEvent() });
+        assert.equal(await sdk.omx.session.read(), null);
+      } finally {
+        await rm(cwd, { recursive: true, force: true });
+      }
+    });
+
+    it('reads hud, notifyFallback, and updateCheck state from root-scoped omx files', async () => {
+      const cwd = await mkdtemp(join(tmpdir(), 'omx-sdk-'));
+      try {
+        await writeOmxStateFile(cwd, 'hud-state.json', {
+          last_turn_at: '2026-01-01T00:00:00.000Z',
+          turn_count: 3,
+        });
+        await writeOmxStateFile(cwd, 'notify-fallback-state.json', {
+          pid: 1234,
+          stopping: false,
+          tracked_files: 2,
+        });
+        await writeOmxStateFile(cwd, 'update-check.json', {
+          last_checked_at: '2026-01-01T00:00:00.000Z',
+          last_seen_latest: '0.11.0',
+        });
+
+        const sdk = createHookPluginSdk({ cwd, pluginName: 'test', event: makeEvent() });
+        assert.deepEqual(await sdk.omx.hud.read(), {
+          last_turn_at: '2026-01-01T00:00:00.000Z',
+          turn_count: 3,
+        });
+        assert.deepEqual(await sdk.omx.notifyFallback.read(), {
+          pid: 1234,
+          stopping: false,
+          tracked_files: 2,
+        });
+        assert.deepEqual(await sdk.omx.updateCheck.read(), {
+          last_checked_at: '2026-01-01T00:00:00.000Z',
+          last_seen_latest: '0.11.0',
+        });
+      } finally {
+        await rm(cwd, { recursive: true, force: true });
+      }
+    });
+
+    it('reads hud state from the current session scope instead of stale root fallback', async () => {
+      const cwd = await mkdtemp(join(tmpdir(), 'omx-sdk-hud-session-'));
+      try {
+        await writeOmxStateFile(cwd, 'session.json', {
+          session_id: 'sess-current',
+          cwd,
+          started_at: '2026-01-01T00:00:00.000Z',
+        });
+        await writeOmxStateFile(cwd, 'hud-state.json', {
+          last_turn_at: 'root-stale',
+          turn_count: 99,
+          last_agent_output: 'Would you like me to continue?',
+        });
+        await writeOmxStateFile(cwd, join('sessions', 'sess-current', 'hud-state.json'), {
+          last_turn_at: '2026-01-01T00:00:00.000Z',
+          turn_count: 3,
+          last_agent_output: 'Current session output',
+        });
+
+        const sdk = createHookPluginSdk({ cwd, pluginName: 'test', event: makeEvent() });
+        assert.deepEqual(await sdk.omx.hud.read(), {
+          last_turn_at: '2026-01-01T00:00:00.000Z',
+          turn_count: 3,
+          last_agent_output: 'Current session output',
+        });
+      } finally {
+        await rm(cwd, { recursive: true, force: true });
+      }
+    });
+
+    it('returns null for missing omx reader files', async () => {
+      const cwd = await mkdtemp(join(tmpdir(), 'omx-sdk-'));
+      try {
+        const sdk = createHookPluginSdk({ cwd, pluginName: 'test', event: makeEvent() });
+        assert.equal(await sdk.omx.session.read(), null);
+        assert.equal(await sdk.omx.hud.read(), null);
+        assert.equal(await sdk.omx.notifyFallback.read(), null);
+        assert.equal(await sdk.omx.updateCheck.read(), null);
+      } finally {
         await rm(cwd, { recursive: true, force: true });
       }
     });

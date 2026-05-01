@@ -78,7 +78,7 @@ oh-my-codex doctor
 Results: 9 passed, 0 warnings, 0 failed
 ```
 
-## Demo 1: Agent Slash Commands
+## Demo 1: Agent/Skill Keywords
 
 Start Codex CLI in any project directory:
 
@@ -86,22 +86,22 @@ Start Codex CLI in any project directory:
 omx
 ```
 
-Then use agent slash commands:
+Then use role and workflow keywords:
 
 ```
-> /prompts:architect "analyze the authentication module"
+> $architect "analyze the authentication module"
 ```
 
 **Expected:** The architect agent analyzes code with file:line references, root cause diagnosis, and trade-off analysis.
 
 ```
-> /prompts:security-reviewer "review the API endpoints"
+> $security-reviewer "review the API endpoints"
 ```
 
 **Expected:** OWASP Top 10 analysis with severity-prioritized findings and remediation code examples.
 
 ```
-> /prompts:explore "find all database query patterns"
+> $explore "find all database query patterns"
 ```
 
 **Expected:** Structural codebase search with file listings and pattern summaries.
@@ -212,7 +212,7 @@ export TEAM_NAME="e2e-team-demo"   # slugified from TEAM_TASK
 # Mixed worker CLIs (5+ workers, codex + claude)
 export OMX_TEAM_WORKER_CLI=auto
 export OMX_TEAM_WORKER_CLI_MAP=codex,codex,codex,claude,claude,claude
-export OMX_TEAM_WORKER_LAUNCH_ARGS='--model gpt-5.3-codex-spark -c model_reasoning_effort="low"'
+export OMX_TEAM_WORKER_LAUNCH_ARGS='-c model_reasoning_effort="low"'
 
 # 5-worker baseline
 omx team 5:executor "parallel team smoke"
@@ -255,11 +255,12 @@ omx team api transition-task-status --input "{\"team_name\":\"e2e-team-demo\",\"
 ### 7.2 Mailbox/message flow
 
 ```bash
-omx team api send-message --input '{"team_name":"e2e-team-demo","from_worker":"worker-1","to_worker":"leader-fixed","body":"ACK: worker-1 ready"}' --json
+omx team api send-message --input '{"team_name":"e2e-team-demo","from_worker":"leader-fixed","to_worker":"worker-1","body":"ACK: worker-1 ready"}' --json
 omx team api broadcast --input '{"team_name":"e2e-team-demo","from_worker":"leader-fixed","body":"Sync checkpoint"}' --json
-omx team api mailbox-list --input '{"team_name":"e2e-team-demo","worker":"worker-1"}' --json
-omx team api mailbox-mark-notified --input '{"team_name":"e2e-team-demo","worker":"worker-1","message_id":"<MESSAGE_ID>"}' --json
-omx team api mailbox-mark-delivered --input '{"team_name":"e2e-team-demo","worker":"worker-1","message_id":"<MESSAGE_ID>"}' --json
+MAILBOX_JSON=$(omx team api mailbox-list --input '{"team_name":"e2e-team-demo","worker":"worker-1"}' --json)
+MESSAGE_ID=$(echo "$MAILBOX_JSON" | jq -r '.data.messages[0].message_id // empty')
+omx team api mailbox-mark-notified --input "{\"team_name\":\"e2e-team-demo\",\"worker\":\"worker-1\",\"message_id\":\"$MESSAGE_ID\"}" --json
+omx team api mailbox-mark-delivered --input "{\"team_name\":\"e2e-team-demo\",\"worker\":\"worker-1\",\"message_id\":\"$MESSAGE_ID\"}" --json
 ```
 
 ### 7.3 Complete operations matrix (broad coverage)
@@ -332,7 +333,7 @@ export TEAM_TASK="e2e team demo"
 export TEAM_NAME="e2e-team-demo"
 export OMX_TEAM_WORKER_CLI=auto
 export OMX_TEAM_WORKER_CLI_MAP=codex,codex,codex,claude,claude,claude
-export OMX_TEAM_WORKER_LAUNCH_ARGS='--model gpt-5.3-codex-spark -c model_reasoning_effort="low"'
+export OMX_TEAM_WORKER_LAUNCH_ARGS='-c model_reasoning_effort="low"'
 
 echo "[1/8] start team (6 workers mixed codex/claude)"
 omx team 6:executor "$TEAM_TASK"
@@ -352,8 +353,11 @@ echo "[5/8] transition task -> completed"
 omx team api transition-task-status --input "{\"team_name\":\"$TEAM_NAME\",\"task_id\":\"$TASK_ID\",\"from\":\"in_progress\",\"to\":\"completed\",\"claim_token\":\"$CLAIM_TOKEN\"}" --json
 
 echo "[6/8] mailbox flow"
-omx team api send-message --input "{\"team_name\":\"$TEAM_NAME\",\"from_worker\":\"worker-1\",\"to_worker\":\"leader-fixed\",\"body\":\"ACK one-shot\"}" --json
-omx team api mailbox-list --input "{\"team_name\":\"$TEAM_NAME\",\"worker\":\"worker-1\"}" --json
+omx team api send-message --input "{\"team_name\":\"$TEAM_NAME\",\"from_worker\":\"leader-fixed\",\"to_worker\":\"worker-1\",\"body\":\"ACK one-shot\"}" --json
+MAILBOX_JSON=$(omx team api mailbox-list --input "{\"team_name\":\"$TEAM_NAME\",\"worker\":\"worker-1\"}" --json)
+MESSAGE_ID=$(echo "$MAILBOX_JSON" | jq -r '.data.messages[0].message_id // empty')
+omx team api mailbox-mark-notified --input "{\"team_name\":\"$TEAM_NAME\",\"worker\":\"worker-1\",\"message_id\":\"$MESSAGE_ID\"}" --json
+omx team api mailbox-mark-delivered --input "{\"team_name\":\"$TEAM_NAME\",\"worker\":\"worker-1\",\"message_id\":\"$MESSAGE_ID\"}" --json
 
 echo "[7/8] summary envelope check"
 omx team api get-summary --input "{\"team_name\":\"$TEAM_NAME\"}" --json | jq -e '.schema_version == "1.0" and .operation == "get-summary" and .ok == true'
@@ -376,7 +380,7 @@ Expected:
 | Component | Count | Location |
 |-----------|-------|----------|
 | Agent prompts | 30 | `~/.codex/prompts/*.md` |
-| Skills | 40 | `~/.agents/skills/*/SKILL.md` |
+| Skills | 40 | `~/.codex/skills/*/SKILL.md` |
 | MCP servers | 4 | Configured in `~/.codex/config.toml` |
 | CLI commands | 11+ | `omx (launch), setup, doctor, team, version, tmux-hook, hud, status, cancel, reasoning, help` |
 | AGENTS.md | 1 | Project root (generated) |
@@ -392,6 +396,25 @@ Expected:
 **Doctor shows warnings:** Run `omx setup` to install missing components
 
 ---
+
+## Demo 9: Autoresearch Showcase Hub
+
+OMX now includes a lightweight research-showcase hub for reproducible autoresearch demos under `playground/README.md`.
+
+Quick start:
+
+```bash
+# list bundled showcase missions
+./scripts/run-autoresearch-showcase.sh --list
+
+# run one showcase
+./scripts/run-autoresearch-showcase.sh bayesopt
+
+# run several showcases back-to-back
+./scripts/run-autoresearch-showcase.sh omx-self ml-tabular bayesopt
+```
+
+See `playground/README.md` for the mission index, completed-result summaries, and repository-hygiene guidance.
 
 ## Demo Script Reference
 
@@ -418,7 +441,7 @@ The bundled E2E demo script provides a complete, automated test of the tmux clau
 | `TEAM_NAME` | (slugified from TEAM_TASK) | Unique team identifier |
 | `OMX_TEAM_WORKER_CLI` | `auto` | Worker CLI selection mode |
 | `OMX_TEAM_WORKER_CLI_MAP` | (auto-generated) | Comma-separated CLI assignments per worker |
-| `OMX_TEAM_WORKER_LAUNCH_ARGS` | `--model gpt-5.3-codex-spark` | Arguments passed to worker CLIs |
+| `OMX_TEAM_WORKER_LAUNCH_ARGS` | `-c model_reasoning_effort="low"` | Arguments passed to worker CLIs (worker model falls back to `OMX_DEFAULT_SPARK_MODEL`) |
 
 #### Demo Flow
 

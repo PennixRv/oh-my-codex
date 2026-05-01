@@ -5,15 +5,13 @@
  * Codex CLI, and inject text into panes. Used by the reply-listener daemon.
  */
 
-import { execSync, execFileSync, spawnSync } from 'child_process';
+import { execFileSync, spawnSync } from 'child_process';
+import { sleepSync } from '../utils/sleep.js';
+import { resolveCommandPathForPlatform, resolveTmuxBinaryForPlatform } from '../utils/platform-command.js';
+import { buildCapturePaneArgv as sharedBuildCapturePaneArgv } from '../scripts/tmux-hook-engine.js';
 
 export function isTmuxAvailable(): boolean {
-  try {
-    execSync('which tmux', { stdio: ['pipe', 'pipe', 'pipe'], timeout: 3000 });
-    return true;
-  } catch {
-    return false;
-  }
+  return resolveCommandPathForPlatform('tmux') !== null;
 }
 
 /**
@@ -22,15 +20,16 @@ export function isTmuxAvailable(): boolean {
  * command injection through a malicious paneId value (issue #156).
  */
 export function buildCapturePaneArgv(paneId: string, lines: number): string[] {
-  return ['capture-pane', '-t', paneId, '-p', '-S', `-${lines}`];
+  return sharedBuildCapturePaneArgv(paneId, lines);
 }
 
 export function capturePaneContent(paneId: string, lines: number = 15): string {
   try {
-    return execFileSync('tmux', buildCapturePaneArgv(paneId, lines), {
+    return execFileSync(resolveTmuxBinaryForPlatform() || 'tmux', buildCapturePaneArgv(paneId, lines), {
       encoding: 'utf-8',
       timeout: 3000,
       stdio: ['pipe', 'pipe', 'pipe'],
+      windowsHide: process.platform === 'win32',
     });
   } catch {
     return '';
@@ -113,14 +112,62 @@ export function buildSendPaneArgvs(
   return argvs;
 }
 
-export function sendToPane(paneId: string, text: string, pressEnter: boolean = true): boolean {
-  for (const argv of buildSendPaneArgvs(paneId, text, pressEnter)) {
-    const result = spawnSync('tmux', argv, {
+const TMUX_TEXT_SETTLE_MS = 120;
+const TMUX_SUBMIT_REPEAT_DELAY_MS = 100;
+
+/**
+ * Returns the number of C-m (submit) key presses needed for a given worker CLI.
+ * Source of truth: Rust runtime's submit_presses_for_worker_cli (Claude=1, Codex/Other=2).
+ * Mirrors the Rust logic inline to avoid shelling out for a trivial mapping.
+ */
+export function getSubmitPresses(workerCli: string): number {
+  if (process.env.OMX_RUNTIME_BRIDGE === '0') {
+    return workerCli.toLowerCase() === 'claude' ? 1 : 2;
+  }
+  // Rust-owned mapping: Claude=1, Codex/Other=2
+  return workerCli.toLowerCase() === 'claude' ? 1 : 2;
+}
+
+type SpawnSyncImpl = (
+  command: string,
+  args: ReadonlyArray<string>,
+  options?: {
+    timeout?: number;
+    stdio?: ['pipe', 'pipe', 'pipe'];
+    encoding?: 'utf-8';
+    windowsHide?: boolean;
+  },
+) => { error?: Error; status: number | null };
+
+interface SendToPaneDeps {
+  spawnSyncImpl?: SpawnSyncImpl;
+  sleepImpl?: (ms: number) => void;
+}
+
+export function sendToPane(
+  paneId: string,
+  text: string,
+  pressEnter: boolean = true,
+  deps: SendToPaneDeps = {},
+): boolean {
+  const spawnSyncImpl = deps.spawnSyncImpl ?? spawnSync;
+  const sleepImpl = deps.sleepImpl ?? sleepSync;
+  const argvs = buildSendPaneArgvs(paneId, text, pressEnter);
+  const tmuxCommand = resolveTmuxBinaryForPlatform() || 'tmux';
+
+  for (const [index, argv] of argvs.entries()) {
+    const result = spawnSyncImpl(tmuxCommand, argv, {
       timeout: 3000,
       stdio: ['pipe', 'pipe', 'pipe'],
       encoding: 'utf-8',
+      windowsHide: process.platform === 'win32',
     });
     if (result.error || result.status !== 0) return false;
+
+    const hasNextArgv = index < argvs.length - 1;
+    if (!hasNextArgv) continue;
+
+    sleepImpl(index === 0 ? TMUX_TEXT_SETTLE_MS : TMUX_SUBMIT_REPEAT_DELAY_MS);
   }
   return true;
 }

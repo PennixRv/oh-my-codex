@@ -33,6 +33,7 @@ describe('agents/definitions', () => {
     const buildAgents = getAgentsByCategory('build');
     assert.ok(buildAgents.length > 0);
     assert.ok(buildAgents.some((agent) => agent.name === 'executor'));
+    assert.ok(buildAgents.some((agent) => agent.name === 'team-executor'));
 
     const allowed: AgentDefinition['category'][] = [
       'build',
@@ -45,6 +46,31 @@ describe('agents/definitions', () => {
     for (const category of allowed) {
       const agents = getAgentsByCategory(category);
       assert.ok(agents.every((agent) => agent.category === category));
+    }
+  });
+
+  it('keeps the installable agent model split aligned with the OMX subagent matrix', () => {
+    assert.equal(AGENT_DEFINITIONS.architect.modelClass, 'frontier');
+    assert.equal(AGENT_DEFINITIONS['security-reviewer'].modelClass, 'frontier');
+    assert.equal(AGENT_DEFINITIONS['test-engineer'].modelClass, 'frontier');
+    assert.equal(AGENT_DEFINITIONS['team-executor'].modelClass, 'frontier');
+    assert.equal(AGENT_DEFINITIONS.vision.modelClass, 'frontier');
+
+    assert.equal(AGENT_DEFINITIONS.explore.modelClass, 'fast');
+
+    for (const name of [
+      'researcher',
+      'debugger',
+      'designer',
+      'writer',
+      'git-master',
+      'build-fixer',
+      'executor',
+      'verifier',
+      'dependency-expert',
+    ] as const) {
+      assert.equal(AGENT_DEFINITIONS[name].modelClass, 'standard');
+      assert.equal(AGENT_DEFINITIONS[name].reasoningEffort, name === 'executor' ? 'medium' : 'high');
     }
   });
 });

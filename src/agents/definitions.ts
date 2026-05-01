@@ -28,6 +28,17 @@ const EXECUTOR_AGENT: AgentDefinition = {
   category: 'build',
 };
 
+const TEAM_EXECUTOR_AGENT: AgentDefinition = {
+  name: 'team-executor',
+  description: 'Supervised team execution for conservative delivery lanes',
+  reasoningEffort: 'medium',
+  posture: 'deep-worker',
+  modelClass: 'frontier',
+  routingRole: 'executor',
+  tools: 'execution',
+  category: 'build',
+};
+
 export const AGENT_DEFINITIONS: Record<string, AgentDefinition> = {
   // Build/Analysis Lane
   'explore': {
@@ -43,7 +54,7 @@ export const AGENT_DEFINITIONS: Record<string, AgentDefinition> = {
   'analyst': {
     name: 'analyst',
     description: 'Requirements clarity, acceptance criteria, hidden constraints',
-    reasoningEffort: 'high',
+    reasoningEffort: 'medium',
     posture: 'frontier-orchestrator',
     modelClass: 'frontier',
     routingRole: 'leader',
@@ -53,7 +64,7 @@ export const AGENT_DEFINITIONS: Record<string, AgentDefinition> = {
   'planner': {
     name: 'planner',
     description: 'Task sequencing, execution plans, risk flags',
-    reasoningEffort: 'high',
+    reasoningEffort: 'medium',
     posture: 'frontier-orchestrator',
     modelClass: 'frontier',
     routingRole: 'leader',
@@ -73,7 +84,7 @@ export const AGENT_DEFINITIONS: Record<string, AgentDefinition> = {
   'debugger': {
     name: 'debugger',
     description: 'Root-cause analysis, regression isolation, failure diagnosis',
-    reasoningEffort: 'medium',
+    reasoningEffort: 'high',
     posture: 'deep-worker',
     modelClass: 'standard',
     routingRole: 'executor',
@@ -81,10 +92,11 @@ export const AGENT_DEFINITIONS: Record<string, AgentDefinition> = {
     category: 'build',
   },
   'executor': EXECUTOR_AGENT,
+  'team-executor': TEAM_EXECUTOR_AGENT,
   'verifier': {
     name: 'verifier',
     description: 'Completion evidence, claim validation, test adequacy',
-    reasoningEffort: 'medium',
+    reasoningEffort: 'high',
     posture: 'frontier-orchestrator',
     modelClass: 'standard',
     routingRole: 'leader',
@@ -128,7 +140,7 @@ export const AGENT_DEFINITIONS: Record<string, AgentDefinition> = {
     description: 'Vulnerabilities, trust boundaries, authn/authz',
     reasoningEffort: 'medium',
     posture: 'frontier-orchestrator',
-    modelClass: 'standard',
+    modelClass: 'frontier',
     routingRole: 'leader',
     tools: 'read-only',
     category: 'review',
@@ -158,7 +170,7 @@ export const AGENT_DEFINITIONS: Record<string, AgentDefinition> = {
   'dependency-expert': {
     name: 'dependency-expert',
     description: 'External SDK/API/package evaluation',
-    reasoningEffort: 'medium',
+    reasoningEffort: 'high',
     posture: 'frontier-orchestrator',
     modelClass: 'standard',
     routingRole: 'specialist',
@@ -170,7 +182,7 @@ export const AGENT_DEFINITIONS: Record<string, AgentDefinition> = {
     description: 'Test strategy, coverage, flaky-test hardening',
     reasoningEffort: 'medium',
     posture: 'deep-worker',
-    modelClass: 'standard',
+    modelClass: 'frontier',
     routingRole: 'executor',
     tools: 'execution',
     category: 'domain',
@@ -188,7 +200,7 @@ export const AGENT_DEFINITIONS: Record<string, AgentDefinition> = {
   'build-fixer': {
     name: 'build-fixer',
     description: 'Build/toolchain/type failures resolution',
-    reasoningEffort: 'medium',
+    reasoningEffort: 'high',
     posture: 'deep-worker',
     modelClass: 'standard',
     routingRole: 'executor',
@@ -198,7 +210,7 @@ export const AGENT_DEFINITIONS: Record<string, AgentDefinition> = {
   'designer': {
     name: 'designer',
     description: 'UX/UI architecture, interaction design',
-    reasoningEffort: 'medium',
+    reasoningEffort: 'high',
     posture: 'deep-worker',
     modelClass: 'standard',
     routingRole: 'executor',
@@ -208,9 +220,9 @@ export const AGENT_DEFINITIONS: Record<string, AgentDefinition> = {
   'writer': {
     name: 'writer',
     description: 'Documentation, migration notes, user guidance',
-    reasoningEffort: 'low',
+    reasoningEffort: 'high',
     posture: 'fast-lane',
-    modelClass: 'fast',
+    modelClass: 'standard',
     routingRole: 'specialist',
     tools: 'execution',
     category: 'domain',
@@ -218,7 +230,7 @@ export const AGENT_DEFINITIONS: Record<string, AgentDefinition> = {
   'qa-tester': {
     name: 'qa-tester',
     description: 'Interactive CLI/service runtime validation',
-    reasoningEffort: 'medium',
+    reasoningEffort: 'low',
     posture: 'deep-worker',
     modelClass: 'standard',
     routingRole: 'executor',
@@ -228,7 +240,7 @@ export const AGENT_DEFINITIONS: Record<string, AgentDefinition> = {
   'git-master': {
     name: 'git-master',
     description: 'Commit strategy, history hygiene, rebasing',
-    reasoningEffort: 'medium',
+    reasoningEffort: 'high',
     posture: 'deep-worker',
     modelClass: 'standard',
     routingRole: 'executor',
@@ -248,7 +260,7 @@ export const AGENT_DEFINITIONS: Record<string, AgentDefinition> = {
   'researcher': {
     name: 'researcher',
     description: 'External documentation and reference research',
-    reasoningEffort: 'medium',
+    reasoningEffort: 'high',
     posture: 'fast-lane',
     modelClass: 'standard',
     routingRole: 'specialist',
@@ -280,7 +292,7 @@ export const AGENT_DEFINITIONS: Record<string, AgentDefinition> = {
   'information-architect': {
     name: 'information-architect',
     description: 'Taxonomy, navigation, findability',
-    reasoningEffort: 'medium',
+    reasoningEffort: 'low',
     posture: 'frontier-orchestrator',
     modelClass: 'standard',
     routingRole: 'specialist',
@@ -290,7 +302,7 @@ export const AGENT_DEFINITIONS: Record<string, AgentDefinition> = {
   'product-analyst': {
     name: 'product-analyst',
     description: 'Product metrics, funnel analysis, experiments',
-    reasoningEffort: 'medium',
+    reasoningEffort: 'low',
     posture: 'frontier-orchestrator',
     modelClass: 'standard',
     routingRole: 'specialist',
@@ -312,9 +324,9 @@ export const AGENT_DEFINITIONS: Record<string, AgentDefinition> = {
   'vision': {
     name: 'vision',
     description: 'Image/screenshot/diagram analysis',
-    reasoningEffort: 'medium',
+    reasoningEffort: 'low',
     posture: 'fast-lane',
-    modelClass: 'standard',
+    modelClass: 'frontier',
     routingRole: 'specialist',
     tools: 'read-only',
     category: 'coordination',

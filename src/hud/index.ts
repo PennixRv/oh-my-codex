@@ -12,9 +12,20 @@
 import { execFileSync } from 'child_process';
 import { readAllState, readHudConfig } from './state.js';
 import { renderHud } from './render.js';
-import type { HudFlags, HudPreset, HudRenderContext } from './types.js';
-import { HUD_TMUX_HEIGHT_LINES } from './constants.js';
+import type { HudFlags, HudPreset, HudRenderContext, ResolvedHudConfig } from './types.js';
+import { HUD_TMUX_HEIGHT_LINES, HUD_TMUX_MAX_HEIGHT_LINES } from './constants.js';
 import { sleep } from '../utils/sleep.js';
+import { runHudAuthorityTick } from './authority.js';
+import { resolveOmxCliEntryPath } from '../utils/paths.js';
+
+export const HUD_USAGE = [
+  'Usage:',
+  '  omx hud              Show current HUD state',
+  '  omx hud --watch      Poll every 1s with terminal clear',
+  '  omx hud --json       Output raw state as JSON',
+  '  omx hud --preset=X   Use preset: minimal, focused, full',
+  '  omx hud --tmux       Open HUD in a tmux split pane (auto-detects orientation)',
+].join('\n');
 
 type SleepFn = (ms: number, signal?: AbortSignal) => Promise<void>;
 
@@ -48,9 +59,10 @@ export async function watchRenderLoop(
 interface RunWatchModeDependencies {
   isTTY: boolean;
   env: NodeJS.ProcessEnv;
-  readAllStateFn: (cwd: string) => Promise<HudRenderContext>;
-  readHudConfigFn: (cwd: string) => Promise<{ preset: HudPreset }>;
-  renderHudFn: (ctx: HudRenderContext, preset: HudPreset) => string;
+  readAllStateFn: (cwd: string, config?: ResolvedHudConfig) => Promise<HudRenderContext>;
+  readHudConfigFn: (cwd: string) => Promise<ResolvedHudConfig>;
+  renderHudFn: (ctx: HudRenderContext, preset: HudPreset, options?: { maxWidth?: number; maxLines?: number }) => string;
+  runAuthorityTickFn: (options: { cwd: string }) => Promise<void>;
   writeStdout: (text: string) => void;
   writeStderr: (text: string) => void;
   registerSigint: (handler: () => void) => void;
@@ -74,6 +86,9 @@ export async function runWatchMode(
     readAllStateFn: deps.readAllStateFn ?? readAllState,
     readHudConfigFn: deps.readHudConfigFn ?? readHudConfig,
     renderHudFn: deps.renderHudFn ?? renderHud,
+    runAuthorityTickFn: deps.runAuthorityTickFn ?? (async ({ cwd: authorityCwd }) => {
+      await runHudAuthorityTick({ cwd: authorityCwd });
+    }),
     writeStdout: deps.writeStdout ?? ((text: string) => process.stdout.write(text)),
     writeStderr: deps.writeStderr ?? ((text: string) => process.stderr.write(text)),
     registerSigint: deps.registerSigint ?? ((handler: () => void) => process.on('SIGINT', handler)),
@@ -121,13 +136,15 @@ export async function runWatchMode(
       } else {
         dependencies.writeStdout('\x1b[H');
       }
-      const [ctx, config] = await Promise.all([
-        dependencies.readAllStateFn(cwd),
-        dependencies.readHudConfigFn(cwd),
-      ]);
+      const config = await dependencies.readHudConfigFn(cwd);
+      const ctx = await dependencies.readAllStateFn(cwd, config);
       const preset = flags.preset ?? config.preset;
-      const line = dependencies.renderHudFn(ctx, preset);
+      const line = dependencies.renderHudFn(ctx, preset, {
+        maxWidth: process.stdout.columns ?? undefined,
+        maxLines: HUD_TMUX_MAX_HEIGHT_LINES,
+      });
       dependencies.writeStdout(line + '\x1b[K\n\x1b[J');
+      await dependencies.runAuthorityTickFn({ cwd });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       dependencies.writeStderr(`HUD watch render failed: ${message}\n`);
@@ -184,10 +201,8 @@ function parseFlags(args: string[]): HudFlags {
 }
 
 async function renderOnce(cwd: string, flags: HudFlags): Promise<void> {
-  const [ctx, config] = await Promise.all([
-    readAllState(cwd),
-    readHudConfig(cwd),
-  ]);
+  const config = await readHudConfig(cwd);
+  const ctx = await readAllState(cwd, config);
 
   const preset = flags.preset ?? config.preset;
 
@@ -196,10 +211,18 @@ async function renderOnce(cwd: string, flags: HudFlags): Promise<void> {
     return;
   }
 
-  console.log(renderHud(ctx, preset));
+  console.log(renderHud(ctx, preset, {
+    maxWidth: process.stdout.columns ?? undefined,
+    maxLines: HUD_TMUX_MAX_HEIGHT_LINES,
+  }));
 }
 
 export async function hudCommand(args: string[]): Promise<void> {
+  if (args[0] === '--help' || args[0] === '-h') {
+    console.log(HUD_USAGE);
+    return;
+  }
+
   const flags = parseFlags(args);
   const cwd = process.cwd();
 
@@ -213,44 +236,7 @@ export async function hudCommand(args: string[]): Promise<void> {
     return;
   }
 
-  // Watch mode: overwrite in-place (no flicker)
-  let firstRender = true;
-  const render = async () => {
-    if (firstRender) {
-      process.stdout.write('\x1b[2J\x1b[H'); // Clear screen on first render only
-      firstRender = false;
-    } else {
-      process.stdout.write('\x1b[H'); // Move cursor to top-left (no clear)
-    }
-    const [ctx, config] = await Promise.all([
-      readAllState(cwd),
-      readHudConfig(cwd),
-    ]);
-    const preset = flags.preset ?? config.preset;
-    const line = renderHud(ctx, preset);
-    process.stdout.write(line + '\x1b[K\n\x1b[J'); // Write line, clear rest of line + below
-  };
-
-  process.stdout.write('\x1b[?25l'); // Hide cursor
-  const abortController = new AbortController();
-  const onSigint = () => {
-    abortController.abort();
-  };
-
-  process.on('SIGINT', onSigint);
-  try {
-    await render();
-    await watchRenderLoop(render, {
-      intervalMs: 1000,
-      signal: abortController.signal,
-      onError: (error) => {
-        console.warn('[omx] warning: hud watch render failed', error);
-      },
-    });
-  } finally {
-    process.off('SIGINT', onSigint);
-    process.stdout.write('\x1b[?25h\x1b[2J\x1b[H'); // Show cursor + clear
-  }
+  await runWatchMode(cwd, flags);
 }
 
 /** Shell-escape a string using single-quote wrapping (POSIX-safe). */
@@ -269,11 +255,14 @@ export function buildTmuxSplitArgs(
   cwd: string,
   omxBin: string,
   preset?: string,
+  sessionId?: string,
 ): string[] {
   // Defense-in-depth: keep preset constrained even if this helper is reused.
   const safePreset = parseHudPreset(preset);
   const presetArg = safePreset ? ` --preset=${safePreset}` : '';
-  const cmd = `node ${shellEscape(omxBin)} hud --watch${presetArg}`;
+  const safeSessionId = typeof sessionId === 'string' ? sessionId.trim() : '';
+  const sessionPrefix = safeSessionId ? `OMX_SESSION_ID=${shellEscape(safeSessionId)} ` : '';
+  const cmd = `${sessionPrefix}node ${shellEscape(omxBin)} hud --watch${presetArg}`;
   return ['split-window', '-v', '-l', String(HUD_TMUX_HEIGHT_LINES), '-c', cwd, cmd];
 }
 
@@ -284,8 +273,12 @@ async function launchTmuxPane(cwd: string, flags: HudFlags): Promise<void> {
     process.exit(1);
   }
 
-  const omxBin = process.argv[1]; // path to bin/omx.js
-  const args = buildTmuxSplitArgs(cwd, omxBin, flags.preset);
+  const omxBin = resolveOmxCliEntryPath();
+  if (!omxBin) {
+    console.error('Failed to resolve OMX launcher path for tmux HUD startup.');
+    process.exit(1);
+  }
+  const args = buildTmuxSplitArgs(cwd, omxBin, flags.preset, process.env.OMX_SESSION_ID);
 
   try {
     // Split bottom pane, 4 lines tall, running omx hud --watch.

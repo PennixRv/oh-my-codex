@@ -11,7 +11,7 @@
  */
 
 import { join, resolve } from 'path';
-import { mkdir } from 'fs/promises';
+import { mkdir, rm } from 'fs/promises';
 import {
   sanitizeTeamName,
   isTmuxAvailable,
@@ -35,9 +35,12 @@ import {
   teamWriteWorkerStatus as writeWorkerStatus,
   teamWithScalingLock as withScalingLock,
   teamAppendEvent as appendTeamEvent,
+  teamCreateTask as createStateTask,
+  teamListTasks as listTasks,
   teamMarkDispatchRequestNotified as markDispatchRequestNotified,
   teamReadDispatchRequest as readDispatchRequest,
   teamTransitionDispatchRequest as transitionDispatchRequest,
+  type TeamConfig,
   type WorkerInfo,
   type WorkerStatus,
 } from './team-ops.js';
@@ -48,20 +51,34 @@ import {
 } from './mcp-comm.js';
 import {
   generateInitialInbox,
-  generateTriggerMessage,
+  buildTriggerDirective,
+  writeWorkerRoleInstructionsFile,
+  writeWorkerWorktreeRootAgentsFile,
+  removeWorkerWorktreeRootAgentsFile,
 } from './worker-bootstrap.js';
 import { loadRolePrompt } from './role-router.js';
+import { composeRoleInstructionsForRole } from '../agents/native-config.js';
 import { codexPromptsDir } from '../utils/paths.js';
 import {
+  parseTeamWorkerLaunchArgs,
   resolveTeamWorkerLaunchArgs,
-  isLowComplexityAgentType,
-  TEAM_LOW_COMPLEXITY_DEFAULT_MODEL,
+  resolveAgentDefaultModel,
+  resolveAgentReasoningEffort,
+  type TeamReasoningEffort,
 } from './model-contract.js';
 import { resolveCanonicalTeamStateRoot } from './state-root.js';
+import {
+  ensureWorktree,
+  planWorktreeTarget,
+  rollbackProvisionedWorktrees,
+  type EnsureWorktreeResult,
+  type WorktreeMode,
+} from './worktree.js';
 
 // ── Environment gate ──────────────────────────────────────────────────────────
 
 const OMX_TEAM_SCALING_ENABLED_ENV = 'OMX_TEAM_SCALING_ENABLED';
+const WORKTREE_TRIGGER_STATE_ROOT = '$OMX_TEAM_STATE_ROOT';
 
 export function isScalingEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
   const raw = env[OMX_TEAM_SCALING_ENABLED_ENV];
@@ -96,6 +113,55 @@ export interface ScaleDownResult {
 export interface ScaleError {
   ok: false;
   error: string;
+}
+
+function resolveInstructionStateRoot(worktreePath?: string | null): string | undefined {
+  return worktreePath ? WORKTREE_TRIGGER_STATE_ROOT : undefined;
+}
+
+function resolveLegacyScaledTeamWorktreeMode(config: Pick<TeamConfig, 'name' | 'workspace_mode' | 'worktree_mode' | 'workers'>): WorktreeMode {
+  if (config.worktree_mode) return config.worktree_mode;
+  if (config.workspace_mode !== 'worktree') return { enabled: false };
+
+  const workersWithMetadata = config.workers.filter((worker) =>
+    worker.worktree_path || worker.worktree_branch || typeof worker.worktree_detached === 'boolean',
+  );
+  if (workersWithMetadata.length === 0) {
+    throw new Error(`scale_up_missing_team_worktree_contract:${config.name}`);
+  }
+
+  if (workersWithMetadata.some((worker) => worker.worktree_detached === true)) {
+    return { enabled: true, detached: true, name: null };
+  }
+
+  const branchPrefixes = new Set(
+    workersWithMetadata
+      .map((worker) => worker.worktree_branch?.trim())
+      .filter((branch): branch is string => Boolean(branch))
+      .map((branch) => {
+        const match = /^(.*)\/worker-\d+$/.exec(branch);
+        return match?.[1]?.trim() || '';
+      })
+      .filter(Boolean),
+  );
+
+  if (branchPrefixes.size === 1) {
+    return { enabled: true, detached: false, name: [...branchPrefixes][0] };
+  }
+
+  throw new Error(`scale_up_missing_team_worktree_contract:${config.name}`);
+}
+
+function resolveScaleUpWorktreeMode(config: TeamConfig): WorktreeMode {
+  if (config.workspace_mode !== 'worktree') return { enabled: false };
+  try {
+    return resolveLegacyScaledTeamWorktreeMode(config);
+  } catch (error) {
+    if (error instanceof Error && error.message === `scale_up_missing_team_worktree_contract:${config.name}`) {
+      return { enabled: true, detached: true, name: null };
+    }
+    throw error;
+  }
 }
 
 async function notifyWorkerPaneOutcome(
@@ -168,13 +234,22 @@ export async function scaleUp(
       display_mode: manifest?.policy?.display_mode === 'split_pane' ? 'split_pane' : 'auto',
       worker_launch_mode: config.worker_launch_mode,
     });
+    const effectiveWorktreeMode = config.worktree_mode ?? resolveScaleUpWorktreeMode(config);
+    if (!config.worktree_mode && effectiveWorktreeMode.enabled) {
+      config.worktree_mode = effectiveWorktreeMode;
+      await saveTeamConfig(config, leaderCwd);
+    }
 
     // Resolve the monotonic worker index counter
     let nextIndex = config.next_worker_index ?? (currentCount + 1);
     const initialNextIndex = nextIndex;
     const addedWorkers: WorkerInfo[] = [];
+    const createdTaskIds: string[] = [];
 
-    const rollbackScaleUp = async (error: string, paneId?: string): Promise<ScaleError> => {
+    const rollbackScaleUp = async (
+      error: string,
+      context: { paneId?: string; workerName?: string; worktreePath?: string } = {},
+    ): Promise<ScaleError> => {
       for (const w of addedWorkers) {
         const idx = config.workers.findIndex((worker) => worker.name === w.name);
         if (idx >= 0) {
@@ -182,15 +257,39 @@ export async function scaleUp(
         }
         try {
           if (w.pane_id) {
-            execFileSync('tmux', ['kill-pane', '-t', w.pane_id], { stdio: 'pipe' });
+            execFileSync('tmux', ['kill-pane', '-t', w.pane_id], { stdio: 'pipe',
+      windowsHide: true,
+    });
           }
+        } catch {}
+        if (w.worktree_path) {
+          await removeWorkerWorktreeRootAgentsFile(sanitized, w.name, teamStateRoot, w.worktree_path).catch(() => {});
+        }
+      }
+
+      if (
+        context.workerName &&
+        context.worktreePath &&
+        !addedWorkers.some((worker) => worker.name === context.workerName)
+      ) {
+        await removeWorkerWorktreeRootAgentsFile(
+          sanitized,
+          context.workerName,
+          teamStateRoot,
+          context.worktreePath,
+        ).catch(() => {});
+      }
+
+      if (context.paneId) {
+        try {
+          execFileSync('tmux', ['kill-pane', '-t', context.paneId], { stdio: 'pipe',
+      windowsHide: true,
+    });
         } catch {}
       }
 
-      if (paneId) {
-        try {
-          execFileSync('tmux', ['kill-pane', '-t', paneId], { stdio: 'pipe' });
-        } catch {}
+      for (const taskId of createdTaskIds) {
+        await rm(join(leaderCwd, '.omx', 'state', 'team', sanitized, 'tasks', `task-${taskId}.json`), { force: true }).catch(() => {});
       }
 
       config.worker_count = config.workers.length;
@@ -200,9 +299,24 @@ export async function scaleUp(
       return { ok: false, error };
     };
 
-    // Resolve worker launch args
-    const workerLaunchArgs = resolveWorkerLaunchArgsForScaling(env, agentType);
-    const workerCliPlan = resolveTeamWorkerCliPlan(count, workerLaunchArgs, env);
+    // Persist incoming tasks first so scaling resolves worker roles and inboxes from
+    // canonical task state (stable task ids, owner, role), matching startTeam().
+    for (const task of tasks) {
+      const createdTask = await createStateTask(sanitized, {
+        subject: task.subject,
+        description: task.description,
+        status: 'pending',
+        owner: task.owner,
+        blocked_by: task.blocked_by,
+        role: task.role,
+      }, leaderCwd);
+      createdTaskIds.push(createdTask.id);
+    }
+    const persistedTasks = await listTasks(sanitized, leaderCwd);
+
+    // Resolve shared worker launch args for CLI selection.
+    const sharedWorkerLaunchArgs = resolveWorkerLaunchArgsForScaling(env, agentType);
+    const workerCliPlan = resolveTeamWorkerCliPlan(count, sharedWorkerLaunchArgs, env);
 
     for (let i = 0; i < count; i++) {
       const workerIndex = nextIndex;
@@ -213,18 +327,74 @@ export async function scaleUp(
       const workerDirPath = join(leaderCwd, '.omx', 'state', 'team', sanitized, 'workers', workerName);
       await mkdir(workerDirPath, { recursive: true });
 
+      // Resolve per-worker role from assigned task roles before launch so reasoning effort can vary by teammate.
+      const workerTaskRoles = persistedTasks.filter(t => t.owner === workerName).map(t => t.role).filter(Boolean) as string[];
+      const uniqueTaskRoles = new Set(workerTaskRoles);
+      const workerRole = workerTaskRoles.length > 0 && uniqueTaskRoles.size === 1
+        ? workerTaskRoles[0]
+        : agentType;
+      const runtimeRole = workerRole;
+      if (uniqueTaskRoles.size > 1) {
+        console.log(`[omx:scaling] ${workerName}: mixed task roles [${[...uniqueTaskRoles].join(', ')}], falling back to ${agentType}`);
+      }
+
+      const worktreeMode = resolveScaleUpWorktreeMode(config);
+      const workerWorkspaceResult = worktreeMode.enabled
+        ? ensureWorktree(planWorktreeTarget({
+            cwd: leaderCwd,
+            scope: 'team',
+            mode: worktreeMode,
+            teamName: sanitized,
+            workerName,
+          }))
+        : { enabled: false } as const;
+      const workerWorkspace = workerWorkspaceResult.enabled ? workerWorkspaceResult : null;
+      const workerCwd = workerWorkspace ? workerWorkspace.worktreePath : leaderCwd;
+
       // Build startup command and create tmux pane
+      const rawRolePromptContent = await loadRolePrompt(runtimeRole, join(leaderCwd, '.codex', 'prompts'))
+        ?? await loadRolePrompt(runtimeRole, codexPromptsDir());
+      const preferredReasoning = resolveAgentReasoningEffort(runtimeRole) ?? resolveAgentReasoningEffort(agentType);
+      const workerLaunchArgs = resolveWorkerLaunchArgsForScaling(env, runtimeRole, preferredReasoning);
+      const resolvedWorkerModel = parseTeamWorkerLaunchArgs(workerLaunchArgs).modelOverride ?? undefined;
+      const rolePromptContent = rawRolePromptContent
+        ? composeRoleInstructionsForRole(runtimeRole, rawRolePromptContent, resolvedWorkerModel)
+        : null;
+      const teamInstructionsPath = join(leaderCwd, '.omx', 'state', 'team', sanitized, 'worker-agents.md');
+      const instructionsFilePath = workerWorkspace
+        ? await writeWorkerWorktreeRootAgentsFile({
+            teamName: sanitized,
+            workerName,
+            workerRole: runtimeRole,
+            rolePromptContent: rolePromptContent ?? '',
+            teamStateRoot,
+            leaderCwd,
+            worktreePath: workerWorkspace.worktreePath,
+          })
+        : rolePromptContent
+          ? await writeWorkerRoleInstructionsFile(sanitized, workerName, leaderCwd, teamInstructionsPath, runtimeRole, rolePromptContent)
+          : teamInstructionsPath;
       const extraEnv: Record<string, string> = {
         OMX_TEAM_STATE_ROOT: teamStateRoot,
         OMX_TEAM_LEADER_CWD: leaderCwd,
+        OMX_MODEL_INSTRUCTIONS_FILE: instructionsFilePath,
       };
+      if (workerWorkspace) {
+        extraEnv.OMX_TEAM_WORKTREE_PATH = workerWorkspace.worktreePath;
+        if (workerWorkspace.branchName) {
+          extraEnv.OMX_TEAM_WORKTREE_BRANCH = workerWorkspace.branchName;
+        }
+        extraEnv.OMX_TEAM_WORKTREE_DETACHED = workerWorkspace.detached ? '1' : '0';
+      }
       const cmd = buildWorkerStartupCommand(
         sanitized,
         workerIndex,
         workerLaunchArgs,
-        leaderCwd,
+        workerCwd,
         extraEnv,
         workerCliPlan[i],
+        undefined,
+        runtimeRole,
       );
 
       // Find the right-most worker pane to split from, or fall back to leader pane.
@@ -236,16 +406,23 @@ export async function scaleUp(
       const splitDirection = splitTarget === (config.leader_pane_id ?? '') ? '-h' : '-v';
 
       const result = spawnSync('tmux', [
-        'split-window', splitDirection, '-t', splitTarget, '-d', '-P', '-F', '#{pane_id}', '-c', leaderCwd, cmd,
+        'split-window', splitDirection, '-t', splitTarget, '-d', '-P', '-F', '#{pane_id}', '-c', workerCwd, cmd,
       ], { encoding: 'utf-8' });
 
       if (result.status !== 0) {
-        return await rollbackScaleUp(`Failed to create tmux pane for ${workerName}: ${(result.stderr || '').trim()}`);
+        return await rollbackScaleUp(
+          `Failed to create tmux pane for ${workerName}: ${(result.stderr || '').trim()}`,
+          { workerName, worktreePath: workerWorkspace?.worktreePath },
+        );
       }
 
       const paneId = (result.stdout || '').trim().split('\n')[0]?.trim();
       if (!paneId || !paneId.startsWith('%')) {
-        return await rollbackScaleUp(`Failed to capture pane ID for ${workerName}`);
+        return await rollbackScaleUp(`Failed to capture pane ID for ${workerName}`, {
+          paneId,
+          workerName,
+          worktreePath: workerWorkspace?.worktreePath,
+        });
       }
 
       // Intentionally avoid forcing `select-layout tiled` here.
@@ -253,16 +430,6 @@ export async function scaleUp(
 
       // Get PID
       const panePid = getWorkerPanePid(sessionName, workerIndex, paneId);
-
-      // Resolve per-worker role from assigned task roles
-      const workerTaskRoles = tasks.filter(t => t.owner === workerName).map(t => t.role).filter(Boolean) as string[];
-      const uniqueTaskRoles = new Set(workerTaskRoles);
-      const workerRole = workerTaskRoles.length > 0 && uniqueTaskRoles.size === 1
-        ? workerTaskRoles[0]
-        : agentType;
-      if (uniqueTaskRoles.size > 1) {
-        console.log(`[omx:scaling] ${workerName}: mixed task roles [${[...uniqueTaskRoles].join(', ')}], falling back to ${agentType}`);
-      }
 
       const workerInfo: WorkerInfo = {
         name: workerName,
@@ -272,7 +439,12 @@ export async function scaleUp(
         assigned_tasks: [],
         pid: panePid ?? undefined,
         pane_id: paneId,
-        working_dir: leaderCwd,
+        working_dir: workerCwd,
+        worktree_repo_root: workerWorkspace ? workerWorkspace.repoRoot : undefined,
+        worktree_path: workerWorkspace ? workerWorkspace.worktreePath : undefined,
+        worktree_branch: workerWorkspace ? (workerWorkspace.branchName ?? undefined) : undefined,
+        worktree_detached: workerWorkspace ? workerWorkspace.detached : undefined,
+        worktree_created: workerWorkspace ? workerWorkspace.created : undefined,
         team_state_root: teamStateRoot,
       };
 
@@ -289,36 +461,29 @@ export async function scaleUp(
       }
 
       // Get assigned tasks for this worker
-      const workerTasks = tasks.filter(t => t.owner === workerName);
+      const workerTasks = persistedTasks.filter(t => t.owner === workerName);
 
-      // Load role-specific prompt content if role differs from default
-      const rolePromptContent = workerRole !== agentType
-        ? await loadRolePrompt(workerRole, codexPromptsDir())
-        : null;
-
-      const inbox = generateInitialInbox(workerName, sanitized, agentType, workerTasks.map((t, idx) => ({
-        id: String(idx + 1),
-        subject: t.subject,
-        description: t.description,
-        status: 'pending' as const,
-        blocked_by: t.blocked_by,
-        role: t.role,
-        created_at: new Date().toISOString(),
-      })), {
+      const inbox = generateInitialInbox(workerName, sanitized, agentType, workerTasks, {
         teamStateRoot,
         leaderCwd,
-        workerRole,
-        rolePromptContent: rolePromptContent ?? undefined,
+        workerRole: runtimeRole,
+        rolePromptContent: rawRolePromptContent ?? undefined,
+        worktreeRootAgentsCanonical: Boolean(workerWorkspace?.worktreePath),
       });
 
-      const trigger = generateTriggerMessage(workerName, sanitized);
+      const triggerDirective = buildTriggerDirective(
+        workerName,
+        sanitized,
+        resolveInstructionStateRoot(workerInfo.worktree_path),
+      );
       const queued = await queueInboxInstruction({
         teamName: sanitized,
         workerName,
         workerIndex,
         paneId,
         inbox,
-        triggerMessage: trigger,
+        triggerMessage: triggerDirective.text,
+        intent: triggerDirective.intent,
         cwd: leaderCwd,
         transportPreference: dispatchPolicy.dispatch_mode,
         fallbackAllowed: true,
@@ -339,7 +504,7 @@ export async function scaleUp(
         if (receipt && (receipt.status === 'notified' || receipt.status === 'delivered')) {
           outcome = { ok: true, transport: 'hook', reason: `hook_receipt_${receipt.status}`, request_id: queued.request_id };
         } else {
-          const fallback = await notifyWorkerPaneOutcome(sessionName, workerIndex, trigger, paneId, workerCliPlan[i]);
+          const fallback = await notifyWorkerPaneOutcome(sessionName, workerIndex, triggerDirective.text, paneId, workerCliPlan[i]);
           if (receipt?.status === 'failed') {
             if (fallback.ok) {
               await transitionDispatchRequest(
@@ -419,13 +584,17 @@ export async function scaleUp(
       // Retry dispatch once if a trust prompt is blocking the worker pane (fixes #393).
       if (!outcome.ok && dismissTrustPromptIfPresent(sessionName, workerIndex, paneId)) {
         waitForWorkerReady(sessionName, workerIndex, readyTimeoutMs, paneId);
-        const retry = await notifyWorkerPaneOutcome(sessionName, workerIndex, trigger, paneId, workerCliPlan[i]);
+        const retry = await notifyWorkerPaneOutcome(sessionName, workerIndex, triggerDirective.text, paneId, workerCliPlan[i]);
         if (retry.ok) {
           outcome = retry;
         }
       }
       if (!outcome.ok) {
-        return await rollbackScaleUp(`scale_up_dispatch_failed:${workerName}:${outcome.reason}`, paneId);
+        return await rollbackScaleUp(`scale_up_dispatch_failed:${workerName}:${outcome.reason}`, {
+          paneId,
+          workerName,
+          worktreePath: workerWorkspace?.worktreePath,
+        });
       }
 
       addedWorkers.push(workerInfo);
@@ -576,8 +745,37 @@ export async function scaleDown(
       leaderPaneId,
       hudPaneId,
     });
+    const detachedWorktreesToRollback: EnsureWorktreeResult[] = targetWorkers
+      .filter((worker) =>
+        worker.worktree_created === true
+        && worker.worktree_detached === true
+        && typeof worker.worktree_repo_root === 'string'
+        && worker.worktree_repo_root.length > 0
+        && typeof worker.worktree_path === 'string'
+        && worker.worktree_path.length > 0,
+      )
+      .map((worker) => ({
+        enabled: true,
+        repoRoot: worker.worktree_repo_root as string,
+        worktreePath: resolve(worker.worktree_path as string),
+        detached: true,
+        branchName: null,
+        created: true,
+        reused: false,
+        createdBranch: false,
+      }));
+    if (detachedWorktreesToRollback.length > 0) {
+      try {
+        await rollbackProvisionedWorktrees(detachedWorktreesToRollback);
+      } catch (error) {
+        return { ok: false, error: `scale_down_worktree_cleanup_failed:${String(error)}` };
+      }
+    }
 
     for (const w of targetWorkers) {
+      if (w.worktree_path) {
+        await removeWorkerWorktreeRootAgentsFile(sanitized, w.name, w.team_state_root ?? config.team_state_root ?? resolveCanonicalTeamStateRoot(leaderCwd), w.worktree_path).catch(() => {});
+      }
       removedNames.push(w.name);
     }
 
@@ -610,15 +808,18 @@ function resolveWorkerReadyTimeoutMs(env: NodeJS.ProcessEnv): number {
   return 45_000;
 }
 
-function resolveWorkerLaunchArgsForScaling(env: NodeJS.ProcessEnv, agentType: string): string[] {
+function resolveWorkerLaunchArgsForScaling(
+  env: NodeJS.ProcessEnv,
+  agentType: string,
+  preferredReasoning?: TeamReasoningEffort,
+): string[] {
   const inheritedArgs: string[] = [];
-  const fallbackModel = isLowComplexityAgentType(agentType)
-    ? TEAM_LOW_COMPLEXITY_DEFAULT_MODEL
-    : undefined;
+  const fallbackModel = resolveAgentDefaultModel(agentType, env.CODEX_HOME);
 
   return resolveTeamWorkerLaunchArgs({
     existingRaw: env.OMX_TEAM_WORKER_LAUNCH_ARGS,
     inheritedArgs,
     fallbackModel,
+    preferredReasoning,
   });
 }

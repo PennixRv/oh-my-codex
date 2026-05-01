@@ -1,13 +1,28 @@
 /**
  * Base mode lifecycle management for oh-my-codex
- * All execution modes (autopilot, ralph, ultrawork, team, ultraqa, ralplan) share this base.
+ * All execution modes (autopilot, autoresearch, deep-interview, ralph, ultrawork, team, ultraqa, ralplan) share this base.
  */
 
-import { readFile, writeFile, mkdir } from 'fs/promises';
-import { join } from 'path';
+import { readFile, writeFile, mkdir, readdir } from 'fs/promises';
 import { existsSync } from 'fs';
 import { withModeRuntimeContext } from '../state/mode-state-context.js';
+import {
+  assertWorkflowTransitionAllowed,
+  isTrackedWorkflowMode,
+  readActiveWorkflowModes,
+} from '../state/workflow-transition.js';
+import { reconcileWorkflowTransition } from '../state/workflow-transition-reconcile.js';
+import { syncCanonicalSkillStateForMode } from '../state/skill-active.js';
 import { validateAndNormalizeRalphState } from '../ralph/contract.js';
+import { applyRunOutcomeContract } from '../runtime/run-outcome.js';
+import { syncRunStateFromModeState } from '../runtime/run-state.js';
+import {
+  getBaseStateDir,
+  getReadScopedStateDirs,
+  getReadScopedStatePaths,
+  getStatePath,
+  resolveStateScope,
+} from '../mcp/state-paths.js';
 
 export interface ModeState {
   active: boolean;
@@ -15,6 +30,7 @@ export interface ModeState {
   iteration: number;
   max_iterations: number;
   current_phase: string;
+  run_outcome?: string;
   task_description?: string;
   started_at: string;
   completed_at?: string;
@@ -23,7 +39,7 @@ export interface ModeState {
   [key: string]: unknown;
 }
 
-export type ModeName = 'autopilot' | 'ralph' | 'ultrawork' | 'team' | 'ultraqa' | 'ralplan';
+export type ModeName = 'autopilot' | 'autoresearch' | 'deep-interview' | 'ralph' | 'ultrawork' | 'team' | 'ultraqa' | 'ralplan';
 
 /** @deprecated These mode names were removed in v4.6. Use the canonical modes instead. */
 export type DeprecatedModeName = 'ultrapilot' | 'pipeline' | 'ecomode';
@@ -44,8 +60,6 @@ export function getDeprecationWarning(mode: string): string | null {
   return `[DEPRECATED] Mode "${mode}" is deprecated. ${warning}`;
 }
 
-const EXCLUSIVE_MODES: ModeName[] = ['autopilot', 'ralph', 'ultrawork'];
-
 function normalizeRalphModeStateOrThrow(state: ModeState): ModeState {
   const originalPhase = state.current_phase;
   const validation = validateAndNormalizeRalphState(state as Record<string, unknown>);
@@ -63,12 +77,33 @@ function normalizeRalphModeStateOrThrow(state: ModeState): ModeState {
   return normalized;
 }
 
-function stateDir(projectRoot?: string): string {
-  return join(projectRoot || process.cwd(), '.omx', 'state');
+function applySharedRunOutcomeContractOrThrow(state: ModeState): ModeState {
+  const validation = applyRunOutcomeContract(state as Record<string, unknown>);
+  if (!validation.ok || !validation.state) {
+    throw new Error(validation.error || 'Invalid run outcome state');
+  }
+  return validation.state as ModeState;
 }
 
-function statePath(mode: string, projectRoot?: string): string {
-  return join(stateDir(projectRoot), `${mode}-state.json`);
+function normalizeModeStateOrThrow(mode: string, state: ModeState): ModeState {
+  const normalized = mode === 'ralph'
+    ? normalizeRalphModeStateOrThrow(state)
+    : state;
+  return applySharedRunOutcomeContractOrThrow(normalized);
+}
+
+function stateDir(projectRoot?: string): string {
+  return getBaseStateDir(projectRoot);
+}
+
+export async function assertModeStartAllowed(
+  mode: ModeName,
+  projectRoot?: string,
+): Promise<void> {
+  if (!isTrackedWorkflowMode(mode)) return;
+  const scope = await resolveStateScope(projectRoot);
+  const activeModes = await readActiveWorkflowModes(projectRoot ?? process.cwd(), scope.sessionId);
+  assertWorkflowTransitionAllowed(activeModes, mode, 'start');
 }
 
 /**
@@ -83,29 +118,17 @@ export async function startMode(
   const dir = stateDir(projectRoot);
   await mkdir(dir, { recursive: true });
 
-  // Check for exclusive mode conflicts
-  if (EXCLUSIVE_MODES.includes(mode)) {
-    for (const other of EXCLUSIVE_MODES) {
-      if (other === mode) continue;
-      const otherPath = statePath(other, projectRoot);
-      if (existsSync(otherPath)) {
-        try {
-          const raw = await readFile(otherPath, 'utf-8');
-          const otherState = JSON.parse(raw) as { active?: unknown };
-          if (otherState.active) {
-            throw new Error(`Cannot start ${mode}: ${other} is already active. Run cancel first.`);
-          }
-        } catch (e) {
-          const err = e as NodeJS.ErrnoException;
-          if (err?.message.includes('Cannot start')) throw err;
-          if (err?.code === 'ENOENT') continue;
-          throw new Error(
-            `Cannot start ${mode}: ${other} state file is malformed or unreadable (${otherPath}). Run cancel or repair the state file.`
-          );
-        }
-      }
-    }
+  const scope = await resolveStateScope(projectRoot);
+  let transitionMessage: string | undefined;
+  if (isTrackedWorkflowMode(mode)) {
+    const transition = await reconcileWorkflowTransition(projectRoot ?? process.cwd(), mode, {
+      action: 'start',
+      sessionId: scope.sessionId,
+      source: 'startMode',
+    });
+    transitionMessage = transition.transitionMessage;
   }
+  await mkdir(scope.stateDir, { recursive: true });
 
   const stateBase: ModeState = {
     active: true,
@@ -115,13 +138,24 @@ export async function startMode(
     current_phase: 'starting',
     task_description: taskDescription,
     started_at: new Date().toISOString(),
+    ...(transitionMessage ? { transition_message: transitionMessage } : {}),
+    ...(mode === 'ralph' && scope.sessionId ? { owner_omx_session_id: scope.sessionId } : {}),
   };
 
   const withContext = withModeRuntimeContext({}, stateBase) as ModeState;
-  const state = mode === 'ralph'
-    ? normalizeRalphModeStateOrThrow(withContext)
-    : withContext;
-  await writeFile(statePath(mode, projectRoot), JSON.stringify(state, null, 2));
+  const state = normalizeModeStateOrThrow(mode, withContext);
+  await writeFile(getStatePath(mode, projectRoot, scope.sessionId), JSON.stringify(state, null, 2));
+  await syncRunStateFromModeState(state, projectRoot, scope.sessionId);
+  if (isTrackedWorkflowMode(mode)) {
+    await syncCanonicalSkillStateForMode({
+      cwd: projectRoot ?? process.cwd(),
+      mode,
+      active: true,
+      currentPhase: typeof state.current_phase === 'string' ? state.current_phase : undefined,
+      sessionId: scope.sessionId,
+      source: 'startMode',
+    });
+  }
   return state;
 }
 
@@ -129,13 +163,34 @@ export async function startMode(
  * Read current mode state
  */
 export async function readModeState(mode: string, projectRoot?: string): Promise<ModeState | null> {
-  const path = statePath(mode, projectRoot);
-  if (!existsSync(path)) return null;
+  const paths = await getReadScopedStatePaths(mode, projectRoot);
+  return readModeStateFromPaths(paths);
+}
+
+async function readModeStateFromPaths(paths: string[]): Promise<ModeState | null> {
+  for (const path of paths) {
+    if (!existsSync(path)) continue;
+    try {
+      return JSON.parse(await readFile(path, 'utf-8'));
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+
+export async function readModeStateForSession(
+  mode: string,
+  sessionId: string | undefined,
+  projectRoot?: string,
+): Promise<ModeState | null> {
+  let paths: string[];
   try {
-    return JSON.parse(await readFile(path, 'utf-8'));
+    paths = await getReadScopedStatePaths(mode, projectRoot, sessionId);
   } catch {
     return null;
   }
+  return readModeStateFromPaths(paths);
 }
 
 /**
@@ -144,17 +199,37 @@ export async function readModeState(mode: string, projectRoot?: string): Promise
 export async function updateModeState(
   mode: string,
   updates: Partial<ModeState>,
-  projectRoot?: string
+  projectRoot?: string,
+  explicitSessionId?: string,
 ): Promise<ModeState> {
-  const current = await readModeState(mode, projectRoot);
+  const current = explicitSessionId
+    ? await readModeStateForSession(mode, explicitSessionId, projectRoot)
+    : await readModeState(mode, projectRoot);
   if (!current) throw new Error(`Mode ${mode} not found`);
+  const scope = await resolveStateScope(projectRoot, explicitSessionId);
+  await mkdir(scope.stateDir, { recursive: true });
 
   const updatedBase = { ...current, ...updates };
-  const normalizedBase = mode === 'ralph'
-    ? normalizeRalphModeStateOrThrow(updatedBase as ModeState)
-    : updatedBase;
+  if (!Object.prototype.hasOwnProperty.call(updates, 'run_outcome')) {
+    delete updatedBase.run_outcome;
+  }
+  if (mode === 'ralph' && scope.sessionId && typeof updatedBase.owner_omx_session_id !== 'string') {
+    updatedBase.owner_omx_session_id = scope.sessionId;
+  }
+  const normalizedBase = normalizeModeStateOrThrow(mode, updatedBase as ModeState);
   const updated = withModeRuntimeContext(current, normalizedBase) as ModeState;
-  await writeFile(statePath(mode, projectRoot), JSON.stringify(updated, null, 2));
+  await writeFile(getStatePath(mode, projectRoot, scope.sessionId), JSON.stringify(updated, null, 2));
+  await syncRunStateFromModeState(updated, projectRoot, scope.sessionId);
+  if (isTrackedWorkflowMode(mode)) {
+    await syncCanonicalSkillStateForMode({
+      cwd: projectRoot ?? process.cwd(),
+      mode,
+      active: updated.active === true,
+      currentPhase: typeof updated.current_phase === 'string' ? updated.current_phase : undefined,
+      sessionId: scope.sessionId,
+      source: 'updateModeState',
+    });
+  }
   return updated;
 }
 
@@ -176,20 +251,23 @@ export async function cancelMode(mode: string, projectRoot?: string): Promise<vo
  * Cancel all active modes
  */
 export async function cancelAllModes(projectRoot?: string): Promise<string[]> {
-  const { readdir } = await import('fs/promises');
-  const dir = stateDir(projectRoot);
+  const dirs = await getReadScopedStateDirs(projectRoot);
   const cancelled: string[] = [];
+  const seenModes = new Set<string>();
 
-  if (!existsSync(dir)) return cancelled;
-
-  const files = await readdir(dir);
-  for (const f of files) {
-    if (!f.endsWith('-state.json')) continue;
-    const mode = f.replace('-state.json', '');
-    const state = await readModeState(mode, projectRoot);
-    if (state?.active) {
-      await cancelMode(mode, projectRoot);
-      cancelled.push(mode);
+  for (const dir of dirs) {
+    if (!existsSync(dir)) continue;
+    const files = await readdir(dir);
+    for (const f of files) {
+      if (!f.endsWith('-state.json')) continue;
+      const mode = f.replace('-state.json', '');
+      if (seenModes.has(mode)) continue;
+      seenModes.add(mode);
+      const state = await readModeState(mode, projectRoot);
+      if (state?.active) {
+        await cancelMode(mode, projectRoot);
+        cancelled.push(mode);
+      }
     }
   }
   return cancelled;
@@ -199,19 +277,22 @@ export async function cancelAllModes(projectRoot?: string): Promise<string[]> {
  * List all active modes
  */
 export async function listActiveModes(projectRoot?: string): Promise<Array<{ mode: string; state: ModeState }>> {
-  const { readdir } = await import('fs/promises');
-  const dir = stateDir(projectRoot);
+  const dirs = await getReadScopedStateDirs(projectRoot);
   const active: Array<{ mode: string; state: ModeState }> = [];
+  const seenModes = new Set<string>();
 
-  if (!existsSync(dir)) return active;
-
-  const files = await readdir(dir);
-  for (const f of files) {
-    if (!f.endsWith('-state.json')) continue;
-    const mode = f.replace('-state.json', '');
-    const state = await readModeState(mode, projectRoot);
-    if (state?.active) {
-      active.push({ mode, state });
+  for (const dir of dirs) {
+    if (!existsSync(dir)) continue;
+    const files = await readdir(dir);
+    for (const f of files) {
+      if (!f.endsWith('-state.json')) continue;
+      const mode = f.replace('-state.json', '');
+      if (seenModes.has(mode)) continue;
+      seenModes.add(mode);
+      const state = await readModeState(mode, projectRoot);
+      if (state?.active) {
+        active.push({ mode, state });
+      }
     }
   }
   return active;

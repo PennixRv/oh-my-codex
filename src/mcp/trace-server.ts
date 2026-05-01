@@ -5,7 +5,6 @@
  */
 
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
-import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
@@ -15,7 +14,7 @@ import { join } from 'path';
 import { createReadStream, existsSync } from 'fs';
 import { createInterface } from 'readline';
 import { listModeStateFilesWithScopePreference, resolveWorkingDirectoryForState } from './state-paths.js';
-import { shouldAutoStartMcpServer } from './bootstrap.js';
+import { autoStartStdioMcpServer } from './bootstrap.js';
 
 function text(data: unknown) {
   return { content: [{ type: 'text' as const, text: JSON.stringify(data, null, 2) }] };
@@ -207,8 +206,8 @@ const server = new Server(
   { capabilities: { tools: {} } }
 );
 
-server.setRequestHandler(ListToolsRequestSchema, async () => ({
-  tools: [
+export function buildTraceServerTools() {
+  return [
     {
       name: 'trace_timeline',
       description: 'Show chronological agent flow trace timeline. Displays turns, mode transitions, and agent activity in time order.',
@@ -235,10 +234,16 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
         },
       },
     },
-  ],
+  ];
+}
+
+server.setRequestHandler(ListToolsRequestSchema, async () => ({
+  tools: buildTraceServerTools(),
 }));
 
-server.setRequestHandler(CallToolRequestSchema, async (request) => {
+export async function handleTraceToolCall(request: {
+  params: { name: string; arguments?: Record<string, unknown> };
+}) {
   const { name, arguments: args } = request.params;
   const a = (args || {}) as Record<string, unknown>;
   let wd: string;
@@ -332,9 +337,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     default:
       return { content: [{ type: 'text' as const, text: `Unknown tool: ${name}` }], isError: true };
   }
-});
-
-if (shouldAutoStartMcpServer('trace')) {
-  const transport = new StdioServerTransport();
-  server.connect(transport).catch(console.error);
 }
+
+server.setRequestHandler(CallToolRequestSchema, handleTraceToolCall);
+
+autoStartStdioMcpServer('trace', server);

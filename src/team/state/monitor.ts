@@ -1,6 +1,7 @@
 import { existsSync } from 'fs';
 import { readFile } from 'fs/promises';
 import { performance } from 'perf_hooks';
+import { isTeamWorkerIntegrationStatus, type TeamWorkerIntegrationStatus } from '../contracts.js';
 
 export interface TeamSummary {
   teamName: string;
@@ -31,6 +32,17 @@ interface TeamSummarySnapshot {
   workerTaskByName: Record<string, string>;
 }
 
+export interface TeamWorkerIntegrationState {
+  last_seen_head?: string;
+  last_integrated_head?: string;
+  last_leader_head?: string;
+  last_rebased_leader_head?: string;
+  status?: TeamWorkerIntegrationStatus;
+  conflict_commit?: string;
+  conflict_files?: string[];
+  updated_at?: string;
+}
+
 export interface TeamMonitorSnapshotState {
   taskStatusById: Record<string, string>;
   workerAliveByName: Record<string, boolean>;
@@ -39,6 +51,7 @@ export interface TeamMonitorSnapshotState {
   workerTaskIdByName: Record<string, string>;
   mailboxNotifiedByMessageId: Record<string, string>;
   completedEventTaskIds: Record<string, boolean>;
+  integrationByWorker?: Record<string, TeamWorkerIntegrationState>;
   monitorTimings?: {
     list_tasks_ms: number;
     worker_scan_ms: number;
@@ -75,6 +88,37 @@ interface MonitorDeps {
   monitorSnapshotPath: (teamName: string, cwd: string) => string;
   teamPhasePath: (teamName: string, cwd: string) => string;
   writeAtomic: (filePath: string, data: string) => Promise<void>;
+}
+
+function normalizeWorkerIntegrationState(value: unknown): TeamWorkerIntegrationState | null {
+  if (!value || typeof value !== 'object') return null;
+  const raw = value as Record<string, unknown>;
+  return {
+    last_seen_head: typeof raw.last_seen_head === 'string' && raw.last_seen_head !== '' ? raw.last_seen_head : undefined,
+    last_integrated_head:
+      typeof raw.last_integrated_head === 'string' && raw.last_integrated_head !== '' ? raw.last_integrated_head : undefined,
+    last_leader_head: typeof raw.last_leader_head === 'string' && raw.last_leader_head !== '' ? raw.last_leader_head : undefined,
+    last_rebased_leader_head:
+      typeof raw.last_rebased_leader_head === 'string' && raw.last_rebased_leader_head !== '' ? raw.last_rebased_leader_head : undefined,
+    status: isTeamWorkerIntegrationStatus(raw.status) ? raw.status : undefined,
+    conflict_commit: typeof raw.conflict_commit === 'string' && raw.conflict_commit !== '' ? raw.conflict_commit : undefined,
+    conflict_files:
+      Array.isArray(raw.conflict_files)
+        ? raw.conflict_files.filter((entry): entry is string => typeof entry === 'string' && entry !== '')
+        : undefined,
+    updated_at: typeof raw.updated_at === 'string' && raw.updated_at !== '' ? raw.updated_at : undefined,
+  };
+}
+
+function normalizeIntegrationByWorker(value: unknown): Record<string, TeamWorkerIntegrationState> {
+  if (!value || typeof value !== 'object') return {};
+  const entries = Object.entries(value as Record<string, unknown>)
+    .map(([workerName, state]) => {
+      const normalized = normalizeWorkerIntegrationState(state);
+      return normalized ? [workerName, normalized] as const : null;
+    })
+    .filter((entry): entry is readonly [string, TeamWorkerIntegrationState] => entry !== null);
+  return Object.fromEntries(entries);
 }
 
 export async function readSummarySnapshot(teamName: string, cwd: string, summarySnapshotPath: MonitorDeps['summarySnapshotPath']): Promise<TeamSummarySnapshot | null> {
@@ -220,6 +264,7 @@ export async function readMonitorSnapshot(
       workerTaskIdByName: parsed.workerTaskIdByName ?? {},
       mailboxNotifiedByMessageId: parsed.mailboxNotifiedByMessageId ?? {},
       completedEventTaskIds: parsed.completedEventTaskIds ?? {},
+      integrationByWorker: normalizeIntegrationByWorker(parsed.integrationByWorker),
       monitorTimings,
     };
   } catch {

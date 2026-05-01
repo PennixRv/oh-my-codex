@@ -22,6 +22,7 @@ export type {
   TeamManifestV2,
   TeamLeader,
   TeamPolicy,
+  TeamGovernance,
   PermissionsSnapshot,
   TeamEvent,
   TeamMailboxMessage,
@@ -36,10 +37,14 @@ export type {
   ClaimTaskResult,
   TransitionTaskResult,
   ReleaseTaskClaimResult,
+  ReclaimTaskResult,
   TeamSummary,
   ShutdownAck,
   TeamMonitorSnapshotState,
+  TeamWorkerIntegrationState,
   TeamPhaseState,
+  TeamLeaderDecisionState,
+  TeamLeaderAttentionState,
 } from './state.js';
 
 // === Constants ===
@@ -54,6 +59,7 @@ export { saveTeamConfig as teamSaveConfig } from './state.js';
 export { cleanupTeamState as teamCleanup } from './state.js';
 export { migrateV1ToV2 as teamMigrateV1ToV2 } from './state.js';
 export { normalizeTeamPolicy as teamNormalizePolicy } from './state.js';
+export { normalizeTeamGovernance as teamNormalizeGovernance } from './state.js';
 
 // === Worker operations ===
 export { writeWorkerIdentity as teamWriteWorkerIdentity } from './state.js';
@@ -69,6 +75,7 @@ export { listTasks as teamListTasks } from './state.js';
 export { updateTask as teamUpdateTask } from './state.js';
 export { claimTask as teamClaimTask } from './state.js';
 export { releaseTaskClaim as teamReleaseTaskClaim } from './state.js';
+export { reclaimExpiredTaskClaim as teamReclaimExpiredTaskClaim } from './state.js';
 export { transitionTaskStatus as teamTransitionTaskStatus } from './state.js';
 export { computeTaskReadiness as teamComputeTaskReadiness } from './state.js';
 
@@ -104,6 +111,10 @@ export { readMonitorSnapshot as teamReadMonitorSnapshot } from './state.js';
 export { writeMonitorSnapshot as teamWriteMonitorSnapshot } from './state.js';
 export { readTeamPhase as teamReadPhase } from './state.js';
 export { writeTeamPhase as teamWritePhase } from './state.js';
+export { readTeamLeaderAttention as teamReadLeaderAttention } from './state.js';
+export { writeTeamLeaderAttention as teamWriteLeaderAttention } from './state.js';
+export { markTeamLeaderSessionStopped as teamMarkLeaderSessionStopped } from './state.js';
+export { markOwnedTeamsLeaderSessionStopped as teamMarkOwnedTeamsLeaderSessionStopped } from './state.js';
 
 // === Worker status write ===
 export { writeWorkerStatus as teamWriteWorkerStatus } from './state.js';
