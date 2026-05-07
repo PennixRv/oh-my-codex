@@ -23,6 +23,9 @@ export type ContextPackPackState = 'missing' | 'unreadable' | 'invalid' | 'valid
 export type ContextPackRoleCoverageState =
   'unknown' | 'missing-required-roles' | 'covered';
 export type ContextPackBasisState = 'stale' | 'fresh';
+export type DirectContextPackStatus = 'ready' | 'incomplete' | 'invalid';
+export type DirectContextPackDeclarationState =
+  'unknown' | 'missing' | 'malformed' | 'ambiguous' | 'mismatch' | 'declared';
 
 export interface ContextPackRef {
   path: string;
@@ -44,6 +47,20 @@ export interface ContextPackHandoffStatusSnapshot {
 
 export interface ContextPackArtifactReadModel {
   plansDir: string;
+}
+
+export interface DirectContextPackStatusSnapshot {
+  packPath: string;
+  packRelativePath: string;
+  slug: string;
+  contextPackStatus: DirectContextPackStatus;
+  declarationState: DirectContextPackDeclarationState;
+  declaredPackPath: string | null;
+  packState: ContextPackPackState;
+  roleCoverage: ContextPackRoleCoverageState;
+  basisState: ContextPackBasisState;
+  missingRequiredContextPackRoles: ContextPackRole[];
+  contextPackIssues: string[];
 }
 
 export interface ContextPackBaselineSelection {
@@ -510,6 +527,165 @@ function validateContextPackBasis(
   }
 
   return issues;
+}
+
+
+function validateDirectContextPackBasis(
+  repoRoot: string,
+  document: ContextPackDocument,
+): string[] {
+  const issues: string[] = [];
+  const validateBasisObject = (basis: ContextPackBasisObject, label: string): void => {
+    const basisPath = resolve(repoRoot, basis.path);
+    const roundTripPath = normalizeRepoRelativePath(relative(repoRoot, basisPath));
+    if (!roundTripPath || roundTripPath !== basis.path) {
+      issues.push(
+        `Declared context pack ${label} basis path ${basis.path} escapes the repository.`,
+      );
+      return;
+    }
+    if (!existsSync(basisPath)) {
+      issues.push(`Declared context pack ${label} basis file is missing: ${basis.path}.`);
+      return;
+    }
+    if (basis.sha1 !== computeGitBlobSha1(basisPath)) {
+      issues.push(
+        `Declared context pack ${label} basis hash for ${basis.path} does not match the current file.`,
+      );
+    }
+  };
+
+  validateBasisObject(document.basis.prd, 'prd');
+  document.basis.testSpecs.forEach((testSpec, index) => {
+    validateBasisObject(testSpec, `test-spec[${index}]`);
+  });
+  return issues;
+}
+
+function resolveDirectContextPackState(input: {
+  packState: ContextPackPackState;
+  roleCoverage: ContextPackRoleCoverageState;
+  basisState: ContextPackBasisState;
+  declarationState: DirectContextPackDeclarationState;
+}): DirectContextPackStatus {
+  if (input.packState === 'invalid' || input.packState === 'unreadable') {
+    return input.packState === 'unreadable' ? 'incomplete' : 'invalid';
+  }
+  if (input.basisState !== 'fresh') {
+    return 'invalid';
+  }
+  if (
+    input.declarationState === 'malformed'
+    || input.declarationState === 'ambiguous'
+    || input.declarationState === 'mismatch'
+  ) {
+    return 'invalid';
+  }
+  if (
+    input.roleCoverage === 'missing-required-roles'
+    || input.declarationState !== 'declared'
+  ) {
+    return 'incomplete';
+  }
+  return 'ready';
+}
+
+export function readDirectContextPackStatus(
+  repoRoot: string,
+  packPath: string,
+): DirectContextPackStatusSnapshot {
+  const resolvedPack = resolveDeclaredContextPackPath(repoRoot, packPath);
+  if (!resolvedPack) {
+    throw new Error(
+      'Context pack path must be canonical: .omx/context/context-<timestamp>-<slug>.json',
+    );
+  }
+
+  let packState: ContextPackPackState = 'missing';
+  let roleCoverage: ContextPackRoleCoverageState = 'unknown';
+  let basisState: ContextPackBasisState = 'stale';
+  let declarationState: DirectContextPackDeclarationState = 'unknown';
+  let declaredPackPath: string | null = null;
+  let missingRequiredContextPackRoles: ContextPackRole[] = [];
+  const contextPackIssues: string[] = [];
+
+  if (!existsSync(resolvedPack.resolvedPath)) {
+    packState = 'unreadable';
+    contextPackIssues.push(`Context pack file is missing: ${resolvedPack.normalizedPath}.`);
+  } else {
+    const packDocument = readContextPackDocument(resolvedPack.resolvedPath);
+    packState = packDocument.packState;
+    contextPackIssues.push(...packDocument.issues);
+
+    if (packDocument.document) {
+      const document = packDocument.document;
+      if (document.slug !== resolvedPack.slug) {
+        contextPackIssues.push(
+          `Context pack slug ${document.slug} does not match canonical path slug ${resolvedPack.slug}.`,
+        );
+        packState = 'invalid';
+      }
+
+      missingRequiredContextPackRoles = findMissingRequiredContextPackRoles(document);
+      roleCoverage = missingRequiredContextPackRoles.length === 0
+        ? 'covered'
+        : 'missing-required-roles';
+
+      const basisIssues = validateDirectContextPackBasis(repoRoot, document);
+      if (basisIssues.length === 0) {
+        basisState = 'fresh';
+      } else {
+        contextPackIssues.push(...basisIssues);
+      }
+
+      const prdPath = resolve(repoRoot, document.basis.prd.path);
+      if (existsSync(prdPath)) {
+        try {
+          const outcome = inspectContextPackOutcome(repoRoot, readFileSync(prdPath, 'utf-8'));
+          declaredPackPath = outcome.declaredPackPath;
+          contextPackIssues.push(...outcome.issues);
+          if (outcome.outcomeState === 'absent') {
+            declarationState = 'missing';
+          } else if (outcome.outcomeState === 'malformed') {
+            declarationState = 'malformed';
+          } else if (outcome.outcomeState === 'ambiguous') {
+            declarationState = 'ambiguous';
+          } else if (outcome.declaredPackPath === resolvedPack.normalizedPath) {
+            declarationState = 'declared';
+          } else {
+            declarationState = 'mismatch';
+            contextPackIssues.push(
+              `Basis PRD declares ${outcome.declaredPackPath ?? '(none)'} instead of ${resolvedPack.normalizedPath}.`,
+            );
+          }
+        } catch {
+          declarationState = 'unknown';
+          contextPackIssues.push(
+            'Basis PRD could not be read while resolving context pack declaration.',
+          );
+        }
+      }
+    }
+  }
+
+  return {
+    packPath: resolvedPack.resolvedPath,
+    packRelativePath: resolvedPack.normalizedPath,
+    slug: resolvedPack.slug,
+    contextPackStatus: resolveDirectContextPackState({
+      packState,
+      roleCoverage,
+      basisState,
+      declarationState,
+    }),
+    declarationState,
+    declaredPackPath,
+    packState,
+    roleCoverage,
+    basisState,
+    missingRequiredContextPackRoles,
+    contextPackIssues,
+  };
 }
 
 export function resolveContextPackHandoffState(input: {

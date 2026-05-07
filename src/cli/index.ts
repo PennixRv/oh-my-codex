@@ -22,6 +22,7 @@ import { performanceGoalCommand } from "./performance-goal.js";
 import { askCommand } from "./ask.js";
 import { questionCommand } from "./question.js";
 import { stateCommand } from "./state.js";
+import { contextPackCommand } from "./context-pack.js";
 import {
   cleanupCommand,
   cleanupOmxMcpProcesses,
@@ -211,6 +212,8 @@ Usage:
   omx hud       Show HUD statusline (--watch, --json, --preset=NAME)
   omx sidecar   Show read-only team/multi-agent visualization (--watch, --json, --tmux)
   omx state     Read/write/list OMX mode state via CLI parity surface
+  omx context-pack status <pack>
+                Read-only status for a canonical context pack
   omx notepad   CLI parity for OMX notepad MCP tools
   omx project-memory
                 CLI parity for OMX project-memory MCP tools
@@ -347,6 +350,7 @@ type CliCommand =
   | "hud"
   | "sidecar"
   | "state"
+  | "context-pack"
   | "wiki"
   | "mcp-serve"
   | "status"
@@ -372,6 +376,7 @@ const NESTED_HELP_COMMANDS = new Set<CliCommand>([
   "hud",
   "sidecar",
   "state",
+  "context-pack",
   "wiki",
   "mcp-serve",
   "ralph",
@@ -1109,7 +1114,7 @@ export async function main(args: string[]): Promise<void> {
     "ask",
     "question",
     "autoresearch",
-  "autoresearch-goal",
+    "autoresearch-goal",
     "explore",
     "sparkshell",
     "team",
@@ -1124,6 +1129,7 @@ export async function main(args: string[]): Promise<void> {
     "hud",
     "sidecar",
     "state",
+    "context-pack",
     "mcp-serve",
     "status",
     "cancel",
@@ -1256,6 +1262,9 @@ export async function main(args: string[]): Promise<void> {
         break;
       case "state":
         await stateCommand(args.slice(1));
+        break;
+      case "context-pack":
+        await contextPackCommand(args.slice(1));
         break;
       case "notepad":
         await mcpParityCommand("notepad", args.slice(1));
