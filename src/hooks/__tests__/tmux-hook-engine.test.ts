@@ -82,6 +82,12 @@ describe('pickActiveMode', () => {
     const mode = pickActiveMode(['autopilot'], ['ralph', 'team']);
     assert.equal(mode, null);
   });
+
+  it('allows runingteam by default for active-mode tmux reinjection', () => {
+    assert.ok(DEFAULT_ALLOWED_MODES.includes('runingteam'));
+    const mode = pickActiveMode(['runingteam'], DEFAULT_ALLOWED_MODES);
+    assert.equal(mode, 'runingteam');
+  });
 });
 
 describe('evaluateInjectionGuards', () => {

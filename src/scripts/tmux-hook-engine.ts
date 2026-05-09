@@ -2,7 +2,7 @@ import { createHash } from 'crypto';
 import { execFileSync } from 'child_process';
 import { resolveTmuxBinaryForPlatform } from '../utils/platform-command.js';
 
-export const DEFAULT_ALLOWED_MODES = ['ralph', 'ultrawork', 'team'];
+export const DEFAULT_ALLOWED_MODES = ['ralph', 'ultrawork', 'team', 'runingteam'];
 export const DEFAULT_MARKER = '[OMX_TMUX_INJECT]';
 const PLACEHOLDER_TARGET_VALUES = new Set([
   'replace-with-tmux-pane-id',

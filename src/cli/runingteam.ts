@@ -17,6 +17,7 @@ import {
   updateRuningTeamSession,
   writeFinalSynthesis,
 } from '../runingteam/runtime.js';
+import { ensureTmuxHookInitialized } from './tmux-hook.js';
 
 export const RUNINGTEAM_APPEND_ENV = 'OMX_RUNINGTEAM_APPEND_INSTRUCTIONS_FILE';
 const VALUE_TAKING_FLAGS = new Set(['--model', '--provider', '--config', '-c', '-i', '--images-dir']);
@@ -133,6 +134,31 @@ export function buildRuningTeamAppendInstructions(
   ].filter((line): line is string => typeof line === 'string').join('\n');
 }
 
+export async function ensureRuningTeamTmuxHookAllowed(cwd: string): Promise<boolean> {
+  await ensureTmuxHookInitialized(cwd).catch(() => {});
+  const configPath = join(cwd, '.omx', 'tmux-hook.json');
+  if (!existsSync(configPath)) return false;
+
+  const raw = await readFile(configPath, 'utf-8').catch(() => '');
+  let parsed: Record<string, unknown>;
+  try {
+    parsed = JSON.parse(raw) as Record<string, unknown>;
+  } catch {
+    return false;
+  }
+
+  const existingModes = Array.isArray(parsed.allowed_modes)
+    ? parsed.allowed_modes.filter((mode): mode is string => typeof mode === 'string' && mode.trim() !== '').map((mode) => mode.trim())
+    : [];
+  if (existingModes.includes('runingteam')) return false;
+
+  const allowedModes = existingModes.length > 0
+    ? [...existingModes, 'runingteam']
+    : ['ralph', 'ultrawork', 'team', 'runingteam'];
+  await writeFile(configPath, `${JSON.stringify({ ...parsed, allowed_modes: allowedModes }, null, 2)}\n`, 'utf-8');
+  return true;
+}
+
 async function writeRuningTeamSessionInstructions(
   cwd: string,
   task: string,
@@ -168,6 +194,7 @@ async function launchRuningTeamCodex(args: string[], cwd: string): Promise<void>
     approved_test_spec_paths: approvedHint?.testSpecPaths ?? [],
     approved_deep_interview_spec_paths: approvedHint?.deepInterviewSpecPaths ?? [],
   }, cwd);
+  await ensureRuningTeamTmuxHookAllowed(cwd);
   const instructionsPath = await writeRuningTeamSessionInstructions(cwd, task, {
     sessionId: controllerSession?.session_id,
     approvedHint,

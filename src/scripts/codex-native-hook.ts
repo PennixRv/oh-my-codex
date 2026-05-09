@@ -65,6 +65,7 @@ import { onSessionStart as buildWikiSessionStartContext } from "../wiki/lifecycl
 import { readAutoresearchCompletionStatus, readAutoresearchModeState } from "../autoresearch/skill-validation.js";
 import { readRunState } from "../runtime/run-state.js";
 import { getRunContinuationSnapshot, shouldContinueRun } from "../runtime/run-loop.js";
+import { readRuningTeamSession } from "../runingteam/runtime.js";
 import { triagePrompt } from "../hooks/triage-heuristic.js";
 import { readTriageConfig } from "../hooks/triage-config.js";
 import {
@@ -834,7 +835,7 @@ async function buildSessionStartContext(
   }
 
   const modeSummaries: string[] = [];
-  for (const mode of ["ralph", "autopilot", "ultrawork", "ultraqa", "ralplan", "deep-interview", "team"] as const) {
+  for (const mode of ["ralph", "autopilot", "ultrawork", "ultraqa", "ralplan", "deep-interview", "team", "runingteam"] as const) {
     const state = await readJsonIfExists(getStatePath(mode, cwd, sessionId));
     if (state?.active !== true || !isNonTerminalPhase(state.current_phase)) continue;
     if (mode === "team") {
@@ -1321,6 +1322,70 @@ async function buildModeBasedStopOutput(
     reason: `OMX ${mode} is still active (phase: ${phase}); continue the task and gather fresh verification evidence before stopping.`,
     stopReason: `${mode}_${phase}`,
     systemMessage: `OMX ${mode} is still active (phase: ${phase}).`,
+  };
+}
+
+const RUNINGTEAM_STOP_TERMINAL_STATUSES = new Set(["complete", "blocked", "failed", "cancelled"]);
+
+async function readRuningTeamModeStateForStop(
+  cwd: string,
+  sessionId?: string,
+): Promise<Record<string, unknown> | null> {
+  const normalizedSessionId = safeString(sessionId).trim();
+  if (!normalizedSessionId) {
+    return await readModeState("runingteam", cwd);
+  }
+
+  const scopedState = await readStopSessionPinnedState("runingteam-state.json", cwd, normalizedSessionId);
+  if (scopedState) return scopedState;
+
+  const rootState = await readJsonIfExists(join(cwd, ".omx", "state", "runingteam-state.json"));
+  if (rootState?.active !== true) return null;
+
+  const ownerSessionId = safeString(rootState.session_id).trim();
+  if (ownerSessionId && ownerSessionId !== normalizedSessionId) {
+    return null;
+  }
+
+  return rootState;
+}
+
+async function buildRuningTeamStopOutput(
+  cwd: string,
+  sessionId?: string,
+): Promise<Record<string, unknown> | null> {
+  const state = await readRuningTeamModeStateForStop(cwd, sessionId);
+  if (!state || !shouldContinueRun(state)) return null;
+
+  const controllerSessionId = safeString(state.controller_session_id).trim();
+  let teamName = safeString(state.team_name).trim();
+  let controllerStatus = "";
+  if (controllerSessionId) {
+    try {
+      const controller = await readRuningTeamSession(cwd, controllerSessionId);
+      controllerStatus = safeString(controller.status).trim();
+      teamName = teamName || safeString(controller.team_name).trim();
+      if (RUNINGTEAM_STOP_TERMINAL_STATUSES.has(controllerStatus)) return null;
+    } catch {
+      // Missing controller state should not allow the leader to silently stop
+      // while the mode state still says RuningTeam is active.
+    }
+  }
+
+  const phase = formatPhase(state.current_phase, "planning");
+  const teamContext = teamName ? `, team: ${teamName}` : "";
+  const controllerContext = controllerSessionId
+    ? `, controller: ${controllerSessionId}${controllerStatus ? `/${controllerStatus}` : ""}`
+    : "";
+  const nextAction = teamName
+    ? `Run \`omx team status ${teamName}\`, read worker messages/results, then create a RuningTeam checkpoint/revision or final synthesis before stopping.`
+    : "Run `omx runingteam status --json`, identify the active/linked team, read worker messages/results, then checkpoint/revise/finalize before stopping.";
+
+  return {
+    decision: "block",
+    reason: `OMX RuningTeam is still active (phase: ${phase}${teamContext}${controllerContext}); continue monitoring worker state before stopping. ${nextAction}`,
+    stopReason: `runingteam_${phase}`,
+    systemMessage: `OMX RuningTeam is still active (phase: ${phase}).`,
   };
 }
 
@@ -2090,6 +2155,18 @@ async function buildStopHookOutput(
         "ultraqa-stop",
         safeString(ultraqaOutput.stopReason),
         ultraqaOutput,
+        canonicalSessionId,
+      );
+    }
+
+    const runingTeamOutput = await buildRuningTeamStopOutput(cwd, canonicalSessionId);
+    if (runingTeamOutput) {
+      return await returnPersistentStopBlock(
+        payload,
+        stateDir,
+        "runingteam-stop",
+        safeString(runingTeamOutput.stopReason),
+        runingTeamOutput,
         canonicalSessionId,
       );
     }

@@ -4081,6 +4081,58 @@ esac
     }
   });
 
+  it("returns Stop continuation output while RuningTeam is active so the leader keeps monitoring workers", async () => {
+    const cwd = await mkdtemp(join(tmpdir(), "omx-native-hook-stop-runingteam-"));
+    try {
+      const stateDir = join(cwd, ".omx", "state");
+      const sessionId = "sess-stop-runingteam";
+      await mkdir(join(stateDir, "sessions", sessionId), { recursive: true });
+      await writeJson(join(stateDir, "session.json"), { session_id: sessionId, cwd });
+      await writeJson(join(stateDir, "sessions", sessionId, "runingteam-state.json"), {
+        active: true,
+        mode: "runingteam",
+        current_phase: "executing",
+        controller_session_id: "rt-active",
+        team_name: "rt-team",
+        iteration: 2,
+        max_iterations: 50,
+        started_at: new Date().toISOString(),
+      });
+      await writeJson(join(stateDir, "runingteam", "rt-active", "session.json"), {
+        session_id: "rt-active",
+        task: "dynamic team fixture",
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        status: "executing",
+        iteration: 2,
+        plan_version: 2,
+        team_name: "rt-team",
+        max_iterations: 10,
+        terminal_reason: null,
+      });
+
+      const result = await dispatchCodexNativeHook(
+        {
+          hook_event_name: "Stop",
+          cwd,
+          session_id: sessionId,
+        },
+        { cwd },
+      );
+
+      assert.equal(result.omxEventName, "stop");
+      assert.deepEqual(result.outputJson, {
+        decision: "block",
+        reason:
+          "OMX RuningTeam is still active (phase: executing, team: rt-team, controller: rt-active/executing); continue monitoring worker state before stopping. Run `omx team status rt-team`, read worker messages/results, then create a RuningTeam checkpoint/revision or final synthesis before stopping.",
+        stopReason: "runingteam_executing",
+        systemMessage: "OMX RuningTeam is still active (phase: executing).",
+      });
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+
   it("blocks Stop for a team worker with a non-terminal assigned task via native worker context", async () => {
     const cwd = await mkdtemp(join(tmpdir(), "omx-native-hook-stop-team-worker-"));
     const prevTeamWorker = process.env.OMX_TEAM_WORKER;

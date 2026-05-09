@@ -46,7 +46,7 @@ interface InitConfigResult {
 const DEFAULT_CONFIG: TmuxHookConfig = {
   enabled: true,
   target: { type: 'pane', value: '' },
-  allowed_modes: ['ralph', 'ultrawork', 'team'],
+  allowed_modes: ['ralph', 'ultrawork', 'team', 'runingteam'],
   cooldown_ms: 15000,
   max_injections_per_session: 200,
   prompt_template: 'Continue from current mode state. [OMX_TMUX_INJECT]',

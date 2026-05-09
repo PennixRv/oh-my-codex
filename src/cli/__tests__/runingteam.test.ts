@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import {
   buildRuningTeamAppendInstructions,
+  ensureRuningTeamTmuxHookAllowed,
   extractRuningTeamTaskDescription,
   filterRuningTeamCodexArgs,
   runingTeamCommand,
@@ -60,6 +61,29 @@ describe('runingteam CLI', () => {
       assert.equal(parsed.sessions.length, 1);
       assert.equal(parsed.sessions[0]?.status, 'planning');
       assert.equal(parsed.sessions[0]?.plan_version, 1);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+
+  it('adds runingteam to existing tmux-hook allowed modes during launch setup', async () => {
+    const cwd = await mkdtemp(join(tmpdir(), 'omx-runingteam-tmux-hook-'));
+    try {
+      await import('node:fs/promises').then(({ mkdir, writeFile }) => Promise.all([
+        mkdir(join(cwd, '.omx'), { recursive: true }),
+        writeFile(join(cwd, '.omx', 'tmux-hook.json'), JSON.stringify({
+          enabled: true,
+          target: { type: 'pane', value: '%9' },
+          allowed_modes: ['ralph', 'team'],
+        }, null, 2)),
+      ]));
+      const changed = await ensureRuningTeamTmuxHookAllowed(cwd);
+      assert.equal(changed, true);
+      const config = JSON.parse(await readFile(join(cwd, '.omx', 'tmux-hook.json'), 'utf-8')) as { allowed_modes: string[] };
+      assert.deepEqual(config.allowed_modes, ['ralph', 'team', 'runingteam']);
+
+      const unchanged = await ensureRuningTeamTmuxHookAllowed(cwd);
+      assert.equal(unchanged, false);
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
