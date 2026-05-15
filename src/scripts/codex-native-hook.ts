@@ -69,6 +69,7 @@ import {
 } from "../hooks/extensibility/events.js";
 import type { HookEventEnvelope } from "../hooks/extensibility/types.js";
 import { dispatchHookEventRuntime } from "../hooks/extensibility/runtime.js";
+import { getNotificationConfig, getVerbosity } from "../notifications/config.js";
 import { reconcileHudForPromptSubmit } from "../hud/reconcile.js";
 import {
   onPreCompact as buildWikiPreCompactContext,
@@ -303,6 +304,13 @@ async function isNativeSubagentHook(
   if (candidateIds.length === 0) return false;
 
   return candidateIds.some((id) => summary.allSubagentThreadIds.includes(id));
+}
+
+function shouldSuppressSubagentLifecycleHookDispatch(): boolean {
+  const config = getNotificationConfig();
+  if (config?.includeChildAgents === true) return false;
+  const verbosity = getVerbosity(config);
+  return verbosity !== "agent" && verbosity !== "verbose";
 }
 
 async function recordIgnoredNativeSubagentSessionStart(
@@ -3327,11 +3335,13 @@ export async function dispatchCodexNativeHook(
   let canonicalSessionId = safeString(currentSessionState?.session_id).trim();
   let resolvedNativeSessionId = nativeSessionId;
   let skipCanonicalSessionStartContext = false;
+  let isSubagentSessionStart = false;
 
   if (hookEventName === "SessionStart" && nativeSessionId) {
     const transcriptPath = safeString(payload.transcript_path ?? payload.transcriptPath).trim();
     const subagentSessionStart = readNativeSubagentSessionStartMetadata(transcriptPath);
     if (subagentSessionStart && canonicalSessionId) {
+      isSubagentSessionStart = true;
       const belongsToCanonicalSession = await nativeSubagentSessionStartBelongsToCanonicalSession(
         cwd,
         canonicalSessionId,
@@ -3400,6 +3410,9 @@ export async function dispatchCodexNativeHook(
         .map((candidateSessionId) => isNativeSubagentHook(cwd, candidateSessionId, nativeSessionId, threadId)),
     )).some(Boolean)
     : false;
+  const suppressNoisySubagentLifecycleDispatch =
+    (isSubagentSessionStart || isSubagentStop)
+    && shouldSuppressSubagentLifecycleHookDispatch();
 
   if (hookEventName === "UserPromptSubmit") {
     const prompt = readPromptText(payload);
@@ -3495,7 +3508,7 @@ export async function dispatchCodexNativeHook(
     await reconcileHudForPromptSubmitFn(cwd, { sessionId: canonicalSessionId || sessionIdForState || undefined }).catch(() => {});
   }
 
-  if (omxEventName && !skipCanonicalSessionStartContext) {
+  if (omxEventName && !skipCanonicalSessionStartContext && !suppressNoisySubagentLifecycleDispatch) {
     const baseContext = buildBaseContext(cwd, payload, hookEventName!, canonicalSessionId);
     if (resolvedNativeSessionId) {
       baseContext.native_session_id = resolvedNativeSessionId;
