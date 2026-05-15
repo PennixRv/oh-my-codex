@@ -221,6 +221,70 @@ describe("notify setup scope", () => {
 		}
 	});
 
+	it("does not preserve nested encoded stale turn-ended previous notify metadata", async () => {
+		const wd = await mkdtemp(join(tmpdir(), "omx-stale-nested-wrapper-notify-"));
+		try {
+			await withIsolatedUserHome(wd, async (codexHomeDir) => {
+				await mkdir(codexHomeDir, { recursive: true });
+				const metadataPath = join(
+					codexHomeDir,
+					".omx",
+					"notify-dispatch.json",
+				);
+				const stalePkgRoot = join(wd, "old-global", "oh-my-codex");
+				const staleDispatcher = join(
+					stalePkgRoot,
+					"dist",
+					"scripts",
+					"notify-dispatcher.js",
+				);
+				const staleTurnEndedWrapper = join(wd, "SkyComputerUseClient");
+				await mkdir(dirname(metadataPath), { recursive: true });
+				await writeFile(
+					join(codexHomeDir, "config.toml"),
+					`notify = ["node", "${staleDispatcher}", "--metadata", "${metadataPath}"]\napproval_policy = "on-failure"\n`,
+				);
+				const nestedWrapper = JSON.stringify([
+					"node",
+					staleTurnEndedWrapper,
+					"turn-ended",
+					"--previous-notify",
+					JSON.stringify(["node", staleDispatcher, "--metadata", metadataPath]),
+				]);
+				await writeFile(
+					metadataPath,
+					JSON.stringify({
+						managedBy: "oh-my-codex",
+						version: 1,
+						previousNotify: [
+							"node",
+							staleTurnEndedWrapper,
+							"turn-ended",
+							"--previous-notify",
+							JSON.stringify(nestedWrapper),
+						],
+						omxNotify: [
+							"node",
+							join(stalePkgRoot, "dist", "scripts", "notify-hook.js"),
+						],
+						dispatcherNotify: ["node", staleDispatcher, "--metadata", metadataPath],
+					}),
+				);
+
+				await withTempCwd(wd, async () => {
+					await setup({ scope: "user" });
+				});
+
+				const config = await readFile(join(codexHomeDir, "config.toml"), "utf-8");
+				assert.match(config, /^notify = \["node", ".*notify-hook\.js"\]$/m);
+				assert.doesNotMatch(config, /notify-dispatcher\.js/);
+				assert.doesNotMatch(config, /SkyComputerUseClient/);
+			});
+		} finally {
+			await rm(wd, { recursive: true, force: true });
+		}
+	});
+
 	it("does not preserve stale turn-ended wrappers with OMX previous notify metadata", async () => {
 		const wd = await mkdtemp(join(tmpdir(), "omx-stale-wrapper-notify-"));
 		try {

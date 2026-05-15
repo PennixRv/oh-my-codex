@@ -332,6 +332,65 @@ function getPreviousNotifyWrapperValue(
   return undefined;
 }
 
+function isOmxManagedPayloadText(value: string): boolean {
+  return (
+    /(?:^|[\\/])notify-(?:hook|dispatcher)\.js(?:\s|$|["'])/.test(
+      value,
+    ) && /(?:^|[\\/])oh-my-codex(?:[\\/]|$)/.test(value)
+  );
+}
+
+function parseJsonString(value: string): unknown | undefined {
+  const trimmed = value.trim();
+  if (!trimmed) return undefined;
+  const first = trimmed[0];
+  if (first !== "[" && first !== "{" && first !== '"') return undefined;
+  try {
+    return JSON.parse(trimmed) as unknown;
+  } catch {
+    return undefined;
+  }
+}
+
+function containsOmxManagedNotifyPayload(
+  value: unknown,
+  pkgRoot: string | undefined,
+  depth = 0,
+): boolean {
+  if (depth > 8 || value == null) return false;
+  if (typeof value === "string") {
+    const parsed = parseJsonString(value);
+    if (parsed !== undefined && parsed !== value) {
+      return containsOmxManagedNotifyPayload(parsed, pkgRoot, depth + 1);
+    }
+    return isOmxManagedPayloadText(value);
+  }
+  if (Array.isArray(value)) {
+    if (value.every((item) => typeof item === "string")) {
+      const nestedCommand = value as string[];
+      return (
+        isOmxManagedNotifyCommand(nestedCommand, pkgRoot) ||
+        isOmxManagedPreviousNotifyWrapper(nestedCommand, pkgRoot)
+      );
+    }
+    return value.some((item) =>
+      containsOmxManagedNotifyPayload(item, pkgRoot, depth + 1),
+    );
+  }
+  if (typeof value === "object") {
+    const record = value as Record<string, unknown>;
+    return [
+      record.previousNotify,
+      record.previous_notify,
+      record.notify,
+      record.command,
+      record.argv,
+      record.args,
+    ].some((item) => containsOmxManagedNotifyPayload(item, pkgRoot, depth + 1));
+  }
+  return false;
+}
+
 function isOmxManagedPreviousNotifyWrapper(
   command: readonly string[] | null | undefined,
   pkgRoot?: string,
@@ -341,23 +400,7 @@ function isOmxManagedPreviousNotifyWrapper(
   const previousNotify = getPreviousNotifyWrapperValue(command);
   if (!previousNotify) return false;
 
-  try {
-    const parsed = JSON.parse(previousNotify) as unknown;
-    if (
-      Array.isArray(parsed) &&
-      parsed.every((item) => typeof item === "string")
-    ) {
-      return isOmxManagedNotifyCommand(parsed, pkgRoot);
-    }
-  } catch {
-    // Fall back to a conservative text match for legacy wrapper payloads.
-  }
-
-  return (
-    /(?:^|[\\/])notify-(?:hook|dispatcher)\.js(?:\s|$|["'])/.test(
-      previousNotify,
-    ) && /(?:^|[\\/])oh-my-codex(?:[\\/]|$)/.test(previousNotify)
-  );
+  return containsOmxManagedNotifyPayload(previousNotify, pkgRoot);
 }
 
 export function isOmxManagedNotifyCommand(

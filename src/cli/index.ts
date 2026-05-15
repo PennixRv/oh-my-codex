@@ -4189,6 +4189,34 @@ interface WatcherPidRecord {
   startedAt: string | null;
 }
 
+export type NotifyFallbackReapResult =
+  | "missing"
+  | "invalid"
+  | "identity_mismatch"
+  | "recent_active"
+  | "reaped"
+  | "failed";
+
+const DEFAULT_NOTIFY_FALLBACK_REAP_GRACE_MS = 5000;
+
+function resolveNotifyFallbackReapGraceMs(env: NodeJS.ProcessEnv = process.env): number {
+  const parsed = Number.parseInt(env.OMX_NOTIFY_FALLBACK_REAP_GRACE_MS || "", 10);
+  if (Number.isFinite(parsed) && parsed >= 0) return parsed;
+  return DEFAULT_NOTIFY_FALLBACK_REAP_GRACE_MS;
+}
+
+function isWatcherRecordWithinReapGrace(
+  record: WatcherPidRecord,
+  nowMs = Date.now(),
+  graceMs = resolveNotifyFallbackReapGraceMs(),
+): boolean {
+  if (graceMs <= 0 || !record.startedAt) return false;
+  const startedMs = Date.parse(record.startedAt);
+  if (!Number.isFinite(startedMs)) return false;
+  const ageMs = nowMs - startedMs;
+  return ageMs >= 0 && ageMs < graceMs;
+}
+
 function parseWatcherPidRecord(content: string): WatcherPidRecord | null {
   const trimmed = content.trim();
   if (!trimmed) return null;
@@ -4244,10 +4272,12 @@ export async function reapStaleNotifyFallbackWatcher(
     hasErrnoCode?: (error: unknown, code: string) => boolean;
     warn?: (message?: unknown, ...optionalParams: unknown[]) => void;
     isWatcherProcess?: (pid: number) => boolean;
+    nowMs?: () => number;
+    reapGraceMs?: number;
   } = {},
-): Promise<void> {
+): Promise<NotifyFallbackReapResult> {
   const exists = deps.exists ?? existsSync;
-  if (!exists(pidPath)) return;
+  if (!exists(pidPath)) return "missing";
 
   const { readFile } = await import("fs/promises");
   const readFileImpl = deps.readFile ?? readFile;
@@ -4258,9 +4288,17 @@ export async function reapStaleNotifyFallbackWatcher(
 
   try {
     const record = parseWatcherPidRecord(await readFileImpl(pidPath, "utf-8"));
-    if (record && isWatcherProcessImpl(record.pid)) {
-      tryKillPidImpl(record.pid, "SIGTERM");
+    if (!record) return "invalid";
+    if (!isWatcherProcessImpl(record.pid)) return "identity_mismatch";
+    if (isWatcherRecordWithinReapGrace(
+      record,
+      deps.nowMs?.() ?? Date.now(),
+      deps.reapGraceMs ?? resolveNotifyFallbackReapGraceMs(),
+    )) {
+      return "recent_active";
     }
+    tryKillPidImpl(record.pid, "SIGTERM");
+    return "reaped";
   } catch (error: unknown) {
     if (!hasErrnoCodeImpl(error, "ESRCH")) {
       warn(
@@ -4271,6 +4309,7 @@ export async function reapStaleNotifyFallbackWatcher(
         },
       );
     }
+    return "failed";
   }
 }
 
@@ -4291,7 +4330,8 @@ async function startNotifyFallbackWatcher(
 ): Promise<void> {
   const { mkdir, writeFile } = await import("fs/promises");
   const pidPath = notifyFallbackPidPath(cwd);
-  await reapStaleNotifyFallbackWatcher(pidPath);
+  const reapResult = await reapStaleNotifyFallbackWatcher(pidPath);
+  if (reapResult === "recent_active") return;
 
   if (!shouldEnableNotifyFallbackWatcher(process.env, process.platform)) return;
 

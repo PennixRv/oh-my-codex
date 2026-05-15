@@ -3358,7 +3358,7 @@ exit 0
   it("reapStaleNotifyFallbackWatcher sends SIGTERM only after confirming watcher identity", async () => {
     const cwd = await mkdtemp(join(tmpdir(), "omx-reap-pid-confirmed-"));
     const pidPath = join(cwd, "watcher.pid");
-    await writeFile(pidPath, JSON.stringify({ pid: 12345, started_at: new Date().toISOString() }));
+    await writeFile(pidPath, JSON.stringify({ pid: 12345, started_at: "2026-04-05T00:00:00.000Z" }));
 
     const killed: number[] = [];
     await reapStaleNotifyFallbackWatcher(pidPath, {
@@ -3367,6 +3367,24 @@ exit 0
     });
 
     assert.deepEqual(killed, [12345], "should SIGTERM the verified watcher process");
+    await rm(cwd, { recursive: true, force: true });
+  });
+
+  it("reapStaleNotifyFallbackWatcher skips recently started watcher records to avoid respawn loops", async () => {
+    const cwd = await mkdtemp(join(tmpdir(), "omx-reap-pid-recent-"));
+    const pidPath = join(cwd, "watcher.pid");
+    await writeFile(pidPath, JSON.stringify({ pid: 24680, started_at: "2026-05-15T00:00:00.000Z" }));
+
+    const killed: number[] = [];
+    const result = await reapStaleNotifyFallbackWatcher(pidPath, {
+      isWatcherProcess: () => true,
+      nowMs: () => Date.parse("2026-05-15T00:00:03.000Z"),
+      reapGraceMs: 5000,
+      tryKillPid: (pid) => { killed.push(pid); return true; },
+    });
+
+    assert.equal(result, "recent_active");
+    assert.equal(killed.length, 0, "should not kill a watcher still inside the startup grace window");
     await rm(cwd, { recursive: true, force: true });
   });
 
