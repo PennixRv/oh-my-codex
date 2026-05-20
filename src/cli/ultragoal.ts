@@ -52,11 +52,10 @@ Codex goal integration:
   the active Codex agent when to call get_goal/create_goal/update_goal safely.
   Ultragoal does not call /goal clear or hidden thread/goal/clear routes. For
   multiple sequential ultragoal runs in one Codex session/thread, manually run
-  /goal clear in the Codex UI or start a fresh Codex thread before creating the
-  next aggregate goal.
+  /goal clear in the Codex UI before creating the next aggregate goal.
   New plans default to aggregate mode: one Codex goal covers the whole ultragoal
   run while OMX checkpoints G001/G002 stories in the durable ledger. Legacy
-  per-story plans retain fresh Codex thread blocker handling when a completed thread
+  per-story plans retain completed-goal blocker handling when a completed thread
   goal prevents create_goal for the next story.
   Dynamic steering is explicit-only: steer accepts structured fields or directive JSON,
   audits accepted/rejected/deduped results in .omx/ultragoal/ledger.jsonl, and

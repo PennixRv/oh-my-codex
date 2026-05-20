@@ -148,7 +148,8 @@ describe('ultragoal artifacts', () => {
       assert.match(instruction, /\.omx\/ultragoal\/ledger\.jsonl/);
       assert.match(instruction, /Complete first milestone/);
       assert.match(instruction, /does not call \/goal clear/);
-      assert.match(instruction, /start a fresh Codex thread/);
+      assert.match(instruction, /manually run \/goal clear/);
+      assert.doesNotMatch(instruction, /fresh (?:Codex )?(?:thread|session)s?/i);
       assert.doesNotMatch(instruction, /\.\.\/\.\.\/codex/);
       assert.doesNotMatch(instruction, /`codex\s+goal\b/i);
     });
@@ -389,7 +390,8 @@ describe('ultragoal artifacts', () => {
       const first = await startNextUltragoal(cwd);
       const instruction = buildCodexGoalInstruction(first.goal!, first.plan);
       assert.match(instruction, /Ultragoal active-goal handoff/);
-      assert.match(instruction, /fresh Codex thread/);
+      assert.match(instruction, /Codex goal context/);
+      assert.doesNotMatch(instruction, /fresh (?:Codex )?(?:thread|session)s?/i);
 
       await checkpointUltragoal(cwd, {
         goalId: first.goal!.id,
@@ -1138,7 +1140,7 @@ describe('ultragoal artifacts', () => {
     }
   });
 
-  it('guides different completed legacy snapshots to blocked checkpoints and fresh threads', async () => {
+  it('guides different completed legacy snapshots to blocked checkpoints and available goal contexts', async () => {
     await withTempRepo(async (cwd) => {
       await createUltragoalPlan(cwd, {
         brief: 'brief',
@@ -1159,7 +1161,8 @@ describe('ultragoal artifacts', () => {
         (error: unknown) => {
           assert.match(String(error), /objective mismatch/);
           assert.match(String(error), /--status blocked/);
-          assert.match(String(error), /fresh Codex thread/);
+          assert.match(String(error), /Codex goal context/);
+          assert.doesNotMatch(String(error), /fresh (?:Codex )?(?:thread|session)s?/i);
           return true;
         },
       );

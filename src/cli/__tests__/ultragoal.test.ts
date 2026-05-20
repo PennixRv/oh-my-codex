@@ -48,7 +48,7 @@ describe('cli/ultragoal', () => {
     assert.match(ULTRAGOAL_HELP, /complete-goals/);
     assert.match(ULTRAGOAL_HELP, /aggregate mode/);
     assert.match(ULTRAGOAL_HELP, /blocked/);
-    assert.match(ULTRAGOAL_HELP, /fresh Codex thread/);
+    assert.doesNotMatch(ULTRAGOAL_HELP, /fresh (?:Codex )?(?:thread|session)s?/i);
     assert.match(ULTRAGOAL_HELP, /get_goal\/create_goal\/update_goal/);
     assert.match(ULTRAGOAL_HELP, /does not call \/goal clear/);
     assert.match(ULTRAGOAL_HELP, /multiple sequential ultragoal runs/);
@@ -398,7 +398,8 @@ describe('cli/ultragoal', () => {
       assert.equal(mismatch.exitCode, 1);
       assert.match(mismatch.stderr.join('\n'), /objective mismatch/);
       assert.match(mismatch.stderr.join('\n'), /--status blocked/);
-      assert.match(mismatch.stderr.join('\n'), /fresh Codex thread/);
+      assert.match(mismatch.stderr.join('\n'), /Codex goal context/);
+      assert.doesNotMatch(mismatch.stderr.join('\n'), /fresh (?:Codex )?(?:thread|session)s?/i);
     });
   });
 

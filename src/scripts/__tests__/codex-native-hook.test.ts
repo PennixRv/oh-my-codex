@@ -1915,7 +1915,7 @@ describe("codex native hook dispatch", () => {
     }
   });
 
-  it("blocks ultragoal Stop with blocked checkpoint and fresh-thread remediation for completed legacy snapshots", async () => {
+  it("blocks ultragoal Stop with blocked checkpoint and available-goal-context remediation for completed legacy snapshots", async () => {
     const cwd = await mkdtemp(join(tmpdir(), "omx-native-hook-ultragoal-legacy-stop-"));
     try {
       await writeJson(join(cwd, ".omx", "ultragoal", "goals.json"), {
@@ -1936,7 +1936,8 @@ describe("codex native hook dispatch", () => {
       assert.equal(result.outputJson?.decision, "block");
       assert.match(output, /omx ultragoal checkpoint --goal-id G001-demo --status complete/);
       assert.match(output, /--status blocked/);
-      assert.match(output, /fresh Codex thread/);
+      assert.match(output, /Codex goal context/);
+      assert.doesNotMatch(output, /fresh (?:Codex )?(?:thread|session)s?/i);
       assert.match(output, /Hooks must not mutate Codex goal state/);
     } finally {
       await rm(cwd, { recursive: true, force: true });

@@ -36,7 +36,7 @@ describe('ultragoal docs contract', () => {
       assert.match(doc, /does not invoke `\/goal clear` or hidden `thread\/goal\/clear`/i);
       assert.match(doc, /only provides `get_goal`, `create_goal`, and `update_goal`/i);
       assert.match(doc, /multiple sequential ultragoal runs/i);
-      assert.match(doc, /fresh Codex thread/i);
+      assert.doesNotMatch(doc, /fresh (?:Codex )?(?:thread|session)s?/i);
     }
   });
 
@@ -46,7 +46,8 @@ describe('ultragoal docs contract', () => {
     assert.match(doc, /checkpoint --goal-id G001-example --status blocked/);
     assert.match(doc, /`goal_blocked`/);
     assert.match(doc, /no Codex goal-tool reset\/new-goal surface/i);
-    assert.match(doc, /fresh Codex thread/i);
+    assert.match(doc, /Codex goal context/i);
+    assert.doesNotMatch(doc, /fresh (?:Codex )?(?:thread|session)s?/i);
     assert.match(doc, /same branch\/worktree/i);
     assert.match(doc, /Active or incomplete wrong Codex goals remain strict mismatch errors/i);
     assert.match(doc, /must not be used to bypass active-goal mismatch protection/i);

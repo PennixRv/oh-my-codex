@@ -9,7 +9,7 @@ Use when the user asks for `ultragoal`, `create-goals`, `complete-goals`, durabl
 
 ## Purpose
 
-`ultragoal` turns a brief into repo-native artifacts and then drives a Codex goal safely through goal tools. New plans default to a stable pointer-style aggregate Codex goal for the whole durable plan in `.omx/ultragoal/goals.json`, including later accepted/appended stories under the original brief constraints, while OMX tracks G001/G002 story progress in the ledger. Ultragoal does not call Codex `/goal clear`; before multiple sequential ultragoal runs in one Codex session/thread, manually run `/goal clear` in the Codex UI or start a fresh Codex thread so the previous completed aggregate goal does not block or confuse the next `create_goal`.
+`ultragoal` turns a brief into repo-native artifacts and then drives a Codex goal safely through goal tools. New plans default to a stable pointer-style aggregate Codex goal for the whole durable plan in `.omx/ultragoal/goals.json`, including later accepted/appended stories under the original brief constraints, while OMX tracks G001/G002 story progress in the ledger. Ultragoal does not call Codex `/goal clear`; before multiple sequential ultragoal runs in one Codex session/thread, manually run `/goal clear` in the Codex UI so the previous completed aggregate goal does not block or confuse the next `create_goal`.
 
 - `.omx/ultragoal/brief.md`
 - `.omx/ultragoal/goals.json`
@@ -23,7 +23,7 @@ Existing aggregate plans with the legacy enumerated objective are migrated to th
    - `omx ultragoal create-goals --brief "<brief>"`
    - `omx ultragoal create-goals --brief-file <path>`
    - `cat <brief> | omx ultragoal create-goals --from-stdin`
-   - `omx ultragoal create-goals --codex-goal-mode per-story --brief "<brief>"` only when one fresh Codex thread per story is explicitly preferred
+   - `omx ultragoal create-goals --codex-goal-mode per-story --brief "<brief>"` only when one Codex goal context per story is explicitly preferred
 2. Inspect `.omx/ultragoal/goals.json` and refine if needed.
 
 ## Complete goals
@@ -101,7 +101,7 @@ The final ultragoal story is not complete until the active agent has run the fin
    omx ultragoal record-review-blockers --goal-id <id> --title "Resolve final code-review blockers" --objective "<blocker-resolution objective>" --evidence "<review findings>" --codex-goal-json <active-get-goal-json-or-path>
    ```
 
-   This marks the current story `review_blocked`, appends a pending blocker-resolution story, keeps the Codex goal active, and lets `omx ultragoal complete-goals` start the blocker next. In legacy per-story mode, the blocker may need a fresh/available Codex goal context because the old per-story Codex goal remains active/incomplete.
+   This marks the current story `review_blocked`, appends a pending blocker-resolution story, keeps the Codex goal active, and lets `omx ultragoal complete-goals` start the blocker next. In legacy per-story mode, the blocker may need an available Codex goal context because the old per-story Codex goal remains active/incomplete.
 
 6. If review is clean, call `update_goal({status: "complete"})`, call `get_goal`, and checkpoint with a structured final gate:
 
@@ -123,7 +123,7 @@ The final ultragoal story is not complete until the active agent has run the fin
 
 - The shell command cannot directly invoke Codex interactive `/goal`; it emits a model-facing handoff for the active Codex agent.
 - Ultragoal intentionally does not invoke `/goal clear` or hidden `thread/goal/clear`; the model-facing tool surface only provides `get_goal`, `create_goal`, and `update_goal`.
-- After a completed aggregate ultragoal run, clear the Codex goal manually with `/goal clear` or open a fresh Codex thread before starting another ultragoal run in the same session/thread.
+- After a completed aggregate ultragoal run, clear the Codex goal manually with `/goal clear` before starting another ultragoal run in the same session/thread.
 - Never call `create_goal` when `get_goal` reports a different active goal.
 - Never call `update_goal` unless the aggregate run or legacy per-story goal is actually complete.
 - In aggregate mode, intermediate story checkpoints require a matching `active` Codex snapshot; final story completion requires a matching `complete` snapshot after `update_goal`.

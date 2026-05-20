@@ -387,7 +387,7 @@ function buildCompletedLegacyGoalRemediation(goal: UltragoalItem): string {
   return [
     'If get_goal returns a different completed legacy/thread objective, do not repeat --status complete in this thread.',
     `Record a non-terminal blocker with: omx ultragoal checkpoint --goal-id ${goal.id} --status blocked --evidence "<completed legacy Codex goal blocks create_goal in this thread>" --codex-goal-json "<different completed get_goal JSON or path>".`,
-    'Then continue this ultragoal in a fresh Codex thread in the same repo/worktree and create the intended goal there.',
+    'Then continue only from a Codex goal context with no active/completed conflicting goal, in the same repo/worktree, and create the intended goal there.',
   ].join(' ');
 }
 
@@ -1256,7 +1256,7 @@ export async function recordFinalReviewBlockers(cwd: string, options: RecordFina
     codexGoal: options.codexGoal,
     message: aggregateMode
       ? 'Final aggregate code-review was not clean; blocker story was appended while Codex goal remains active.'
-      : 'Final per-story code-review was not clean; blocker story was appended and may require a fresh/available Codex goal context.',
+      : 'Final per-story code-review was not clean; blocker story was appended and may require an available Codex goal context.',
   });
   await appendLedger(cwd, {
     ts: now,
@@ -1297,8 +1297,8 @@ function buildPerStoryCodexGoalInstruction(goal: UltragoalItem, plan: UltragoalP
     'Codex goal integration constraints:',
     '- First call get_goal. If no active goal exists, call create_goal with the payload below.',
     '- If a different active Codex goal exists, finish/checkpoint that goal before starting this ultragoal.',
-    '- Ultragoal cannot call /goal clear from the model/shell tool surface. For another per-story goal in the same session/thread after a completed Codex goal, manually run /goal clear in the Codex UI or continue in a fresh Codex thread.',
-    '- If get_goal returns a different completed legacy/thread goal and create_goal rejects because this thread already has a completed goal, continue this ultragoal in a fresh Codex thread (same repo/worktree) and create the payload there.',
+    '- Ultragoal cannot call /goal clear from the model/shell tool surface. For another per-story goal in the same session/thread after a completed Codex goal, manually run /goal clear in the Codex UI before creating the next goal.',
+    '- If get_goal returns a different completed legacy/thread goal and create_goal rejects because this thread already has a completed goal, continue only from a Codex goal context with no active/completed conflicting goal in the same repo/worktree and create the payload there.',
     `- To preserve the durable ledger before switching threads, record the non-terminal blocker without failing this goal: omx ultragoal checkpoint --goal-id ${goal.id} --status blocked --evidence "<completed legacy Codex goal blocks create_goal in this thread>" --codex-goal-json "<get_goal JSON or path>"`,
     '- Work only this goal until its completion audit passes.',
     finalStory
@@ -1311,7 +1311,7 @@ function buildPerStoryCodexGoalInstruction(goal: UltragoalItem, plan: UltragoalP
       ? `  omx ultragoal record-review-blockers --goal-id ${goal.id} --title "Resolve final code-review blockers" --objective "<blocker-resolution objective>" --evidence "<review findings>" --codex-goal-json "<active get_goal JSON or path>"`
       : `  omx ultragoal checkpoint --goal-id ${goal.id} --status complete --evidence "<tests/files/PR evidence>" --codex-goal-json "<fresh get_goal JSON or path>"`,
     finalStory
-      ? '- In legacy per-story mode, the blocker story may require a fresh/available Codex goal context because this story remains an active incomplete Codex goal; do not claim it is complete.'
+      ? '- In legacy per-story mode, the blocker story may require an available Codex goal context because this story remains an active incomplete Codex goal; do not claim it is complete.'
       : null,
     finalStory
       ? '- If final $code-review is clean (APPROVE + CLEAR), call update_goal({status: "complete"}), call get_goal again, then checkpoint with --quality-gate-json:'
@@ -1345,7 +1345,7 @@ function buildAggregateCodexGoalInstruction(goal: UltragoalItem, plan: Ultragoal
     '- First call get_goal. If no active goal exists, call create_goal with the aggregate payload below.',
     '- If get_goal reports the same aggregate objective as active, continue this OMX story without creating a new Codex goal.',
     '- If a different active or incomplete Codex goal exists, finish/checkpoint that goal before starting this ultragoal; do not replace hidden Codex state from the shell.',
-    '- Ultragoal does not call /goal clear. After a completed aggregate run, manually run /goal clear in the Codex UI or start a fresh Codex thread before starting another ultragoal run in the same session/thread.',
+    '- Ultragoal does not call /goal clear. After a completed aggregate run, manually run /goal clear in the Codex UI before starting another ultragoal run in the same session/thread.',
     finalStory
       ? '- This is the final pending story: run the mandatory final ai-slop-cleaner pass, rerun verification, and run $code-review before any update_goal call.'
       : '- This is not the final story: do not call update_goal yet; the aggregate Codex goal must remain active while later OMX stories remain.',
