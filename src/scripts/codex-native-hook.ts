@@ -2077,8 +2077,8 @@ async function findActiveGoalWorkflowReconciliationRequirement(cwd: string): Pro
         workflow: "autoresearch-goal",
         command: `omx autoresearch-goal complete --slug ${safeString(mission.slug) || entry.name} --codex-goal-json '<get_goal JSON or path>'`,
         remediation: [
-          "If that command fails with a Codex goal objective mismatch after a fresh get_goal snapshot, do not repeat the same complete command blindly in this thread.",
-          "Either retry with a correct fresh snapshot or record an explicit blocked verdict for this autoresearch-goal and continue it from a fresh Codex thread.",
+          "If that command fails with a Codex goal objective mismatch after a refreshed get_goal snapshot, do not repeat the same complete command blindly in this thread.",
+          "Either retry with a correct refreshed snapshot or record an explicit blocked verdict for this autoresearch-goal and continue from the explicit blocker path.",
         ].join(" "),
       };
     }
