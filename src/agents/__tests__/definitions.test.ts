@@ -49,10 +49,20 @@ describe('agents/definitions', () => {
     }
   });
 
-  it('does not define Prometheus Strict prompt-backed native agents', () => {
-    assert.equal(AGENT_DEFINITIONS['prometheus-strict-metis'], undefined);
-    assert.equal(AGENT_DEFINITIONS['prometheus-strict-momus'], undefined);
-    assert.equal(AGENT_DEFINITIONS['prometheus-strict-oracle'], undefined);
+  it('defines the Prometheus Strict clean-room planner panel agents', () => {
+    const panel = [
+      AGENT_DEFINITIONS['prometheus-strict-metis'],
+      AGENT_DEFINITIONS['prometheus-strict-momus'],
+      AGENT_DEFINITIONS['prometheus-strict-oracle'],
+    ];
+
+    assert.deepEqual(panel.map((agent) => agent.name), [
+      'prometheus-strict-metis',
+      'prometheus-strict-momus',
+      'prometheus-strict-oracle',
+    ]);
+    assert.ok(panel.every((agent) => agent.category === 'coordination'));
+    assert.ok(panel.every((agent) => agent.routingRole === 'leader'));
   });
 
   it('keeps the installable agent model split aligned with the OMX subagent matrix', () => {
