@@ -62,6 +62,7 @@ describe("generateOverlay", () => {
     assert.ok(overlay.includes("<!-- OMX:RUNTIME:END -->"));
     assert.ok(overlay.includes("test-session-1"));
     assert.ok(overlay.includes("Compaction Protocol"));
+    assert.ok(overlay.includes("preflight-context.json"));
   });
 
   it("injects mandatory native subagent agent_type routing guidance", async () => {

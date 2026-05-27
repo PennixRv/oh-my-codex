@@ -326,7 +326,8 @@ function getCompactionInstructions(): string {
     "Before context compaction, preserve critical state:",
     "1. Write progress checkpoint via `omx state write --input '<json>' --json`",
     "2. Save key decisions via `omx notepad write-working --input '<json>' --json`",
-    "3. If context is >80% full, proactively checkpoint state",
+    "3. Before large Team work near compaction, reload `.omx/state/team/<team>/preflight-context.json`",
+    "4. If context is >80% full, proactively checkpoint state",
   ].join("\n");
 }
 

@@ -146,6 +146,7 @@ import {
   readPersistedTeamUltragoalContext,
   renderLeaderOwnedUltragoalContextSection,
   resolveLeaderOwnedUltragoalContext,
+  resolveLeaderOwnedUltragoalContextOutcome,
   writePersistedTeamUltragoalContext,
 } from './ultragoal-context.js';
 import {
@@ -1384,6 +1385,81 @@ function resolveEffectiveTeamWorktreeMode(
   return { enabled: false };
 }
 
+function isExplicitUltragoalLinkedTeam(task: string, approvedExecution: unknown, selectedApprovedExecutionHint: unknown): boolean {
+  const approvedHaystack = [
+    JSON.stringify(approvedExecution ?? {}),
+    JSON.stringify(selectedApprovedExecutionHint ?? {}),
+  ].join('\n');
+  if (/(?:ultragoal|\.omx\/ultragoal)/i.test(approvedHaystack)) return true;
+  return /(?:\.omx\/ultragoal|ultragoal\s+(?:goal|plan|checkpoint)|goal\s+G\d{3}|\bG\d{3}[-\w]*\b)/i.test(task);
+}
+
+async function writeTeamPreflightContextPacket(params: {
+  teamName: string;
+  displayName: string;
+  teamStateRoot: string;
+  leaderCwd: string;
+  task: string;
+  workerCount: number;
+  workerBootstrapPlans: Array<{
+    workerName: string;
+    workerRole: string;
+    workerTasks: TeamTask[];
+  }>;
+  approvedExecution: ApprovedTeamExecutionBinding | null;
+  ultragoalOutcome: {
+    status: string;
+    context?: { activeGoalId?: string; activeGoalTitle?: string } | null;
+    warning?: { message?: string } | null;
+  };
+}): Promise<string> {
+  const packetPath = join(params.teamStateRoot, 'team', params.teamName, 'preflight-context.json');
+  const packet = {
+    schema_version: 1,
+    created_at: new Date().toISOString(),
+    team_id: params.teamName,
+    display_name: params.displayName,
+    leader_cwd: params.leaderCwd,
+    task: params.task,
+    worker_count: params.workerCount,
+    worker_allocation: params.workerBootstrapPlans.map((plan) => ({
+      worker: plan.workerName,
+      role: plan.workerRole,
+      task_ids: plan.workerTasks.map((task) => task.id),
+      task_subjects: plan.workerTasks.map((task) => task.subject),
+    })),
+    approved_execution: params.approvedExecution
+      ? {
+        prd_path: params.approvedExecution.prd_path,
+        task: params.approvedExecution.task,
+      }
+      : null,
+    ultragoal: {
+      status: params.ultragoalOutcome.status,
+      active_goal_id: params.ultragoalOutcome.context?.activeGoalId ?? null,
+      active_goal_title: params.ultragoalOutcome.context?.activeGoalTitle ?? null,
+      warning: params.ultragoalOutcome.warning?.message ?? null,
+    },
+    verification_checklist: [
+      'collect worker evidence before leader checkpoint',
+      'run targeted verification for changed files',
+      'leader performs any Ultragoal checkpoint from fresh get_goal evidence',
+    ],
+    prohibitions: [
+      'workers_must_not_mutate_ultragoal',
+      'workers_must_not_checkpoint_ultragoal',
+    ],
+    resume_instructions: [
+      `After compaction, reload ${packetPath}`,
+      'Verify the active Ultragoal goal still matches this packet before checkpointing.',
+      'Resume Team monitoring with omx team status before dispatching follow-up work.',
+    ],
+  };
+  await mkdir(dirname(packetPath), { recursive: true });
+  await writeFile(packetPath, `${JSON.stringify(packet, null, 2)}\n`, 'utf-8');
+  return packetPath;
+}
+
 const MODEL_INSTRUCTIONS_FILE_ENV = 'OMX_MODEL_INSTRUCTIONS_FILE';
 const TEAM_STATE_ROOT_ENV = 'OMX_TEAM_STATE_ROOT';
 const TEAM_LEADER_CWD_ENV = 'OMX_TEAM_LEADER_CWD';
@@ -2377,7 +2453,21 @@ export async function startTeam(
   const approvedExecution = selectedApprovedExecutionHint
     ? buildApprovedTeamExecutionBinding(selectedApprovedExecutionHint)
     : null;
-  const ultragoalContext = await resolveLeaderOwnedUltragoalContext(leaderCwd);
+  const explicitUltragoalLinkedTeam = isExplicitUltragoalLinkedTeam(
+    task,
+    requestedApprovedExecution ?? approvedExecution,
+    selectedApprovedExecutionHint,
+  );
+  const strictUltragoalContext = explicitUltragoalLinkedTeam
+    ? await resolveLeaderOwnedUltragoalContext(leaderCwd)
+    : undefined;
+  const ultragoalOutcome = explicitUltragoalLinkedTeam
+    ? {
+      status: strictUltragoalContext ? 'valid' as const : 'missing' as const,
+      context: strictUltragoalContext ?? null,
+    }
+    : await resolveLeaderOwnedUltragoalContextOutcome(leaderCwd);
+  const ultragoalContext = ultragoalOutcome.status === 'valid' ? ultragoalOutcome.context : null;
   const approvedContextSection = joinContextSections(
     buildApprovedTeamHandoffSection(selectedApprovedExecutionHint),
     renderLeaderOwnedUltragoalContextSection(ultragoalContext),
@@ -2743,6 +2833,17 @@ export async function startTeam(
     };
 
     // 6. Create worker runtime (interactive tmux panes or prompt-mode child processes)
+    await writeTeamPreflightContextPacket({
+      teamName: sanitized,
+      displayName,
+      teamStateRoot,
+      leaderCwd,
+      task,
+      workerCount,
+      workerBootstrapPlans,
+      approvedExecution,
+      ultragoalOutcome,
+    });
     await cleanupTeamWorkerLaunchOrphanedMcpProcesses({
       cleanup: options.cleanupLaunchOrphanedMcpProcesses,
       writeWarning: options.writeCleanupWarning,

@@ -27,8 +27,10 @@ import { composeRoleInstructionsForRole } from "../../agents/native-config.js";
 import { buildTeamWorkerGoalInstruction } from "../goal-workflow.js";
 import {
   normalizeUltragoalTeamContext,
+  reconcilePersistedTeamUltragoalContext,
   renderLeaderOwnedUltragoalContextSection,
   resolveLeaderOwnedUltragoalContext,
+  resolveLeaderOwnedUltragoalContextOutcome,
 } from "../ultragoal-context.js";
 import type { TeamTask } from "../state.js";
 
@@ -460,6 +462,66 @@ describe("worker bootstrap", () => {
         () => resolveLeaderOwnedUltragoalContext(wd),
         /invalid_ultragoal_team_context:malformed_goals_json/,
       );
+    } finally {
+      await rm(wd, { recursive: true, force: true });
+    }
+  });
+
+  it("resolves invalid Ultragoal artifacts as optional warnings for unrelated Team startup", async () => {
+    const wd = await mkdtemp(join(tmpdir(), "omx-team-ultragoal-optional-"));
+    try {
+      await mkdir(join(wd, ".omx", "ultragoal"), { recursive: true });
+      await writeFile(join(wd, ".omx", "ultragoal", "goals.json"), "{bad json\n");
+
+      const outcome = await resolveLeaderOwnedUltragoalContextOutcome(wd);
+
+      assert.equal(outcome.status, "malformed");
+      assert.equal(outcome.context, null);
+      assert.match(outcome.warning?.message ?? "", /malformed_goals_json/);
+    } finally {
+      await rm(wd, { recursive: true, force: true });
+    }
+  });
+
+  it("reconciles persisted Ultragoal context against current active goals", async () => {
+    const wd = await mkdtemp(join(tmpdir(), "omx-team-ultragoal-reconcile-"));
+    try {
+      await mkdir(join(wd, ".omx", "ultragoal"), { recursive: true });
+      await writeFile(
+        join(wd, ".omx", "ultragoal", "goals.json"),
+        `${JSON.stringify({
+          version: 1,
+          activeGoalId: "G002-current",
+          codexGoalMode: "aggregate",
+          goals: [{
+            id: "G002-current",
+            title: "Current story",
+            status: "in_progress",
+          }],
+        })}\n`,
+      );
+
+      const stale = await reconcilePersistedTeamUltragoalContext(wd, {
+        kind: "leader_owned_ultragoal_context",
+        goalsPath: ".omx/ultragoal/goals.json",
+        ledgerPath: ".omx/ultragoal/ledger.jsonl",
+        activeGoalId: "G001-old",
+        codexGoalMode: "aggregate",
+        checkpointPolicy: "fresh_leader_get_goal_required",
+      });
+      assert.equal(stale.status, "mismatched");
+      assert.equal(stale.context, null);
+
+      const valid = await reconcilePersistedTeamUltragoalContext(wd, {
+        kind: "leader_owned_ultragoal_context",
+        goalsPath: ".omx/ultragoal/goals.json",
+        ledgerPath: ".omx/ultragoal/ledger.jsonl",
+        activeGoalId: "G002-current",
+        codexGoalMode: "aggregate",
+        checkpointPolicy: "fresh_leader_get_goal_required",
+      });
+      assert.equal(valid.status, "valid");
+      assert.equal(valid.context?.activeGoalId, "G002-current");
     } finally {
       await rm(wd, { recursive: true, force: true });
     }

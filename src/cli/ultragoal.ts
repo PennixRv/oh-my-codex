@@ -288,6 +288,36 @@ function printSteerResult(proposal: UltragoalSteeringProposal, result: CliSteerR
   printStatus(result.plan);
 }
 
+const ULTRAGOAL_MUTATING_COMMANDS = new Set([
+  'create',
+  'create-goals',
+  'add-goal',
+  'steer',
+  'record-review-blockers',
+  'complete',
+  'complete-goals',
+  'next',
+  'start-next',
+  'checkpoint',
+]);
+
+function readTeamWorkerIdentity(env: NodeJS.ProcessEnv = process.env): string | null {
+  const publicIdentity = typeof env.OMX_TEAM_WORKER === 'string' ? env.OMX_TEAM_WORKER.trim() : '';
+  if (publicIdentity) return publicIdentity;
+  const internalIdentity = typeof env.OMX_TEAM_INTERNAL_WORKER === 'string' ? env.OMX_TEAM_INTERNAL_WORKER.trim() : '';
+  return internalIdentity || null;
+}
+
+function assertUltragoalMutationAllowedFromCurrentProcess(command: string): void {
+  if (!ULTRAGOAL_MUTATING_COMMANDS.has(command)) return;
+  const workerIdentity = readTeamWorkerIdentity();
+  if (!workerIdentity) return;
+  throw new UltragoalError(
+    `Refusing mutating ultragoal command "${command}" from Team worker ${workerIdentity}. `
+    + 'Ultragoal state is leader-owned; workers must report checkpoint evidence upward instead of mutating .omx/ultragoal.',
+  );
+}
+
 export async function ultragoalCommand(args: string[]): Promise<void> {
   const command = args[0] ?? 'help';
   const rest = args.slice(1);
@@ -299,6 +329,8 @@ export async function ultragoalCommand(args: string[]): Promise<void> {
       console.log(ULTRAGOAL_HELP);
       return;
     }
+
+    assertUltragoalMutationAllowedFromCurrentProcess(command);
 
     if (command === 'create' || command === 'create-goals') {
       const briefFile = readValue(rest, '--brief-file');

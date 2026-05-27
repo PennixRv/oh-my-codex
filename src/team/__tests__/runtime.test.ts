@@ -6677,6 +6677,22 @@ esac
         existsSync(join(teamStateRoot, 'team', runtime.teamName, 'ultragoal-context.json')),
         false,
       );
+      const preflight = JSON.parse(await readFile(
+        join(teamStateRoot, 'team', runtime.teamName, 'preflight-context.json'),
+        'utf-8',
+      )) as {
+        schema_version: number;
+        task: string;
+        ultragoal: { status: string; active_goal_id: string | null };
+        prohibitions: string[];
+        resume_instructions: string[];
+      };
+      assert.equal(preflight.schema_version, 1);
+      assert.match(preflight.task, /completed Ultragoal artifacts/);
+      assert.equal(preflight.ultragoal.status, 'missing');
+      assert.equal(preflight.ultragoal.active_goal_id, null);
+      assert.ok(preflight.prohibitions.includes('workers_must_not_mutate_ultragoal'));
+      assert.ok(preflight.resume_instructions.some((line) => /preflight-context\.json/.test(line)));
       const inbox = await readFile(
         join(teamStateRoot, 'team', runtime.teamName, 'workers', 'worker-1', 'inbox.md'),
         'utf-8',
@@ -6687,6 +6703,87 @@ esac
       if (runtime) {
         await shutdownTeam(runtime.teamName, cwd, { force: true }).catch(() => {});
       }
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+
+  it('startTeam tolerates malformed Ultragoal artifacts for unrelated Team startup', async () => {
+    const cwd = await mkdtemp(join(tmpdir(), 'omx-runtime-ultragoal-malformed-optional-'));
+    const binDir = join(cwd, 'bin');
+    const fakeCodexPath = join(binDir, 'codex');
+    await mkdir(binDir, { recursive: true });
+    await mkdir(join(cwd, '.omx', 'ultragoal'), { recursive: true });
+    await writeFile(join(cwd, '.omx', 'ultragoal', 'goals.json'), '{not-json');
+    await writeFakePromptWorkerBinary(
+      fakeCodexPath,
+      `setTimeout(() => {}, 5000);`,
+    );
+
+    let runtime: TeamRuntime | null = null;
+    try {
+      runtime = await withPromptModeCodexEnv(binDir, {}, () =>
+        withoutTeamWorkerEnv(() =>
+          startTeam(
+            'team-ultragoal-malformed-optional',
+            'malformed Ultragoal artifacts must not block unrelated team startup',
+            'executor',
+            1,
+            [{ subject: 's', description: 'd', owner: 'worker-1' }],
+            cwd,
+          ),
+        ),
+      );
+
+      const teamStateRoot = runtime.config.team_state_root ?? join(cwd, '.omx', 'state');
+      const preflight = JSON.parse(await readFile(
+        join(teamStateRoot, 'team', runtime.teamName, 'preflight-context.json'),
+        'utf-8',
+      )) as { ultragoal: { status: string; warning: string | null } };
+      assert.equal(preflight.ultragoal.status, 'malformed');
+      assert.match(preflight.ultragoal.warning ?? '', /malformed_goals_json/);
+      const inbox = await readFile(
+        join(teamStateRoot, 'team', runtime.teamName, 'workers', 'worker-1', 'inbox.md'),
+        'utf-8',
+      );
+      assert.doesNotMatch(inbox, /Leader-owned Ultragoal context/);
+    } finally {
+      if (runtime) {
+        await shutdownTeam(runtime.teamName, cwd, { force: true }).catch(() => {});
+      }
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+
+  it('startTeam fails closed for malformed artifacts when explicitly linked to an Ultragoal goal', async () => {
+    const cwd = await mkdtemp(join(tmpdir(), 'omx-runtime-ultragoal-malformed-strict-'));
+    const binDir = join(cwd, 'bin');
+    const fakeCodexPath = join(binDir, 'codex');
+    await mkdir(binDir, { recursive: true });
+    await mkdir(join(cwd, '.omx', 'ultragoal'), { recursive: true });
+    await writeFile(join(cwd, '.omx', 'ultragoal', 'goals.json'), '{not-json');
+    await writeFakePromptWorkerBinary(
+      fakeCodexPath,
+      `setTimeout(() => {}, 5000);`,
+    );
+
+    try {
+      await assert.rejects(
+        () => withPromptModeCodexEnv(binDir, {}, () =>
+          withoutTeamWorkerEnv(() =>
+            startTeam(
+              'team-ultragoal-malformed-strict',
+              'Execute Ultragoal goal G001-malformed-story with Team',
+              'executor',
+              1,
+              [{ subject: 's', description: 'd', owner: 'worker-1' }],
+              cwd,
+            ),
+          ),
+        ),
+        /invalid_ultragoal_team_context:malformed_goals_json/,
+      );
+      assert.equal(existsSync(join(cwd, '.omx', 'state', 'team', 'team-ultragoal-malformed-strict')), false);
+    } finally {
       await rm(cwd, { recursive: true, force: true });
     }
   });

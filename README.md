@@ -285,6 +285,10 @@ These are useful, but they are not the main onboarding path.
 
 Use the team runtime when you specifically need durable tmux/worktree coordination, not as the default way to begin using OMX. In Codex App or plain outside-tmux sessions, treat `omx team` as a tmux-runtime shell surface rather than a directly available in-app workflow; launch OMX CLI from shell first if you actually want team execution.
 
+When Team runs inside an Ultragoal story, Ultragoal remains leader-owned state: workers report checkpoint-ready evidence upward instead of mutating `.omx/ultragoal` directly. Team startup tolerates stale or malformed Ultragoal artifacts for unrelated work, but explicitly Ultragoal-linked Team launches stay fail-closed. Team startup also writes `.omx/state/team/<team-name>/preflight-context.json` so large Team runs can be resumed after compaction with the original task, worker split, Ultragoal context, and verification checklist.
+
+For very small atomic work, Team may cap implicit fanout to one worker and print an over-orchestration warning; pass an explicit worker count only when the extra coordination cost is intentional.
+
 ```bash
 omx team 3:executor "fix the failing tests with verification"
 omx team status <team-name>

@@ -2908,6 +2908,20 @@ describe('teamCommand status', () => {
       await writeFile(testSpecPath, '# Ultragoal JSON status test spec\n');
       const hint = readApprovedExecutionLaunchHint(wd, 'team', { prdPath, task });
       assert.ok(hint);
+      await mkdir(join(wd, '.omx', 'ultragoal'), { recursive: true });
+      await writeFile(
+        join(wd, '.omx', 'ultragoal', 'goals.json'),
+        `${JSON.stringify({
+          version: 1,
+          activeGoalId: 'G001-team-runtime-bridge',
+          codexGoalMode: 'aggregate',
+          goals: [{
+            id: 'G001-team-runtime-bridge',
+            title: 'Team runtime bridge',
+            status: 'in_progress',
+          }],
+        })}\n`,
+      );
       await writePersistedApprovedTeamExecutionBinding(
         'ultragoal-json-team',
         wd,
@@ -3012,6 +3026,20 @@ describe('teamCommand status', () => {
       await writeFile(testSpecPath, '# Ultragoal text status test spec\n');
       const hint = readApprovedExecutionLaunchHint(wd, 'team', { prdPath, task });
       assert.ok(hint);
+      await mkdir(join(wd, '.omx', 'ultragoal'), { recursive: true });
+      await writeFile(
+        join(wd, '.omx', 'ultragoal', 'goals.json'),
+        `${JSON.stringify({
+          version: 1,
+          activeGoalId: 'G001-team-runtime-bridge',
+          codexGoalMode: 'aggregate',
+          goals: [{
+            id: 'G001-team-runtime-bridge',
+            title: 'Team runtime bridge',
+            status: 'in_progress',
+          }],
+        })}\n`,
+      );
       await writePersistedApprovedTeamExecutionBinding(
         'ultragoal-text-team',
         wd,
