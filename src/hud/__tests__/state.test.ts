@@ -551,7 +551,7 @@ describe('additional HUD mode state readers', () => {
     });
   });
 
-  it('prefers OMX_SESSION_ID over stale session.json for hud notify state', async () => {
+  it('does not use OMX_SESSION_ID as hud notify current session when session metadata is stale', async () => {
     await withTempRepo('omx-hud-notify-env-session-', async (cwd) => {
       const rootStateDir = join(cwd, '.omx', 'state');
       const activeSessionId = 'sess-active';
@@ -572,7 +572,7 @@ describe('additional HUD mode state readers', () => {
       process.env.OMX_SESSION_ID = activeSessionId;
       try {
         const state = await readHudNotifyState(cwd);
-        assert.deepEqual(state, { last_turn_at: 'active', turn_count: 5 });
+        assert.deepEqual(state, { last_turn_at: 'root', turn_count: 99 });
       } finally {
         if (typeof previousSessionId === 'string') process.env.OMX_SESSION_ID = previousSessionId;
         else delete process.env.OMX_SESSION_ID;
@@ -1035,7 +1035,7 @@ describe('readAllState canonical skill precedence', () => {
     });
   });
 
-  it('binds canonical HUD state to OMX_SESSION_ID instead of stale session.json/root fallback', async () => {
+  it('does not bind canonical HUD state to OMX_SESSION_ID when session metadata is stale', async () => {
     await withTempRepo('omx-hud-canonical-env-session-', async (cwd) => {
       const rootStateDir = join(cwd, '.omx', 'state');
       const activeSessionId = 'sess-active';
@@ -1070,11 +1070,7 @@ describe('readAllState canonical skill precedence', () => {
         const state = await readAllState(cwd);
         assert.equal(state.session, null);
         assert.equal(state.ralph, null);
-        assert.deepEqual(state.team, {
-          active: true,
-          team_name: 'env-authority',
-          current_phase: 'running',
-        });
+        assert.equal(state.team, null);
         assert.equal(state.hudNotify, null);
       } finally {
         if (typeof previousSessionId === 'string') process.env.OMX_SESSION_ID = previousSessionId;
