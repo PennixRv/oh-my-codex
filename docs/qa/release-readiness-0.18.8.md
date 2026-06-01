@@ -131,3 +131,15 @@ All commands were run on `release/0.18.8` with `USE_OMX_EXPLORE_CMD` unset where
 ## Current readiness verdict
 
 Release prep local/e2e/live gates are complete for PR handoff. Publication remains blocked until PR/CI promotion, local tag validation, release workflow, GitHub release, npm, and final dev sync proof are recorded.
+
+## Post-publish evidence update (2026-06-01)
+
+- PR #2688 (`release/0.18.8` -> `dev`) merged at `a5cf84243f509c4b29db59dd62d7cda6f3a2fc37` after PR CI run `26740371920` completed successfully with `CI Status` passing.
+- `main` was directly fast-forwarded to `a5cf84243f509c4b29db59dd62d7cda6f3a2fc37` for release promotion, bypassing the PR-only branch rule under maintainer release authority.
+- Local release body generation passed before tag push: `node dist/scripts/generate-release-body.js --template RELEASE_BODY.md --out /tmp/RELEASE_BODY-0.18.8.generated.md --current-tag v0.18.8 --previous-tag v0.18.7 --repo Yeachan-Heo/oh-my-codex`.
+- Annotated tag `v0.18.8` was pushed and points to `a5cf84243f509c4b29db59dd62d7cda6f3a2fc37`.
+- Release workflow run `26742594280` built and uploaded native assets, smoke-verified native assets, and passed packed global install smoke. The workflow failed only at `npm publish --provenance` because `fulcio.sigstore.dev` repeatedly reset TLS connections while npm created the Sigstore signing certificate (`CA_CREATE_SIGNING_CERTIFICATE_ERROR`, `ECONNRESET`).
+- Temporary fallback workflow run `26744847619` checked out `v0.18.8`, verified package version `0.18.8`, and published to npm with `npm publish --access public --provenance=false` using the repository `NPM_TOKEN`. This fallback was required because Fulcio was unreachable from the self-hosted runner and local curl checks also returned TLS connection resets.
+- npm proof after fallback: `npm view oh-my-codex version dist-tags --json` returned `{"version":"0.18.8","dist-tags":{"latest":"0.18.8"}}`.
+- GitHub release proof: `gh release view v0.18.8` returned `isDraft=false`, `isPrerelease=false`, and uploaded native release assets including `native-release-manifest.json`.
+- A temporary fallback workflow was added after the release tag only to complete npm publication during the Fulcio outage; it was removed immediately after publish proof. The intended shipped source remains the `v0.18.8` tag, while `main`/`dev` may contain this docs-only evidence update after cleanup.
