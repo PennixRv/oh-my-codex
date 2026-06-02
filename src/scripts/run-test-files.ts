@@ -185,14 +185,15 @@ function runWithCompletionForceExit(): void {
       clearTimeout(completionTimer);
       completionTimer = undefined;
     }
+    armCompletionTimer('force-exit failure grace elapsed after TAP failure', 1);
   }
 
-  function armCompletionTimer(reason: string): void {
-    if (sawFailure) return;
+  function armCompletionTimer(reason: string, exitCode = 0): void {
+    if (sawFailure && exitCode === 0) return;
     if (completionTimer) clearTimeout(completionTimer);
     completionTimer = setTimeout(() => {
-      if (sawFailure) return;
-      finish(0, reason);
+      if (sawFailure && exitCode === 0) return;
+      finish(exitCode, reason);
     }, forceExitGraceMs);
   }
 
@@ -222,7 +223,12 @@ function runWithCompletionForceExit(): void {
     if (ok) {
       lastTapOk = Number(ok[1]);
       if (lastTapOk >= files.length) {
-        armCompletionTimer(`force-exit completion grace elapsed after TAP ok ${lastTapOk} with no later failures`);
+        armCompletionTimer(
+          sawFailure
+            ? `force-exit failure grace elapsed after TAP ok ${lastTapOk} with earlier failures`
+            : `force-exit completion grace elapsed after TAP ok ${lastTapOk} with no later failures`,
+          sawFailure ? 1 : 0,
+        );
       }
       return;
     }
@@ -232,10 +238,19 @@ function runWithCompletionForceExit(): void {
       armCompletionTimer(`force-exit completion grace elapsed after TAP plan ${line}`);
       return;
     }
+    if (plan && Number(plan[1]) === lastTapOk && sawFailure) {
+      armCompletionTimer(`force-exit failure grace elapsed after TAP plan ${line} with earlier failures`, 1);
+      return;
+    }
 
     if (/^# duration_ms /.test(line) && sawCleanTapSummary()) {
       completedFromSummary = true;
       armCompletionTimer('force-exit completion grace elapsed after clean TAP summary');
+      return;
+    }
+
+    if (/^# duration_ms /.test(line) && sawFailure) {
+      armCompletionTimer('force-exit failure grace elapsed after TAP duration with earlier failures', 1);
     }
   }
 

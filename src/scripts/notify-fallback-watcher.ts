@@ -1383,6 +1383,10 @@ async function runFallbackAutoNudgeTick(): Promise<void> {
   const now = Date.now();
   const nowIso = new Date(now).toISOString();
   const hudState = await readScopedJsonIfExists(stateDir, 'hud-state.json', undefined, null, {}, cwd);
+  const session = await readSessionState(cwd);
+  const currentSessionId = session && isSessionStateAuthoritativeForCwd(session, cwd) && !isSessionStale(session)
+    ? normalizeValidSessionId(session.session_id)
+    : '';
 
   lastFallbackAutoNudge = {
     ...lastFallbackAutoNudge,
@@ -1422,12 +1426,13 @@ async function runFallbackAutoNudgeTick(): Promise<void> {
   const signature = await resolveAutoNudgeSignature(stateDir, {
     type: 'agent-turn-complete',
     cwd,
+    ...(currentSessionId ? { session_id: currentSessionId } : {}),
     source: 'notify-fallback-watcher-stall',
     'thread-id': 'notify-fallback-watcher-stall',
     'turn-id': `stalled-turn-${turnCount}`,
     'input-messages': ['[notify-fallback] synthesized from stalled hud-state'],
     'last-assistant-message': lastMessage,
-  }, lastMessage, { sessionId: '', cwd });
+  }, lastMessage, { sessionId: currentSessionId, cwd });
   const persistedAutoNudgeState = await readAutoNudgeState();
   const autoNudgeConfig = await loadAutoNudgeConfig();
   const semanticSignature = normalizeAutoNudgeSignatureText(lastMessage);
@@ -1457,6 +1462,7 @@ async function runFallbackAutoNudgeTick(): Promise<void> {
     payload: {
       type: 'agent-turn-complete',
       cwd,
+      ...(currentSessionId ? { session_id: currentSessionId } : {}),
       source: 'notify-fallback-watcher-stall',
       'thread-id': 'notify-fallback-watcher-stall',
       'turn-id': `stalled-turn-${turnCount}`,

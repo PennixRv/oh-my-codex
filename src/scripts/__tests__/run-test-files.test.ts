@@ -11,6 +11,11 @@ function runCompiledRunner(root: string, envOverrides: Record<string, string> = 
     encoding: 'utf-8',
     env: {
       ...process.env,
+      OMX_NODE_TEST_FORCE_EXIT: '',
+      OMX_NODE_TEST_FORCE_EXIT_GRACE_MS: '',
+      OMX_NODE_TEST_RUNNER_TIMEOUT_MS: '',
+      OMX_NODE_TEST_TIMEOUT_MS: '',
+      OMX_NODE_TEST_CONCURRENCY: '',
       ...envOverrides,
     },
     timeout: timeoutMs,
@@ -57,7 +62,7 @@ describe('run-test-files diagnostics', () => {
         join(testsDir, 'leaky-pass.test.js'),
         [
           "import { test } from 'node:test';",
-          "test('passes but leaves an interval', () => { setInterval(() => {}, 1_000); });",
+          "test('passes but blocks process exit', () => { process.on('exit', () => { while (true) {} }); });",
           '',
         ].join('\n'),
       );
@@ -69,7 +74,11 @@ describe('run-test-files diagnostics', () => {
 
       const withForceExit = runCompiledRunner(
         wd,
-        { OMX_NODE_TEST_RUNNER_TIMEOUT_MS: '750', OMX_NODE_TEST_FORCE_EXIT: '1' },
+        {
+          OMX_NODE_TEST_RUNNER_TIMEOUT_MS: '750',
+          OMX_NODE_TEST_FORCE_EXIT: '1',
+          OMX_NODE_TEST_FORCE_EXIT_GRACE_MS: '100',
+        },
         2_000,
       );
       assert.equal(withForceExit.status, 0, withForceExit.stderr || withForceExit.stdout);
@@ -176,6 +185,43 @@ describe('run-test-files diagnostics', () => {
 
       assert.notEqual(result.status, 0);
       assert.match(result.stdout, /not ok|# fail [1-9]/);
+    } finally {
+      rmSync(wd, { recursive: true, force: true });
+    }
+  });
+
+  it('force-exits a completed failing test child that blocks process exit', () => {
+    const wd = mkdtempSync(join(tmpdir(), 'omx-run-test-files-'));
+    try {
+      const testsDir = join(wd, '__tests__');
+      mkdirSync(testsDir, { recursive: true });
+      writeFileSync(
+        join(testsDir, 'leaky-fail.test.js'),
+        [
+          "import { test } from 'node:test';",
+          "import assert from 'node:assert/strict';",
+          "test('fails and blocks process exit', () => {",
+          "  process.on('exit', () => { while (true) {} });",
+          "  assert.equal(1, 2);",
+          "});",
+          '',
+        ].join('\n'),
+      );
+
+      const result = runCompiledRunner(
+        wd,
+        {
+          OMX_NODE_TEST_FORCE_EXIT: '1',
+          OMX_NODE_TEST_FORCE_EXIT_GRACE_MS: '100',
+          OMX_NODE_TEST_RUNNER_TIMEOUT_MS: '2000',
+        },
+        4_000,
+      );
+
+      assert.notEqual(result.status, 0);
+      assert.match(result.stdout, /not ok|# fail [1-9]/);
+      assert.match(result.stderr, /failure grace elapsed/);
+      assert.doesNotMatch(result.stderr, /runner timeout 2000ms elapsed/);
     } finally {
       rmSync(wd, { recursive: true, force: true });
     }
