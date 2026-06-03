@@ -530,8 +530,8 @@ describe('direct npm spawn fallback', () => {
             return okResult('1234567890abcdef\n');
           }
           if (command === 'npm' && args[0] === 'pack') {
-            writeFileSync(join(options?.cwd ?? process.cwd(), 'oh-my-codex-0.18.8.tgz'), 'packed');
-            return okResult(JSON.stringify([{ filename: 'oh-my-codex-0.18.8.tgz' }]));
+            writeFileSync(join(options?.cwd ?? process.cwd(), 'oh-my-codex-0.18.9.tgz'), 'packed');
+            return okResult(JSON.stringify([{ filename: 'oh-my-codex-0.18.9.tgz' }]));
           }
           return okResult();
         }) as unknown as typeof import('node:child_process').spawnSync,
@@ -545,7 +545,7 @@ describe('direct npm spawn fallback', () => {
         ['npm', 'install', '--global=false', '--location=project'],
         ['npm', 'run', 'prepack'],
         ['npm', 'pack', '--ignore-scripts', '--json'],
-        ['npm', 'install', '-g', join(calls[2].cwd ?? '', 'oh-my-codex-0.18.8.tgz')],
+        ['npm', 'install', '-g', join(calls[2].cwd ?? '', 'oh-my-codex-0.18.9.tgz')],
       ]);
       const dependencyInstall = calls.find((call) => call.command === 'npm' && call.args[0] === 'install' && call.args.includes('--include=dev'));
       assert.equal(dependencyInstall?.env?.npm_config_global, 'false');

@@ -874,9 +874,16 @@ esac
         '--json',
       ]);
 
-      setTimeout(() => {
-        process.stdin.emit('keypress', '', { name: 'enter' });
-      }, 25);
+      const waitForInlineFrame = async (pattern: RegExp, label: string) => {
+        for (let attempt = 0; attempt < 200; attempt += 1) {
+          if (pattern.test(stderrWrites.join(''))) return;
+          await new Promise((resolve) => setTimeout(resolve, 10));
+        }
+        throw new Error(`Timed out waiting for ${label}; stderr=${stderrWrites.join('')}`);
+      };
+
+      await waitForInlineFrame(/↑↓ move · Enter select/, 'single-question answering frame');
+      process.stdin.emit('keypress', '', { name: 'enter' });
 
       await runPromise;
       const joined = writes.join('');

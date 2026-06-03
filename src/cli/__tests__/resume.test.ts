@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { chmod, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, mkdtemp, realpath, rm, writeFile } from 'node:fs/promises';
 import { spawnSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
@@ -36,6 +36,7 @@ describe('omx resume', () => {
     try {
       const home = join(wd, 'home');
       const projectCodexHome = join(wd, '.codex');
+      const canonicalProjectCodexHome = join(await realpath(wd), '.codex');
       const fakeBin = join(wd, 'bin');
       const fakeCodexPath = join(fakeBin, 'codex');
       const fakePsPath = join(fakeBin, 'ps');
@@ -73,7 +74,7 @@ if [ -f "$CODEX_HOME/sessions/2026/06/03/rollout-session-2712.jsonl" ]; then ech
 
       assert.equal(result.status, 0, result.error || result.stderr || result.stdout);
       assert.match(result.stdout, /fake-codex:resume\b/);
-      assert.match(result.stdout, new RegExp(`sqlite-home:${projectCodexHome.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`));
+      assert.match(result.stdout, new RegExp(`sqlite-home:${canonicalProjectCodexHome.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`));
       assert.match(result.stdout, /codex-home:.*\.omx\/runtime\/codex-home\//);
       assert.match(result.stdout, /state-present=yes/);
       assert.match(result.stdout, /wal-present=yes/);

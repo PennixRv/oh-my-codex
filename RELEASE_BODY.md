@@ -1,38 +1,39 @@
-# oh-my-codex 0.18.8
+# oh-my-codex 0.18.9
 
-`0.18.8` is a patch release after `0.18.7` for the runtime reliability train that landed on `dev`. It focuses on HUD/session ownership under native session drift, Autopilot replay and context hardening, plugin hook/cache correctness, Team startup/disablement safety, and release/CI evidence improvements without intentional package-layout or CLI compatibility breaks.
+`0.18.9` is a patch release after `0.18.8` for update-channel reliability, project-local runtime state lookup, tmux/cmux question rendering, Autopilot/Ultragoal gate visibility, and release/CI hardening. It preserves existing package layout and CLI compatibility while tightening how dev-source updates, review lanes, HUD reconciliation, and release evidence behave.
 
 ## Highlights
 
-- **HUD/session ownership is more durable** — HUD panes are scoped by leader/source pane, duplicate legacy/fallback panes are deduped after prompt revive, deleted-cwd doctor panes are avoided, escaped tmux separators are parsed correctly, and native session-id drift preserves HUD ownership.
-- **Autopilot replay and context handling are safer** — completed terminal turns no longer reactivate Autopilot, context snapshots are seeded and hardened, task-seed provenance is clearer, and planning phases avoid editing under native session drift.
-- **Plugin hook and mirror correctness is stricter** — stale plugin hook cache refresh is fixed, oversized Stop semantics and launcher JSON fallback behavior are preserved, setup mode survives update refresh, and mirror sync verifies plugin hook metadata.
-- **Team/native-agent runtime behavior is clearer** — Team mode can be disabled, tmux worktree startup compatibility is fixed, native executor lanes remain leaf-only, and default native subagent routing guidance is corrected.
-- **Release and CI evidence is tighter** — self-hosted Linux runner selection and GJC evidence lane optimization reduce avoidable CI churn while the release readiness document records full local/e2e/live gates.
+- **Stable/dev update channels are explicit** — OMX update now distinguishes stable and dev channels, dev-source updates build installable package artifacts from a local checkout, and Windows update paths fall back to `npm.cmd` when direct `npm` lookup fails.
+- **Project-local runtime state lookup is safer** — SessionStart project memory lookup works with boxed `OMX_ROOT`, and project-local `omx resume` history listing preserves the intended project history during isolated launches.
+- **Deep-interview and question panes are more robust** — `omx question` delivers env vars through an export/prefix path under cmux/tmux shims, short panes keep deep-interview questions visible, and deep-interview handoffs are grounded in repo docs before execution.
+- **Autopilot, review, and Ultragoal gates are clearer** — Autopilot ralplan write guards are phase-aware, review subagent model/effort choices are respected, and Ultragoal HUD stays active until goals finish.
+- **HUD and CI reliability improved** — repeated tmux HUD reconciliation stays scoped to the emitting pane, fork PR CI avoids self-hosted skips, and self-hosted prerequisite install is hardened.
 
 ## Fixes / compatibility
 
-- Existing HUD, Autopilot, Team, plugin, and state files remain compatible; this release tightens ownership, cache, and replay behavior.
-- README maintainer/contributor tables, Discord invite text, state operation help, and UltraQA harness guidance were updated.
-- PR `#2685` is the maintainer CI wrapper for PR `#2682`; `#2682` is not counted separately in the final shipped compare inventory because the shipped merge commit is `#2685`.
+- Existing update, HUD, Autopilot, Ultragoal, deep-interview, and project-local state files remain compatible; this release tightens fallback behavior and release evidence without intentional breaking changes.
+- `0.18.8` post-publish evidence cleanup commits are included as internal release-readiness hygiene in the compare range.
+- Nested `crates/omx-sparkshell/Cargo.lock` remains a standalone historical lockfile recording `omx-sparkshell` `0.1.0`; workspace package versioning is governed by root `Cargo.toml` and root `Cargo.lock`, both bumped for `0.18.9`.
 
 ## Merged PR inventory
 
-#2686, #2685, #2684, #2677, #2676, #2675, #2672, #2657, #2652, #2671, #2664, #2660, #2670, #2667, #2666, #2661, #2665, #2656, #2654, #2655, #2651, #2643, #2650, #2649, #2648, #2642, #2636, #2646, #2640, #2596.
+#2713, #2711, #2710, #2709, #2708, #2706, #2704, #2703, #2702, #2699, #2697, #2693, #2691, #2690.
 
 ## Validation
 
-Release readiness evidence is recorded in `docs/qa/release-readiness-0.18.8.md`.
+Release readiness evidence is recorded in `docs/qa/release-readiness-0.18.9.md`.
 
-Local gates completed before tagging include version sync, build, lint/no-unused, native-agent/plugin-bundle verification, full compiled tests, all discovered e2e/smoke/live gates available in the OMX session, release body generation, `git diff --check`, and `npm pack --dry-run`.
+Local gates before tagging include version sync, build, lint/no-unused, native-agent/plugin-bundle verification, catalog docs check, full tests, targeted compatibility/runtime tests, live OMX/Codex smoke where prerequisites are available, mandatory UltraQA, release body generation and review, `git diff --check`, `npm pack --dry-run`, packed-install smoke, and native asset/manifest verification evidence.
 
 The GitHub release workflow remains the authoritative cross-platform native asset and npm publication gate after tag push.
 
 ## Contributors
 
-Thanks to the contributors who landed the `v0.18.7...v0.18.8` delta:
+Thanks to the contributors who landed the `v0.18.8...v0.18.9` delta:
 
 - [@Yeachan-Heo](https://github.com/Yeachan-Heo)
 - [@iqdoctor](https://github.com/iqdoctor)
+- [@Bongseop-Kim](https://github.com/Bongseop-Kim)
 
-**Full Changelog**: [`v0.18.7...v0.18.8`](https://github.com/Yeachan-Heo/oh-my-codex/compare/v0.18.7...v0.18.8)
+**Full Changelog**: [`v0.18.8...v0.18.9`](https://github.com/Yeachan-Heo/oh-my-codex/compare/v0.18.8...v0.18.9)

@@ -4,9 +4,33 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+## [0.18.9] - 2026-06-03
+
+Patch release for the post-`0.18.8` update/runtime reliability train: stable/dev update channels, source-install packaging, Windows npm fallback, project-local runtime state lookup, cmux/tmux question rendering, deep-interview visibility/grounding, Autopilot/Ultragoal/review gate clarity, HUD pane scoping, and CI/release evidence hardening.
+
+### Changed
+
+- **Update channels are clearer** — stable and dev update paths are explicit, dev-source updates produce installable package artifacts, and update behavior is safer across local checkouts.
+- **Autopilot, review, and Ultragoal gates are clearer** — ralplan write guards are phase-aware, review subagent model/effort choices are respected, and Ultragoal HUD stays active until goals finish.
+- **Release and CI evidence is tighter** — fork PR CI avoids self-hosted skips, self-hosted prerequisite install is hardened, and 0.18.8 release evidence cleanup is captured as internal release hygiene.
+
 ### Fixed
 
-- **`omx question` UI pane works under cmux** — when OMX runs inside cmux, its `tmux` binary is a shim (`~/.cmuxterm/.../tmux` -> `cmux __tmux-compat`) that does not implement tmux's `split-window -e KEY=VALUE` env option, so the `-e` flags leaked into the spawned pane's shell command (`zsh: command not found: -e`) and the question pane exited immediately. Under cmux, OMX now delivers env vars to the question pane via a shell-neutral, single-quoted `env KEY=VALUE ...` prefix on a single shell-command argument instead of `-e`. This stays correct on the cmux shim, on a real tmux that inherits cmux env vars, and across POSIX and non-POSIX (e.g. fish) pane shells. Real tmux without cmux env is unchanged (still uses `-e`). This is a defensive compatibility workaround; the root cause is in cmux's tmux-compat layer.
+- **Question and deep-interview rendering is more robust** — `omx question` works under cmux/tmux shims via env prefix delivery, short panes keep deep-interview questions visible, and deep-interview handoffs are grounded in repo docs.
+- **Project-local state lookup is safer** — boxed `OMX_ROOT` project memory lookup and project-local resume history listing preserve the intended project context during isolated launches.
+- **HUD/update edge cases are covered** — repeated tmux HUD reconciliation stays scoped to the emitting pane, and Windows update global-root lookup falls back to `npm.cmd`.
+
+### PRs
+
+- #2713, #2711, #2710, #2709, #2708, #2706, #2704, #2703, #2702, #2699, #2697, #2693, #2691, #2690
+
+### Issues
+
+- No separately closed GitHub issues were found for the `v0.18.8..HEAD` release range; the release scope is represented by the merged PR inventory above.
+
+### Verification
+
+- Release readiness evidence is tracked in `docs/qa/release-readiness-0.18.9.md`.
 
 ## [0.18.8] - 2026-06-01
 

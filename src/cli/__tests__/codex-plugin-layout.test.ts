@@ -487,7 +487,7 @@ describe('official Codex plugin layout', () => {
         cachePluginRoot,
         JSON.stringify({ hook_event_name: 'Stop', session_id: 'sess-plugin-false-command-stop' }),
         {
-          OMX_NATIVE_HOOK_COMMAND: process.platform === 'win32' ? 'cmd.exe /c exit 1' : '/bin/false',
+          OMX_NATIVE_HOOK_COMMAND: process.platform === 'win32' ? 'cmd.exe /c exit 1' : '/usr/bin/false',
         },
       );
 
