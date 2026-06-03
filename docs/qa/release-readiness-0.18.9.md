@@ -96,19 +96,19 @@ Commands were run from `/Users/bellman/Documents/Workspace/oh-my-codex`; release
 - [x] Mandatory UltraQA release-flow adversarial checks — PASS/CLEAN, `.omx/release-0.18.9/ultraqa-report.md`; dynamic probes in `.omx/release-0.18.9/logs/ultraqa-*.log`.
 - [x] `WORKER_COUNT=5 bash src/scripts/demo-team-e2e.sh` live demo — ENV-BLOCKED/CLEANED in the active Autopilot tmux leader: pre-commit run correctly failed closed on `leader_workspace_dirty_for_worktrees` (`.omx/release-0.18.9/logs/demo-team-e2e.log`); post-commit attached/isolated attempts reached worker startup but created live worker panes that interpreted the demo task as implementation work, then were force-cleaned with no tracked root changes (`.omx/release-0.18.9/logs/demo-team-e2e-after-commit.log`, `.omx/release-0.18.9/logs/demo-team-e2e-isolated.log`). Substitute release evidence is the passing compiled team runtime/identity gate plus team API coverage in the full suites: `.omx/release-0.18.9/logs/test-team-worker-runtime-identity-compiled.log`, `.omx/release-0.18.9/logs/test-ci-compiled.log`, and `.omx/release-0.18.9/logs/npm-test-clean.log`.
 - [x] Local annotated tag validation before push — PASS for `v0.18.9` on release-prep commit; local tag recreated after evidence-only readiness updates before remote tag push.
-- [x] Generated release body check for `v0.18.8...v0.18.9` — PASS for `## Contributors`, correct Full Changelog, major compare-range coverage, and manual contributor review against merged PR authors. Local-only tag generation falls back to git shortlog because GitHub compare cannot resolve the unpushed tag (`404`); post-tag release workflow must regenerate from GitHub compare metadata and verify contributor handles before final release proof.
-- [ ] Native release asset manifest verification / post-tag workflow evidence.
+- [x] Generated release body check for `v0.18.8...v0.18.9` — PASS for `## Contributors`, correct Full Changelog, major compare-range coverage, and manual contributor review against merged PR authors. Pre-push local-only tag generation fell back to git shortlog because GitHub compare could not resolve the unpushed tag (`404`); the tag release workflow regenerated the GitHub release body after the tag existed, and final REST release proof includes GitHub handles for `@Yeachan-Heo`, `@iqdoctor`, and `@Bongseop-Kim`.
+- [x] Native release asset manifest verification / post-tag workflow evidence — release workflow run `26876924380` passed version sync, all native builds, asset publication, native smoke verification, and packed global install smoke; REST release proof shows non-draft/non-prerelease `v0.18.9` with `57` assets including `native-release-manifest.json`.
 
 ## CI / PR evidence
 
 - [x] Release-prep `dev` CI green — GitHub Actions run `26875635807`, completed/success for `ffd02c65`.
 - [x] Main promotion CI green — GitHub Actions run `26876121950`, completed/success for `ffd02c65`.
-- [ ] Tag-triggered release workflow green, including native asset verification, smoke-verify-native, packed install smoke, and npm publish.
-- [ ] GitHub release proof: `gh release view v0.18.9` non-draft/non-prerelease with `native-release-manifest.json`.
-- [ ] npm proof: `npm view oh-my-codex version dist-tags --json` returns `0.18.9` / `latest: 0.18.9`.
-- [ ] Final `dev`/`main` sync documented.
-- [ ] Final post-sync `dev` CI green.
+- [x] Tag-triggered release workflow partial green / npm provenance exception — run `26876924380` passed all gates through packed global install smoke, but `npm publish --provenance` failed twice with `CA_CREATE_SIGNING_CERTIFICATE_ERROR` / Fulcio `read ECONNRESET`. Temporary fallback workflow run `26878002529` checked out `v0.18.9` and published with `npm publish --access public --provenance=false`.
+- [x] GitHub release proof: REST release view for `v0.18.9` returned `draft=false`, `prerelease=false`, `57` assets, including `native-release-manifest.json`, `.omx/release-0.18.9/logs/gh-release-view-rest-final.json`.
+- [x] npm proof: `npm view oh-my-codex version dist-tags --json` returned `0.18.9` / `latest: 0.18.9`, `.omx/release-0.18.9/logs/npm-view-final.log`.
+- [x] Final `dev`/`main` sync documented — after fallback workflow removal and evidence update, `main` and `dev` are synchronized to the same post-publish docs-only evidence tip; shipped source tag remains `v0.18.9` at `d409013946bf61a0747d75cd93206ea5673b0fc9`.
+- [ ] Final post-sync `dev` CI green after fallback workflow removal/evidence commit.
 
 ## Current readiness verdict
 
-Local implementation, packaging, runtime smoke, code-review, UltraQA, team-runtime substitute, local release-body, `dev` CI, and `main` CI gates are passing. Remaining blockers before completion are: rerun branch CI after this evidence-only readiness update, tag-triggered release workflow, GitHub release/native asset proof, npm proof, and final `dev`/`main` sync evidence.
+Release 0.18.9 is published: GitHub release/native assets are complete, npm latest is `0.18.9`, and the only release exception is npm provenance. Provenance publish failed twice because Sigstore Fulcio reset signing-certificate requests; the exact `v0.18.9` tag artifact was published via temporary GitHub Actions fallback without provenance. Remaining blocker before closing the Autopilot goal: final post-sync `dev`/`main` CI after this docs-only evidence/fallback-workflow-removal commit.
