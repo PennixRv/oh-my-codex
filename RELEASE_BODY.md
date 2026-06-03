@@ -26,7 +26,7 @@ Release readiness evidence is recorded in `docs/qa/release-readiness-0.18.9.md`.
 
 Local gates before tagging include version sync, build, lint/no-unused, native-agent/plugin-bundle verification, catalog docs check, full tests, targeted compatibility/runtime tests, live OMX/Codex smoke where prerequisites are available, mandatory UltraQA, release body generation and review, `git diff --check`, `npm pack --dry-run`, packed-install smoke, and native asset/manifest verification evidence.
 
-The GitHub release workflow remains the authoritative cross-platform native asset gate after tag push. During publication, npm provenance signing hit repeated Fulcio `ECONNRESET` failures; a temporary GitHub Actions fallback published the exact `v0.18.9` tag artifact with `npm publish --provenance=false`, matching the prior release-train outage procedure.
+The GitHub release workflow remains the authoritative cross-platform native asset gate after tag push, including the uploaded `native-release-manifest.json`. During publication, npm provenance signing hit repeated Fulcio `ECONNRESET` failures; a temporary GitHub Actions fallback published the exact `v0.18.9` tag artifact with `npm publish --provenance=false`, matching the prior release-train outage procedure.
 
 ## Contributors
 
