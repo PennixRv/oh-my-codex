@@ -1,10 +1,10 @@
 {
-  "generatedAt": "2026-05-24T12:14:18.921Z",
+  "generatedAt": "2026-06-10T15:20:00.632Z",
   "version": "2026.02.28.1",
   "counts": {
-    "skillCount": 50,
+    "skillCount": 51,
     "promptCount": 34,
-    "activeSkillCount": 28,
+    "activeSkillCount": 29,
     "activeAgentCount": 20
   },
   "coreSkills": [
@@ -311,6 +311,13 @@
     {
       "name": "hud",
       "category": "utility",
+      "status": "active",
+      "core": false,
+      "internalRequired": false
+    },
+    {
+      "name": "omx-supervisor",
+      "category": "execution",
       "status": "active",
       "core": false,
       "internalRequired": false

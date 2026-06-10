@@ -243,6 +243,11 @@
       "status": "active"
     },
     {
+      "name": "omx-supervisor",
+      "category": "execution",
+      "status": "active"
+    },
+    {
       "name": "omx-setup",
       "category": "utility",
       "status": "active"

@@ -103,4 +103,15 @@ describe('skill catalog hygiene', () => {
 
     assert.deepEqual(offenders, []);
   });
+
+  it('requires supervisor PR publication to compare transcript progress with hook-visible Autopilot state', () => {
+    const content = skillContent('omx-supervisor');
+
+    assert.match(content, /Compare two evidence classes before allowing PR publication/i);
+    assert.match(content, /pane transcript\/progress evidence/i);
+    assert.match(content, /hook-visible Autopilot\/HUD state/i);
+    assert.match(content, /prevent PR publication/i);
+    assert.match(content, /Do not treat transcript progress as a substitute/i);
+    assert.match(content, /user explicitly waives/i);
+  });
 });

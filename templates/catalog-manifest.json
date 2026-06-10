@@ -302,6 +302,13 @@
       "internalRequired": false
     },
     {
+      "name": "omx-supervisor",
+      "category": "execution",
+      "status": "active",
+      "core": false,
+      "internalRequired": false
+    },
+    {
       "name": "omx-setup",
       "category": "utility",
       "status": "active",
