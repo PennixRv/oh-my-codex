@@ -281,4 +281,158 @@ describe('autopilot ralplan gate', () => {
       await rm(cwd, { recursive: true, force: true });
     }
   });
+
+  it('rejects stale standalone handoff consensus during a return-to-ralplan cycle', async () => {
+    const cwd = await mkdtemp(join(tmpdir(), 'omx-autopilot-ralplan-stale-handoff-'));
+    const sessionId = 'sess-autopilot-stale-standalone';
+    const trackingPath = subagentTrackingPath(cwd);
+    try {
+      await mkdir(join(trackingPath, '..'), { recursive: true });
+      await writeFile(join(cwd, '.omx', 'state', 'session.json'), JSON.stringify({
+        session_id: sessionId,
+        native_session_id: 'thread-leader',
+      }, null, 2));
+      await writeFile(trackingPath, JSON.stringify({
+        schemaVersion: 1,
+        sessions: {
+          [sessionId]: {
+            session_id: sessionId,
+            leader_thread_id: 'thread-leader',
+            updated_at: '2026-05-28T18:34:51.000Z',
+            threads: {
+              'thread-architect': {
+                thread_id: 'thread-architect',
+                kind: 'subagent',
+                first_seen_at: '2026-05-28T18:34:51.000Z',
+                last_seen_at: '2026-05-28T18:34:51.000Z',
+                turn_count: 1,
+              },
+              'thread-critic': {
+                thread_id: 'thread-critic',
+                kind: 'subagent',
+                first_seen_at: '2026-05-28T18:35:10.000Z',
+                last_seen_at: '2026-05-28T18:35:10.000Z',
+                turn_count: 1,
+              },
+            },
+          },
+        },
+      }, null, 2));
+
+      const state = {
+        current_phase: 'ralplan',
+        return_to_ralplan_reason: 'Code review requested changes.',
+        handoff_artifacts: {
+          ralplan: {
+            complete: true,
+            sequence: ['architect-review', 'critic-review'],
+            ralplan_architect_review: {
+              agent_role: 'architect',
+              provenance_kind: 'native_subagent',
+              verdict: 'approve',
+              session_id: sessionId,
+              thread_id: 'thread-architect',
+              artifact_path: '.omx/artifacts/architect.md',
+              tracker_path: '.omx/state/subagent-tracking.json',
+              completed_at: '2026-05-28T18:34:51.000Z',
+            },
+            ralplan_critic_review: {
+              agent_role: 'critic',
+              provenance_kind: 'native_subagent',
+              verdict: 'approve',
+              session_id: sessionId,
+              thread_id: 'thread-critic',
+              artifact_path: '.omx/artifacts/critic.md',
+              tracker_path: '.omx/state/subagent-tracking.json',
+              completed_at: '2026-05-28T18:35:10.000Z',
+            },
+          },
+        },
+      };
+
+      const decision = canAdvanceAutopilotRalplanToUltragoal({ cwd, sessionId, currentState: state });
+      assert.equal(decision.allowed, false);
+      assert.equal(decision.evidence?.blockedReason, 'missing_sequential_architect_then_critic_approval');
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+
+  it('accepts fresh handoff consensus when review_cycle is advanced after a stale return cycle', async () => {
+    const cwd = await mkdtemp(join(tmpdir(), 'omx-autopilot-ralplan-fresh-cycle-handoff-'));
+    const sessionId = 'sess-autopilot-fresh-cycle';
+    const trackingPath = subagentTrackingPath(cwd);
+    try {
+      await mkdir(join(trackingPath, '..'), { recursive: true });
+      await writeFile(join(cwd, '.omx', 'state', 'session.json'), JSON.stringify({
+        session_id: sessionId,
+        native_session_id: 'thread-leader',
+      }, null, 2));
+      await writeFile(trackingPath, JSON.stringify({
+        schemaVersion: 1,
+        sessions: {
+          [sessionId]: {
+            session_id: sessionId,
+            leader_thread_id: 'thread-leader',
+            updated_at: '2026-05-28T18:35:10.000Z',
+            threads: {
+              'thread-architect': {
+                thread_id: 'thread-architect',
+                kind: 'subagent',
+                first_seen_at: '2026-05-28T18:34:51.000Z',
+                last_seen_at: '2026-05-28T18:34:51.000Z',
+                turn_count: 1,
+              },
+              'thread-critic': {
+                thread_id: 'thread-critic',
+                kind: 'subagent',
+                first_seen_at: '2026-05-28T18:35:10.000Z',
+                last_seen_at: '2026-05-28T18:35:10.000Z',
+                turn_count: 1,
+              },
+            },
+          },
+        },
+      }, null, 2));
+
+      const state = {
+        current_phase: 'ralplan',
+        review_cycle: 1,
+        return_to_ralplan_reason: 'Code review requested changes.',
+        handoff_artifacts: {
+          review_cycle: 2,
+          ralplan: {
+            complete: true,
+            sequence: ['architect-review', 'critic-review'],
+            ralplan_architect_review: {
+              agent_role: 'architect',
+              provenance_kind: 'native_subagent',
+              verdict: 'approve',
+              session_id: sessionId,
+              thread_id: 'thread-architect',
+              artifact_path: '.omx/artifacts/architect.md',
+              tracker_path: '.omx/state/subagent-tracking.json',
+              completed_at: '2026-05-28T18:34:51.000Z',
+            },
+            ralplan_critic_review: {
+              agent_role: 'critic',
+              provenance_kind: 'native_subagent',
+              verdict: 'approve',
+              session_id: sessionId,
+              thread_id: 'thread-critic',
+              artifact_path: '.omx/artifacts/critic.md',
+              tracker_path: '.omx/state/subagent-tracking.json',
+              completed_at: '2026-05-28T18:35:10.000Z',
+            },
+          },
+        },
+      };
+
+      const decision = canAdvanceAutopilotRalplanToUltragoal({ cwd, sessionId, currentState: state });
+      assert.equal(decision.allowed, true);
+      assert.equal(decision.evidence?.blockedReason, null);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
 });

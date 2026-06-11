@@ -31,6 +31,27 @@ export interface RalplanNativeSubagentConsensusOptions {
 export interface RalplanConsensusSource {
   source: string;
   value: unknown;
+  returnToRalplanReason?: string;
+  returnToRalplanReviewCycle?: number;
+}
+
+interface ReturnToRalplanContext {
+  reason: string;
+  reviewCycle?: number;
+}
+
+interface ParsedSequentialConsensusEvidence {
+  ralplan_architect_review: Record<string, unknown>;
+  ralplan_critic_review: Record<string, unknown>;
+}
+
+interface SequentialEvidenceScanResult {
+  evidence: ParsedSequentialConsensusEvidence | null;
+  invalidEvidence: {
+    ralplan_architect_review: Record<string, unknown> | null;
+    ralplan_critic_review: Record<string, unknown> | null;
+    blockedDetails: string[];
+  } | null;
 }
 
 export function buildRalplanConsensusGateFromSources(
@@ -38,8 +59,8 @@ export function buildRalplanConsensusGateFromSources(
   options: RalplanNativeSubagentConsensusOptions = {},
 ): RalplanConsensusGateEvidence {
   let nativeBlockedEvidence: {
-    ralplan_architect_review: Record<string, unknown>;
-    ralplan_critic_review: Record<string, unknown>;
+    ralplan_architect_review: Record<string, unknown> | null;
+    ralplan_critic_review: Record<string, unknown> | null;
     source: string;
   } | null = null;
   let invalidCompleteEvidence: {
@@ -50,7 +71,14 @@ export function buildRalplanConsensusGateFromSources(
   } | null = null;
 
   for (const candidate of sources) {
-    const evidence = extractSequentialConsensusEvidence(candidate.value);
+    const { evidence, invalidEvidence } = extractSequentialConsensusEvidence(candidate.value, {
+      inheritedReturnToRalplanContext: candidate.returnToRalplanReason
+        ? {
+          reason: candidate.returnToRalplanReason,
+          reviewCycle: candidate.returnToRalplanReviewCycle,
+        }
+        : undefined,
+    });
     if (evidence) {
       if (
         options.requireNativeSubagents
@@ -69,7 +97,6 @@ export function buildRalplanConsensusGateFromSources(
       };
     }
 
-    const invalidEvidence = extractInvalidCompleteConsensusEvidence(candidate.value);
     if (invalidEvidence) {
       invalidCompleteEvidence ??= { ...invalidEvidence, source: candidate.source };
     }
@@ -145,12 +172,18 @@ export function readLocalRalplanConsensusStateCandidates(
   const scopedStateDir = getBaseStateDir(cwd);
   const localStateDir = localBaseStateDir(cwd);
   if (explicitSession && sessionIdList.length === 0) return [];
-  const stateRoots = sessionIdList.length > 0
-    ? uniquePaths(sessionIdList.flatMap((id) => [
-      join(scopedStateDir, 'sessions', id),
-      join(localStateDir, 'sessions', id),
-    ]))
-    : [localStateDir];
+  const stateRoots = uniquePaths(
+    (sessionIdList.length > 0
+      ? sessionIdList.flatMap((id) => [
+          join(scopedStateDir, 'sessions', id),
+          join(localStateDir, 'sessions', id),
+        ])
+      : [
+        localStateDir,
+        ...(scopedStateDir === localStateDir || isStateDirBoundToCwd(scopedStateDir, cwd)
+          ? [scopedStateDir]
+          : []),
+      ]));
 
   const paths = stateRoots.flatMap((dir) => [
     join(dir, 'ralplan-state.json'),
@@ -164,140 +197,234 @@ export function readLocalRalplanConsensusStateCandidates(
   });
 }
 
-function extractSequentialConsensusEvidence(value: unknown): {
-  ralplan_architect_review: Record<string, unknown>;
-  ralplan_critic_review: Record<string, unknown>;
-} | null {
-  if (!value || typeof value !== 'object') return null;
-  const record = value as Record<string, unknown>;
+function extractSequentialConsensusEvidence(
+  value: unknown,
+  options: {
+    inheritedReturnToRalplanContext?: ReturnToRalplanContext;
+  } = {},
+): SequentialEvidenceScanResult {
+  if (!value || typeof value !== 'object') {
+    return { evidence: null, invalidEvidence: null };
+  }
 
-  const gate = record.ralplanConsensusGate ?? record.ralplan_consensus_gate;
-  if (gate && typeof gate === 'object') {
-    const gateRecord = gate as Record<string, unknown>;
-    const architectReview = asRecord(
-      gateRecord.ralplan_architect_review ?? gateRecord.architectReview ?? gateRecord.architect_review,
-    );
-    const criticReview = asRecord(
-      gateRecord.ralplan_critic_review ?? gateRecord.criticReview ?? gateRecord.critic_review,
-    );
-    if (
-      gateRecord.complete === true
-      && hasArchitectThenCriticSequence(gateRecord)
-      && isApproveReview(architectReview, 'architect')
-      && isApproveReview(criticReview, 'critic')
-      && isCriticNotBeforeArchitect(architectReview, criticReview)
-    ) {
-      return { ralplan_architect_review: architectReview, ralplan_critic_review: criticReview };
+  const record = value as Record<string, unknown>;
+  const returnToRalplanContext = deriveReturnToRalplanContext(record, options.inheritedReturnToRalplanContext);
+  const handoffArtifactsAreStale = isReturnToRalplanCycle(record, returnToRalplanContext);
+
+  if (!handoffArtifactsAreStale) {
+    const gate = record.ralplanConsensusGate ?? record.ralplan_consensus_gate;
+    if (gate && typeof gate === 'object') {
+      const gateRecord = gate as Record<string, unknown>;
+      const architectReview = asRecord(
+        gateRecord.ralplan_architect_review ?? gateRecord.architectReview ?? gateRecord.architect_review,
+      );
+      const criticReview = asRecord(
+        gateRecord.ralplan_critic_review ?? gateRecord.criticReview ?? gateRecord.critic_review,
+      );
+      if (
+        gateRecord.complete === true
+        && hasArchitectThenCriticSequence(gateRecord)
+        && isApproveReview(architectReview, 'architect')
+        && isApproveReview(criticReview, 'critic')
+        && isCriticNotBeforeArchitect(architectReview, criticReview)
+      ) {
+        return {
+          evidence: {
+            ralplan_architect_review: architectReview,
+            ralplan_critic_review: criticReview,
+          },
+          invalidEvidence: null,
+        };
+      }
+
+      if (gateRecord.complete === true && hasArchitectThenCriticSequence(gateRecord)) {
+        const blockedDetails = [
+          ...reviewApprovalProblems(architectReview, 'architect'),
+          ...reviewApprovalProblems(criticReview, 'critic'),
+        ];
+        if (!isCriticNotBeforeArchitect(architectReview, criticReview)) {
+          blockedDetails.push('critic review is ordered before architect review');
+        }
+        if (blockedDetails.length > 0) {
+          return {
+            evidence: null,
+            invalidEvidence: {
+              ralplan_architect_review: architectReview,
+              ralplan_critic_review: criticReview,
+              blockedDetails,
+            },
+          };
+        }
+      }
     }
   }
 
-  const handoffArtifactsAreStale = isReturnToRalplanCycle(record);
-  const topLevelHandoffArtifacts = handoffArtifactsAreStale ? null : asRecord(record.handoff_artifacts);
+  const topLevelHandoffArtifacts = asRecord(record.handoff_artifacts);
   if (topLevelHandoffArtifacts) {
-    const evidence = extractSequentialConsensusEvidence(topLevelHandoffArtifacts);
-    if (evidence) return evidence;
+    const recursiveResult = extractSequentialConsensusEvidence(topLevelHandoffArtifacts, {
+      inheritedReturnToRalplanContext: returnToRalplanContext,
+    });
+    if (recursiveResult.evidence) return recursiveResult;
+    if (recursiveResult.invalidEvidence) {
+      return {
+        evidence: null,
+        invalidEvidence: recursiveResult.invalidEvidence,
+      };
+    }
   }
 
   const stateRecord = asRecord(record.state);
-  const stateHandoffArtifacts = handoffArtifactsAreStale || (stateRecord && isReturnToRalplanCycle(stateRecord))
-    ? null
-    : asRecord(stateRecord?.handoff_artifacts);
+  const stateHandoffArtifacts = asRecord(stateRecord?.handoff_artifacts);
   if (stateHandoffArtifacts) {
-    const evidence = extractSequentialConsensusEvidence(stateHandoffArtifacts);
-    if (evidence) return evidence;
-  }
-
-  const directArchitectReview = asRecord(record.ralplan_architect_review);
-  const directCriticReview = asRecord(record.ralplan_critic_review);
-  if (
-    hasArchitectThenCriticSequence(record)
-    && isApproveReview(directArchitectReview, 'architect')
-    && isApproveReview(directCriticReview, 'critic')
-    && isCriticNotBeforeArchitect(directArchitectReview, directCriticReview)
-  ) {
-    return {
-      ralplan_architect_review: directArchitectReview,
-      ralplan_critic_review: directCriticReview,
-    };
-  }
-
-  const reviewHistory = Array.isArray(record.review_history) ? record.review_history : [];
-  const latestReviewEntry = asRecord(reviewHistory.at(-1));
-  if (latestReviewEntry) {
-    const architectReview = asRecord(
-      latestReviewEntry.ralplan_architect_review ?? latestReviewEntry.architect_review ?? latestReviewEntry.architectReview,
-    );
-    const criticReview = asRecord(
-      latestReviewEntry.ralplan_critic_review ?? latestReviewEntry.critic_review ?? latestReviewEntry.criticReview,
-    );
-    if (
-      isApproveReview(architectReview, 'architect')
-      && isApproveReview(criticReview, 'critic')
-      && isCriticNotBeforeArchitect(architectReview, criticReview)
-    ) {
-      return { ralplan_architect_review: architectReview, ralplan_critic_review: criticReview };
+    const recursiveResult = extractSequentialConsensusEvidence(stateHandoffArtifacts, {
+      inheritedReturnToRalplanContext: returnToRalplanContext,
+    });
+    if (recursiveResult.evidence) return recursiveResult;
+    if (recursiveResult.invalidEvidence) {
+      return {
+        evidence: null,
+        invalidEvidence: recursiveResult.invalidEvidence,
+      };
     }
   }
 
-  const architectReviews = Array.isArray(record.architectReviews) ? record.architectReviews : [];
-  const criticReviews = Array.isArray(record.criticReviews) ? record.criticReviews : [];
-  if (architectReviews.length > 0 && criticReviews.length > 0 && architectReviews.length === criticReviews.length) {
-    const architectReview = asRecord(architectReviews.at(-1));
-    const criticReview = asRecord(criticReviews.at(-1));
+  if (!handoffArtifactsAreStale) {
+    const directArchitectReview = asRecord(record.ralplan_architect_review);
+    const directCriticReview = asRecord(record.ralplan_critic_review);
     if (
-      isApproveReview(architectReview, 'architect')
-      && isApproveReview(criticReview, 'critic')
-      && isCriticNotBeforeArchitect(architectReview, criticReview)
+      hasArchitectThenCriticSequence(record)
+      && isApproveReview(directArchitectReview, 'architect')
+      && isApproveReview(directCriticReview, 'critic')
+      && isCriticNotBeforeArchitect(directArchitectReview, directCriticReview)
     ) {
-      return { ralplan_architect_review: architectReview, ralplan_critic_review: criticReview };
+      return {
+        evidence: {
+          ralplan_architect_review: directArchitectReview,
+          ralplan_critic_review: directCriticReview,
+        },
+        invalidEvidence: null,
+      };
     }
-  }
 
-  return null;
-}
-
-function extractInvalidCompleteConsensusEvidence(value: unknown): {
-  ralplan_architect_review: Record<string, unknown> | null;
-  ralplan_critic_review: Record<string, unknown> | null;
-  blockedDetails: string[];
-} | null {
-  if (!value || typeof value !== 'object') return null;
-  const record = value as Record<string, unknown>;
-
-  const gate = record.ralplanConsensusGate ?? record.ralplan_consensus_gate;
-  if (gate && typeof gate === 'object') {
-    const gateRecord = gate as Record<string, unknown>;
-    const architectReview = asRecord(
-      gateRecord.ralplan_architect_review ?? gateRecord.architectReview ?? gateRecord.architect_review,
-    );
-    const criticReview = asRecord(
-      gateRecord.ralplan_critic_review ?? gateRecord.criticReview ?? gateRecord.critic_review,
-    );
-    if (gateRecord.complete === true && hasArchitectThenCriticSequence(gateRecord)) {
-      const blockedDetails = [
-        ...reviewApprovalProblems(architectReview, 'architect'),
-        ...reviewApprovalProblems(criticReview, 'critic'),
-      ];
-      if (!isCriticNotBeforeArchitect(architectReview, criticReview)) {
-        blockedDetails.push('critic review is ordered before architect review');
-      }
-      if (blockedDetails.length > 0) {
+    const reviewHistory = Array.isArray(record.review_history) ? record.review_history : [];
+    const latestReviewEntry = asRecord(reviewHistory.at(-1));
+    if (latestReviewEntry) {
+      const architectReview = asRecord(
+        latestReviewEntry.ralplan_architect_review ?? latestReviewEntry.architect_review ?? latestReviewEntry.architectReview,
+      );
+      const criticReview = asRecord(
+        latestReviewEntry.ralplan_critic_review ?? latestReviewEntry.critic_review ?? latestReviewEntry.criticReview,
+      );
+      if (
+        isApproveReview(architectReview, 'architect')
+        && isApproveReview(criticReview, 'critic')
+        && isCriticNotBeforeArchitect(architectReview, criticReview)
+      ) {
         return {
-          ralplan_architect_review: architectReview,
-          ralplan_critic_review: criticReview,
-          blockedDetails,
+          evidence: {
+            ralplan_architect_review: architectReview,
+            ralplan_critic_review: criticReview,
+          },
+          invalidEvidence: null,
+        };
+      }
+    }
+
+    const architectReviews = Array.isArray(record.architectReviews) ? record.architectReviews : [];
+    const criticReviews = Array.isArray(record.criticReviews) ? record.criticReviews : [];
+    if (architectReviews.length > 0 && criticReviews.length > 0 && architectReviews.length === criticReviews.length) {
+      const architectReview = asRecord(architectReviews.at(-1));
+      const criticReview = asRecord(criticReviews.at(-1));
+      if (
+        isApproveReview(architectReview, 'architect')
+        && isApproveReview(criticReview, 'critic')
+        && isCriticNotBeforeArchitect(architectReview, criticReview)
+      ) {
+        return {
+          evidence: {
+            ralplan_architect_review: architectReview,
+            ralplan_critic_review: criticReview,
+          },
+          invalidEvidence: null,
         };
       }
     }
   }
 
-  const stateHandoffArtifacts = asRecord(asRecord(record.state)?.handoff_artifacts);
-  if (stateHandoffArtifacts) {
-    const evidence = extractInvalidCompleteConsensusEvidence(stateHandoffArtifacts);
-    if (evidence) return evidence;
+  return { evidence: null, invalidEvidence: null };
+}
+
+function deriveReturnToRalplanContext(
+  record: Record<string, unknown>,
+  inherited?: ReturnToRalplanContext,
+): ReturnToRalplanContext | undefined {
+  const explicit = explicitReturnToRalplanContext(record);
+  if (explicit) return explicit;
+
+  const inheritedReviewCycle = typeof inherited?.reviewCycle === 'number' ? inherited.reviewCycle : undefined;
+  if (inheritedReviewCycle == null) return inherited;
+
+  const recordReviewCycle = extractReviewCycle(record);
+  if (recordReviewCycle == null || recordReviewCycle <= inheritedReviewCycle) {
+    return inherited;
   }
 
-  return null;
+  return undefined;
+}
+
+function explicitReturnToRalplanContext(record: Record<string, unknown>): ReturnToRalplanContext | undefined {
+  const currentPhase = String(record.current_phase ?? record.currentPhase ?? '').toLowerCase();
+  const reason = record.return_to_ralplan_reason ?? record.returnToRalplanReason;
+  if (
+    currentPhase !== 'ralplan'
+    || typeof reason !== 'string'
+    || reason.trim().length === 0
+  ) {
+    return undefined;
+  }
+
+  return {
+    reason: reason.trim(),
+    reviewCycle: extractReviewCycle(record),
+  };
+}
+
+function isReturnToRalplanCycle(
+  record: Record<string, unknown>,
+  inherited?: ReturnToRalplanContext,
+): boolean {
+  const explicit = explicitReturnToRalplanContext(record);
+  if (explicit) {
+    return true;
+  }
+
+  if (!inherited) {
+    return false;
+  }
+
+  const recordReviewCycle = extractReviewCycle(record);
+  if (recordReviewCycle == null) return true;
+  if (typeof inherited.reviewCycle === 'number') {
+    return recordReviewCycle <= inherited.reviewCycle;
+  }
+  return true;
+}
+
+function extractReviewCycle(record: Record<string, unknown>): number | undefined {
+  const candidates = [
+    record.review_cycle,
+    record.reviewCycle,
+  ];
+  for (const candidate of candidates) {
+    if (typeof candidate === 'number' && Number.isInteger(candidate) && candidate >= 0) {
+      return candidate;
+    }
+    if (typeof candidate === 'string' && candidate.trim() !== '') {
+      const parsed = Number(candidate);
+      if (Number.isInteger(parsed) && parsed >= 0) return parsed;
+    }
+  }
+  return undefined;
 }
 
 function asRecord(value: unknown): Record<string, unknown> | null {
@@ -497,20 +624,17 @@ function readLocalCurrentSessionIds(cwd: string): string[] {
   return sessionId ? validateLocalSessionId(sessionId) : [];
 }
 
+function isStateDirBoundToCwd(stateDir: string, cwd: string): boolean {
+  const state = readJsonState(join(stateDir, 'session.json'));
+  return typeof state?.cwd === 'string' && state.cwd === cwd;
+}
+
 function localBaseStateDir(cwd: string): string {
   return join(resolveWorkingDirectoryForState(cwd), '.omx', 'state');
 }
 
 function uniquePaths(paths: string[]): string[] {
   return [...new Set(paths)];
-}
-
-function isReturnToRalplanCycle(record: Record<string, unknown>): boolean {
-  const currentPhase = String(record.current_phase ?? record.currentPhase ?? '').toLowerCase();
-  const reason = record.return_to_ralplan_reason ?? record.returnToRalplanReason;
-  return currentPhase === 'ralplan'
-    && typeof reason === 'string'
-    && reason.trim().length > 0;
 }
 
 function readJsonState(path: string): Record<string, unknown> | null {

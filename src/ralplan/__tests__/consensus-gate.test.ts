@@ -181,4 +181,127 @@ describe('ralplan consensus gate state roots', () => {
       await rm(cwd, { recursive: true, force: true });
     }
   });
+
+  it('rejects non-approving complete consensus before fallback approvals in the same candidate', async () => {
+    const cwd = await mkdtemp(join(tmpdir(), 'omx-ralplan-consensus-invalid-fallback-'));
+    const gate = buildRalplanConsensusGateForCwd(cwd, {
+      artifacts: {
+        current_phase: 'ralplan',
+        handoff_artifacts: {
+          ralplan_consensus_gate: {
+            complete: true,
+            sequence: ['architect-review', 'critic-review'],
+            ralplan_architect_review: {
+              agent_role: 'architect',
+              verdict: 'iterate',
+              completed_at: '2026-06-11T16:00:00.000Z',
+            },
+            ralplan_critic_review: {
+              agent_role: 'critic',
+              verdict: 'approve',
+              completed_at: '2026-06-11T16:01:00.000Z',
+            },
+          },
+        },
+        ralplan_architect_review: {
+          agent_role: 'architect',
+          verdict: 'approve',
+          completed_at: '2026-06-11T15:50:00.000Z',
+        },
+        ralplan_critic_review: {
+          agent_role: 'critic',
+          verdict: 'approve',
+          completed_at: '2026-06-11T15:51:00.000Z',
+        },
+      },
+    });
+
+    assert.equal(gate.complete, false);
+    assert.equal(gate.blockedReason, 'non_approving_ralplan_consensus_review');
+    assert.match(String(gate.blockedDetails?.join('\n') ?? ''), /architect.*iterate/);
+    await rm(cwd, { recursive: true, force: true });
+  });
+
+  it('accepts freshened consensus when stale return cycle includes a newer review cycle in nested handoff', async () => {
+    const gate = buildRalplanConsensusGateForCwd(process.cwd(), {
+      artifacts: {
+        current_phase: 'ralplan',
+        return_to_ralplan_reason: 'Code review requested changes.',
+        review_cycle: 1,
+        handoff_artifacts: {
+          review_cycle: 2,
+          ralplan_consensus_gate: {
+            complete: true,
+            sequence: ['architect-review', 'critic-review'],
+            ralplan_architect_review: {
+              agent_role: 'architect',
+              verdict: 'approve',
+              completed_at: '2026-06-11T16:10:00.000Z',
+            },
+            ralplan_critic_review: {
+              agent_role: 'critic',
+              verdict: 'approve',
+              completed_at: '2026-06-11T16:11:00.000Z',
+            },
+          },
+        },
+      },
+    });
+
+    assert.equal(gate.complete, true);
+    assert.equal(gate.blockedReason, null);
+  });
+
+  it('includes scoped state root when no session is active and env state root is bound to cwd', async () => {
+    const cwd = await mkdtemp(join(tmpdir(), 'omx-ralplan-consensus-scoped-root-'));
+    const scopedRoot = await mkdtemp(join(tmpdir(), 'omx-ralplan-consensus-scoped-env-'));
+    const previousOmxStateRoot = process.env.OMX_STATE_ROOT;
+    const previousOmxRoot = process.env.OMX_ROOT;
+    const previousOmxTeamStateRoot = process.env.OMX_TEAM_STATE_ROOT;
+    const sessionId = 'sess-boxed-bound-root';
+    try {
+      delete process.env.OMX_ROOT;
+      delete process.env.OMX_TEAM_STATE_ROOT;
+      process.env.OMX_STATE_ROOT = scopedRoot;
+      const baseStateDir = getBaseStateDir(cwd);
+      const sessionDir = join(baseStateDir, 'sessions', sessionId);
+      await mkdir(sessionDir, { recursive: true });
+      await writeFile(join(baseStateDir, 'session.json'), JSON.stringify({
+        session_id: sessionId,
+        cwd,
+      }, null, 2));
+      await writeFile(join(sessionDir, 'autopilot-state.json'), JSON.stringify({
+        handoff_artifacts: {
+          ralplan_consensus_gate: {
+            complete: true,
+            sequence: ['architect-review', 'critic-review'],
+            ralplan_architect_review: {
+              agent_role: 'architect',
+              verdict: 'approve',
+              completed_at: '2026-06-11T16:30:00.000Z',
+            },
+            ralplan_critic_review: {
+              agent_role: 'critic',
+              verdict: 'approve',
+              completed_at: '2026-06-11T16:31:00.000Z',
+            },
+          },
+        },
+      }, null, 2));
+
+      const gate = buildRalplanConsensusGateForCwd(cwd);
+
+      assert.equal(gate.complete, true);
+      assert.match(String(gate.source), /scoped-env-/);
+    } finally {
+      if (typeof previousOmxRoot === 'string') process.env.OMX_ROOT = previousOmxRoot;
+      else delete process.env.OMX_ROOT;
+      if (typeof previousOmxStateRoot === 'string') process.env.OMX_STATE_ROOT = previousOmxStateRoot;
+      else delete process.env.OMX_STATE_ROOT;
+      if (typeof previousOmxTeamStateRoot === 'string') process.env.OMX_TEAM_STATE_ROOT = previousOmxTeamStateRoot;
+      else delete process.env.OMX_TEAM_STATE_ROOT;
+      await rm(cwd, { recursive: true, force: true });
+      await rm(scopedRoot, { recursive: true, force: true });
+    }
+  });
 });
