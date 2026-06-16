@@ -23,16 +23,17 @@ permissions:
 jobs:
   publish:
     name: Publish npm package
-    runs-on: [self-hosted, Linux, X64, gajae-layofflabs-2]
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
           ref: ${{ inputs.tag }}
           fetch-depth: 0
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: "22"
           cache: npm
+          registry-url: https://registry.npmjs.org
       - run: npm ci
       - name: Verify tag/package version
         shell: bash
@@ -40,8 +41,8 @@ jobs:
           set -euo pipefail
           VERSION=$(node -p "require('./package.json').version")
           test "${{ inputs.tag }}" = "v${VERSION}"
-          if npm view "oh-my-codex@${VERSION}" version >/dev/null 2>&1; then
-            echo "oh-my-codex@${VERSION} already exists on npm; skipping"
+          if npm view "oh-my-codex-pennix@${VERSION}" version >/dev/null 2>&1; then
+            echo "oh-my-codex-pennix@${VERSION} already exists on npm; skipping"
             exit 0
           fi
       - run: npm pack --dry-run
@@ -62,7 +63,7 @@ jobs:
           set -euo pipefail
           VERSION=$(node -p "require('./package.json').version")
           if npm publish --access public --provenance 2>&1 | tee npm-publish.log; then
-            echo "Published oh-my-codex@${VERSION} with provenance"
+            echo "Published oh-my-codex-pennix@${VERSION} with provenance"
           elif grep -Eiq 'TLOG_CREATE_ENTRY_ERROR|tlog|rekor|transparency log' npm-publish.log && [ "${{ inputs.allow_without_provenance }}" = "true" ]; then
             echo "::warning::Provenance publish failed due to Sigstore/Rekor tlog outage; retrying without provenance"
             npm publish --access public
@@ -75,7 +76,7 @@ jobs:
           set -euo pipefail
           VERSION=$(node -p "require('./package.json').version")
           for i in $(seq 1 20); do
-            if [ "$(npm view "oh-my-codex@${VERSION}" version 2>/dev/null || true)" = "$VERSION" ]; then
+            if [ "$(npm view "oh-my-codex-pennix@${VERSION}" version 2>/dev/null || true)" = "$VERSION" ]; then
               npm view oh-my-codex version dist-tags --json
               exit 0
             fi

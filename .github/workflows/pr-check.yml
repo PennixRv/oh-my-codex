@@ -1,79 +1,101 @@
 name: PR Check
 
 on:
-  pull_request_target:
+  pull_request:
     types: [opened, synchronize, reopened, edited]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: write
 
 jobs:
-  size-label:
-    name: PR Size Label
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
-    runs-on: [self-hosted, Linux, X64, gajae-layofflabs-2]
-    permissions:
-      pull-requests: write
+  size-check:
+    name: Size Check
+    runs-on: ubuntu-latest
     steps:
-      - uses: actions/github-script@v9
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Check PR size
+        uses: actions/github-script@v7
         with:
           script: |
-            const { additions, deletions } = context.payload.pull_request;
-            const total = additions + deletions;
+            const { data: files } = await github.rest.pulls.listFiles({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: context.issue.number
+            });
 
-            let label;
-            if (total < 50) label = 'size/S';
-            else if (total < 200) label = 'size/M';
-            else if (total < 500) label = 'size/L';
-            else label = 'size/XL';
+            const additions = files.reduce((acc, f) => acc + f.additions, 0);
+            const deletions = files.reduce((acc, f) => acc + f.deletions, 0);
+            const changedFiles = files.length;
 
-            const existing = context.payload.pull_request.labels
-              .map(l => l.name)
-              .filter(n => n.startsWith('size/'));
+            let sizeLabel = 'size/S';
+            if (additions + deletions > 1000) sizeLabel = 'size/XL';
+            else if (additions + deletions > 500) sizeLabel = 'size/L';
+            else if (additions + deletions > 100) sizeLabel = 'size/M';
 
-            for (const old of existing) {
-              if (old !== label) {
-                await github.rest.issues.removeLabel({
-                  owner: context.repo.owner,
-                  repo: context.repo.repo,
-                  issue_number: context.issue.number,
-                  name: old,
-                });
-              }
-            }
+            const isFork = context.payload.pull_request.head.repo.full_name !== context.payload.repository.full_name;
 
-            if (!existing.includes(label)) {
+            if (!isFork) {
               await github.rest.issues.addLabels({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
                 issue_number: context.issue.number,
-                labels: [label],
+                labels: [sizeLabel]
               });
+
+              if (additions + deletions > 1000) {
+                await github.rest.issues.createComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: context.issue.number,
+                  body: `⚠️ **Large PR Alert**\n\nThis PR has ${additions} additions and ${deletions} deletions across ${changedFiles} files.\n\nConsider breaking it into smaller PRs for easier review.`
+                });
+              }
+            } else {
+              core.notice(`Fork PR - skipping label/comment (no write permission). Size: ${sizeLabel}`);
             }
 
-            core.notice(`PR size: ${total} changes (${additions}+, ${deletions}-) → ${label}`);
+            console.log(`PR Stats: +${additions} -${deletions} (${changedFiles} files) → ${sizeLabel}`);
 
-  draft-check:
-    name: Draft Check
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
-    runs-on: [self-hosted, Linux, X64, gajae-layofflabs-2]
+  base-branch-check:
+    name: Base Branch Check
+    runs-on: ubuntu-latest
     steps:
-      - uses: actions/github-script@v9
+      - name: Require allowed base branch
+        uses: actions/github-script@v7
         with:
           script: |
-            if (context.payload.pull_request.draft) {
-              core.notice('This PR is still in draft state.');
+            const pr = context.payload.pull_request;
+            if (!pr) {
+              core.notice('No pull_request payload; skipping base branch check');
+              return;
             }
 
-  base-branch-guidance:
-    name: PR Base Guidance
-    if: github.event.pull_request.base.ref == 'main'
-    runs-on: [self-hosted, Linux, X64, gajae-layofflabs-2]
-    permissions: {}
+            const base = pr.base.ref;
+            const allowedBaseBranches = new Set(['dev', 'main']);
+            const isReleaseBranch = /^release\/.+/.test(base);
+
+            if (!allowedBaseBranches.has(base) && !isReleaseBranch) {
+              core.setFailed(
+                `PRs must target \`dev\`, \`main\`, or \`release/*\`, not \`${base}\`. ` +
+                `Fix with: gh pr edit ${context.issue.number} --base <allowed-branch>`
+              );
+            }
+
+  draft-check:
+    name: Draft PR Check
+    runs-on: ubuntu-latest
     steps:
-      - name: Remind contributors to target dev for normal contributions
-        run: |
-          message='Normal contributions should target `dev`. If this PR was opened against `main` by accident, please retarget it to `dev`. Maintainer-directed `main` PRs are still allowed.'
-          echo "::warning title=Retarget normal PRs to dev::$message"
-          {
-            echo '## PR base guidance'
-            echo
-            echo "$message"
-          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Check if PR is draft
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const pr = context.payload.pull_request;
+            if (pr.draft) {
+              core.notice('This is a draft PR - CI will run but merge is blocked');
+            }

@@ -1,7 +1,7 @@
 {
-  "name": "oh-my-codex",
+  "name": "oh-my-codex-pennix",
   "version": "0.18.12",
-  "description": "Multi-agent orchestration layer for OpenAI Codex CLI",
+  "description": "Multi-agent orchestration layer for OpenAI Codex CLI — Pennix fork",
   "type": "module",
   "main": "dist/index.js",
   "bin": {
@@ -82,14 +82,14 @@
     "orchestration",
     "multi-agent"
   ],
-  "author": "Yeachan Heo",
+  "author": "Yeachan Heo (forked by PennixRv)",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/Yeachan-Heo/oh-my-codex.git"
+    "url": "git+https://github.com/PennixRv/oh-my-codex.git"
   },
-  "homepage": "https://yeachan-heo.github.io/oh-my-codex",
+  "homepage": "https://github.com/PennixRv/oh-my-codex",
   "bugs": {
-    "url": "https://github.com/Yeachan-Heo/oh-my-codex/issues"
+    "url": "https://github.com/PennixRv/oh-my-codex/issues"
   },
   "license": "MIT",
   "dependencies": {
