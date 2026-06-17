@@ -4665,6 +4665,22 @@ async function buildTeamAttentionOutput(
 
     if (pendingCount === 0) return null;
 
+    const signature = parts.sort().join("|");
+    const dedupePath = join(stateDir, "team-attention-last.json");
+    let lastSignature = "";
+    try {
+      if (existsSync(dedupePath)) {
+        lastSignature = safeString(JSON.parse(await readFile(dedupePath, "utf-8")).s || "").trim();
+      }
+    } catch { /* best-effort */ }
+
+    // Avoid re-injecting the same set of completed items on every turn.
+    if (signature === lastSignature) return null;
+
+    try {
+      await writeFile(dedupePath, JSON.stringify({ s: signature, at: new Date().toISOString() }));
+    } catch { /* best-effort */ }
+
     const summary = parts.join("; ") + ". ";
     const guidance =
       pendingCount === 1
@@ -4672,8 +4688,6 @@ async function buildTeamAttentionOutput(
         : `Check with \`omx team status\` and handle ${pendingCount} completed items at the next natural pause.`;
 
     return {
-      decision: "block",
-      reason: `team_attention_pending: ${pendingCount} item(s) need leader review`,
       hookSpecificOutput: {
         hookEventName: "PreToolUse",
         additionalContext: `[OMX team] ${summary}${guidance}`,
