@@ -31,10 +31,12 @@ import {
 } from "../hooks/session.js";
 import {
   appendTeamEvent,
+  listTasks,
   readTeamLeaderAttention,
   readTeamConfig,
   readTeamManifestV2,
   readTeamPhase,
+  readWorkerStatus,
   writeTeamLeaderAttention,
   writeTeamPhase,
 } from "../team/state.js";
@@ -4484,6 +4486,7 @@ export async function dispatchCodexNativeHook(
       : "";
     outputJson = await buildDeepInterviewPreToolUseBoundaryOutput(payload, cwd, stateDir, preToolUseSessionId)
       ?? await buildRalplanPreToolUseBoundaryOutput(payload, cwd, stateDir, preToolUseSessionId)
+      ?? await buildTeamAttentionOutput(cwd, stateDir)
       ?? buildNativePreToolUseOutput(payload);
   } else if (hookEventName === "PostToolUse") {
     if (detectMcpTransportFailure(payload)) {
@@ -4595,6 +4598,90 @@ function inferHookEventNameFromMalformedInput(raw: string): CodexHookEventName |
   const value = match?.[1];
   if (!value) return null;
   return readHookEventName({ hook_event_name: value });
+}
+
+/**
+ * Check team state for tasks that have completed or failed since the leader
+ * last acknowledged them. When there are pending items, inject a non-blocking
+ * system reminder via {@code hookSpecificOutput.additionalContext} so the
+ * leader sees it on the next turn without a tmux send-keys interrupt.
+ *
+ * This replaces the old inject-based leader nudge with async file-based
+ * attention polling.  The notify hook stays disabled; team workers still
+ * write mailbox + status files independently.
+ */
+async function buildTeamAttentionOutput(
+  cwd: string,
+  stateDir: string,
+): Promise<Record<string, unknown> | null> {
+  try {
+    if (!readTeamModeConfig(cwd).enabled) return null;
+
+    const teamRoot = resolveCanonicalTeamStateRoot(cwd);
+    const teamDir = join(teamRoot, "team");
+    if (!existsSync(teamDir)) return null;
+
+    const entries = await readdir(teamDir).catch(() => [] as string[]);
+    if (entries.length === 0) return null;
+
+    const parts: string[] = [];
+    let pendingCount = 0;
+
+    for (const teamName of entries) {
+      const teamPath = join(teamDir, teamName);
+      try {
+        if (!(await stat(teamPath)).isDirectory()) continue;
+      } catch { continue; }
+
+      // ── tasks ────────────────────────────────────────────────
+      let tasks: Array<{ id: string; status: string }> = [];
+      try {
+        tasks = await listTasks(teamName, cwd);
+      } catch { /* best-effort */ }
+
+      const newlyDone = tasks
+        .filter(t => t.status === "completed" || t.status === "failed")
+        .map(t => `task-${t.id}(${t.status})`);
+      if (newlyDone.length > 0) {
+        parts.push(`Team ${teamName}: ${newlyDone.join(", ")}`);
+        pendingCount += newlyDone.length;
+      }
+
+      // ── workers ──────────────────────────────────────────────
+      const workersDir = join(teamPath, "workers");
+      let workerEntries: string[] = [];
+      try { workerEntries = await readdir(workersDir); } catch { /* empty */ }
+
+      for (const workerName of workerEntries) {
+        try {
+          const ws = await readWorkerStatus(teamName, workerName, cwd);
+          if (ws.state === "done" || ws.state === "failed") {
+            parts.push(`Team ${teamName}: worker ${workerName} ${ws.state}`);
+            pendingCount++;
+          }
+        } catch { /* best-effort */ }
+      }
+    }
+
+    if (pendingCount === 0) return null;
+
+    const summary = parts.join("; ") + ". ";
+    const guidance =
+      pendingCount === 1
+        ? "Check with `omx team status` and handle the result at the next natural pause."
+        : `Check with \`omx team status\` and handle ${pendingCount} completed items at the next natural pause.`;
+
+    return {
+      decision: "block",
+      reason: `team_attention_pending: ${pendingCount} item(s) need leader review`,
+      hookSpecificOutput: {
+        hookEventName: "PreToolUse",
+        additionalContext: `[OMX team] ${summary}${guidance}`,
+      },
+    } as unknown as Record<string, unknown>;
+  } catch {
+    return null;
+  }
 }
 
 function buildMalformedStdinHookOutput(
