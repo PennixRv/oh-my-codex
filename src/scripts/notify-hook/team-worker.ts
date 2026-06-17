@@ -454,6 +454,7 @@ export async function maybeNotifyLeaderAllWorkersIdle({ cwd, stateDir, logsDir, 
   }
 
   try {
+    if (process.env.OMX_TEAM_NO_INJECT) return;
     const sendResult = await sendPaneInput({
       paneTarget: tmuxTarget,
       prompt: message,
@@ -646,6 +647,7 @@ export async function maybeNotifyLeaderWorkerIdle({ cwd, stateDir, logsDir, pars
   const message = `${parts.join('. ')}. ${DEFAULT_MARKER}`;
 
   try {
+    if (process.env.OMX_TEAM_NO_INJECT) return;
     const sendResult = await sendPaneInput({
       paneTarget: tmuxTarget,
       prompt: message,

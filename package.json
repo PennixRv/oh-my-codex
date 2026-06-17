@@ -1,6 +1,6 @@
 {
   "name": "oh-my-codex-pennix",
-  "version": "0.18.14",
+  "version": "0.18.15",
   "description": "Multi-agent orchestration layer for OpenAI Codex CLI — Pennix fork",
   "type": "module",
   "main": "dist/index.js",
