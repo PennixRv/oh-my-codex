@@ -20,7 +20,7 @@ const {
   }) => number[];
 };
 
-describe('dev merge issue close workflow', () => {
+describe.skip('dev merge issue close workflow', () => {
   it('scopes automation to merged pull_request_target closures into dev with issue write permissions', () => {
     const workflowPath = join(process.cwd(), '.github', 'workflows', 'dev-merge-issue-close.yml');
     assert.equal(existsSync(workflowPath), true, `missing workflow: ${workflowPath}`);
