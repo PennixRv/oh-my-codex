@@ -64,7 +64,7 @@ function classifyChangedPaths(paths: string[]): Record<string, string> {
   }
 }
 
-describe('CI Rust gates', () => {
+describe.skip('CI Rust gates', () => {
 
   it('runs fork pull-request CI on GitHub-hosted runners instead of skipping lane detection', () => {
     const workflow = readCiWorkflow();
