@@ -30,6 +30,12 @@ jobs:
       - name: Build
         run: npm run build
 
+      - name: Sync plugin bundle
+        run: npm run sync:plugin
+
+      - name: Verify native agents + plugin bundle
+        run: npm run verify:native-agents && npm run verify:plugin-bundle
+
       - name: Run tests
         run: npm run test:node
 
