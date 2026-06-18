@@ -2326,7 +2326,7 @@ export function mergeSharedMcpRegistryBlock(
 function getOmxTablesBlock(
   pkgRoot: string,
   includeTui = true,
-  statusLinePreset: HudPreset = DEFAULT_STATUS_LINE_PRESET,
+  statusLinePreset: HudPreset | undefined = undefined,
   codexHooksFile?: string,
   hookOptions: ManagedCodexHookOptions = {},
   includeFirstPartyMcp = false,
@@ -2375,7 +2375,7 @@ function getOmxTablesBlock(
   }
 
   lines.push(
-    ...(includeTui
+    ...(includeTui && statusLinePreset != null
       ? [
           "",
           "# OMX TUI StatusLine (Codex CLI v0.101.0+)",
