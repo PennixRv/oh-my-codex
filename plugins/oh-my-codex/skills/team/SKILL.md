@@ -178,7 +178,7 @@ Important:
 - Worker panes are independent full Codex/Claude CLI sessions
 - Workers may run in separate git worktrees (`omx team --worktree[=<name>]`) while sharing one team state root
 - Worker ACKs go to `mailbox/leader-fixed.json`
-- Notify hook updates worker heartbeat and sends lifecycle-driven leader nudges (for example resolved native worker Stop/all-idle or stale-leader evidence) during active team mode; deprecated worker stall/progress heuristics are not operator-facing guidance.
+- Leader receives async task-completion context via hook-specific output (non-blocking system reminders); no tmux send-keys injection is used.
 - Submit routing uses this CLI resolution order per worker trigger:
   1) explicit worker CLI provided by runtime state (persisted on worker identity/config),
   2) `OMX_TEAM_WORKER_CLI_MAP` entry for that worker index,
@@ -241,13 +241,11 @@ Minimum acceptable loop:
 sleep 30 && omx team status <team-name>
 ```
 
+## Team State Polling
+
 Repeat that check while the team stays active, or use `omx team await <team-name> --timeout-ms 30000 --json` when event-driven waiting is a better fit.
 
-If the leader gets a stale, lifecycle, or all-idle nudge, immediately run `omx team status <team-name>` before taking any manual intervention. Deprecated worker stall/progress nudges should not be treated as an active runtime contract.
-
-### Deprecated worker stall/progress knobs
-
-`OMX_TEAM_PROGRESS_STALL_MS` and `OMX_TEAM_WORKER_TURN_STALL_MS` are legacy compatibility/test-only names for the retired worker stall/progress nudge path. Do not recommend them as operator tuning knobs for active team runs; resolved native worker Stop, all-idle, mailbox, and stale-leader evidence are the supported leader wakeup signals.
+Leader notification is async and non-blocking: completed tasks and worker state changes appear as system-reminder context on the next PreToolUse hook. If you see an `[OMX team]` context block, run `omx team status <team-name>` and handle the result at the next natural pause.
 
 ## Message Dispatch Policy (CLI-first, state-first)
 

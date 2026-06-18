@@ -466,7 +466,11 @@ function getOmxTopLevelLines(
     ...(notifyCommand === false
       ? []
       : [`notify = ${formatTomlStringArray(notifyCommand)}`]),
-    'model_reasoning_effort = "medium"',
+    // Pennix fork: preserve user's existing reasoning effort; only set default
+    // when no explicit value was configured.
+    ...(rootValues.has("model_reasoning_effort")
+      ? []
+      : ['model_reasoning_effort = "medium"']),
     `developer_instructions = "${escapeTomlString(OMX_DEVELOPER_INSTRUCTIONS)}"`,
   ];
 

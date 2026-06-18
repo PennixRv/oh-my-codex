@@ -3807,6 +3807,11 @@ async function buildNotifyMergePlan(
 		return { notifyCommand: false };
 	}
 
+	// Pennix fork: notify hook is disabled by default.  All tmux send-keys
+	// leader injection has been removed via the central guard in sendPaneInput().
+	// Restore the block below to re-enable lifecycle notifications.
+	return { notifyCommand: false };
+	/*
 	const omxNotify = ["node", join(pkgRoot, "dist", "scripts", "notify-hook.js")];
 	const metadataPath = getNotifyMetadataPath(codexHomeDir);
 	const dispatcherNotify = [
@@ -3876,6 +3881,9 @@ async function buildNotifyMergePlan(
 	};
 }
 
+*/
+
+}
 async function updateManagedConfig(
 	configPath: string,
 	hooksPath: string,
@@ -3932,7 +3940,7 @@ async function updateManagedConfig(
 		sharedMcpRegistrySource: sharedMcpRegistry.sourcePath,
 		verbose: options.verbose,
 		statusLinePreset: options.statusLinePreset,
-		forceStatusLinePreset: options.forceStatusLinePreset,
+		forceStatusLinePreset: false, // Pennix fork: HUD disabled
 		notifyCommand: notifyPlan.notifyCommand,
 		includeFirstPartyMcp: mcpMode === "compat",
 		preserveExistingFirstPartyMcp,

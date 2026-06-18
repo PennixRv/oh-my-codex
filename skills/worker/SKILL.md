@@ -80,7 +80,7 @@ When notified, read messages and follow any instructions. Use short ACK replies 
 
 Note: leader dispatch is state-first. The durable queue lives at:
 `<team_state_root>/team/<teamName>/dispatch/requests.json`
-Hooks/watchers may nudge you after mailbox/inbox state is already written.
+Check your inbox and mailbox after each turn; state is written to files before any optional prompt trigger.
 
 Use CLI interop:
 - `omx team api mailbox-list --json` to read
@@ -99,7 +99,7 @@ Worker sessions should treat team state + CLI interop as the source of truth.
 
 - Prefer inbox/mailbox/task state and `omx team api ... --json` operations.
 - Do **not** rely on ad-hoc tmux keystrokes as a primary delivery channel.
-- If a manual trigger arrives (for example `tmux send-keys` nudge), treat it only as a prompt to re-check state and continue through the normal claim-safe lifecycle.
+- If a manual prompt trigger arrives, treat it only as a signal to re-check state and continue through the normal claim-safe lifecycle.
 
 
 ## Team Big Five / ATEM Coordination Gate
