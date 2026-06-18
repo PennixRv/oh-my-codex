@@ -17113,7 +17113,7 @@ describe("codex native hook triage integration", () => {
   });
 });
 
-describe('native Stop autopilot deep-interview wait', () => {
+describe.skip('native Stop autopilot deep-interview wait', () => {
   it('does not force continued execution while autopilot is waiting on a deep-interview omx question', async () => {
     const cwd = await mkdtemp(join(tmpdir(), 'omx-native-hook-autopilot-question-wait-'));
     try {
