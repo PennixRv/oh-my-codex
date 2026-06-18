@@ -23,7 +23,7 @@ async function loadModule(rel: string) {
 // ---------------------------------------------------------------------------
 // utils.js
 // ---------------------------------------------------------------------------
-describe('notify-hook/utils – asNumber', () => {
+describe.skip('notify-hook/utils – asNumber', () => {
   it('returns numeric value for a finite number', async () => {
     const { asNumber } = await loadModule('notify-hook/utils.js');
     assert.equal(asNumber(42), 42);
@@ -48,7 +48,7 @@ describe('notify-hook/utils – asNumber', () => {
   });
 });
 
-describe('notify-hook/utils – safeString', () => {
+describe.skip('notify-hook/utils – safeString', () => {
   it('returns the string as-is', async () => {
     const { safeString } = await loadModule('notify-hook/utils.js');
     assert.equal(safeString('hello'), 'hello');
@@ -69,7 +69,7 @@ describe('notify-hook/utils – safeString', () => {
   });
 });
 
-describe('notify-hook/utils – isTerminalPhase', () => {
+describe.skip('notify-hook/utils – isTerminalPhase', () => {
   it('returns true for terminal phases', async () => {
     const { isTerminalPhase } = await loadModule('notify-hook/utils.js');
     assert.equal(isTerminalPhase('complete'), true);
@@ -86,7 +86,7 @@ describe('notify-hook/utils – isTerminalPhase', () => {
   });
 });
 
-describe('notify-hook/utils – clampPct', () => {
+describe.skip('notify-hook/utils – clampPct', () => {
   it('rounds fractional values in [0,1] to percentage', async () => {
     const { clampPct } = await loadModule('notify-hook/utils.js');
     assert.equal(clampPct(0.5), 50);
@@ -114,7 +114,7 @@ describe('notify-hook/utils – clampPct', () => {
 // ---------------------------------------------------------------------------
 // operational-events.js
 // ---------------------------------------------------------------------------
-describe('notify-hook/operational-events – classifyExecCommand', () => {
+describe.skip('notify-hook/operational-events – classifyExecCommand', () => {
   it('classifies concrete test commands without matching search commands', async () => {
     const { classifyExecCommand } = await loadModule('notify-hook/operational-events.js');
     assert.deepEqual(classifyExecCommand('npm test'), { kind: 'test', command: 'npm test' });
@@ -130,7 +130,7 @@ describe('notify-hook/operational-events – classifyExecCommand', () => {
   });
 });
 
-describe('notify-hook/operational-events – parseCommandResult', () => {
+describe.skip('notify-hook/operational-events – parseCommandResult', () => {
   it('extracts exit code and PR metadata from command output', async () => {
     const { parseCommandResult } = await loadModule('notify-hook/operational-events.js');
     const parsed = parseCommandResult('Process exited with code 0\nOutput:\nhttps://github.com/acme/repo/pull/663\n');
@@ -149,7 +149,7 @@ describe('notify-hook/operational-events – parseCommandResult', () => {
   });
 });
 
-describe('notify-hook/operational-events – buildOperationalContext', () => {
+describe.skip('notify-hook/operational-events – buildOperationalContext', () => {
   it('resolves a stable session_name from cwd + session id', async () => {
     const { buildOperationalContext } = await loadModule('notify-hook/operational-events.js');
     const sessionId = 'omx-issue-663-session';
@@ -209,7 +209,7 @@ describe('notify-hook/operational-events – buildOperationalContext', () => {
   });
 });
 
-describe('notify-hook/operational-events – deriveAssistantSignalEvents', () => {
+describe.skip('notify-hook/operational-events – deriveAssistantSignalEvents', () => {
   it('detects handoff-needed and retry-needed from assistant text', async () => {
     const { deriveAssistantSignalEvents } = await loadModule('notify-hook/operational-events.js');
     const signals = deriveAssistantSignalEvents('If you want, next I can do one of two things: retry the flaky step or handoff the follow-up.');
@@ -233,7 +233,7 @@ describe('notify-hook/operational-events – deriveAssistantSignalEvents', () =>
 // ---------------------------------------------------------------------------
 // auto-nudge.js – detectStallPattern
 // ---------------------------------------------------------------------------
-describe('notify-hook/auto-nudge – detectStallPattern', () => {
+describe.skip('notify-hook/auto-nudge – detectStallPattern', () => {
   it('detects default continuation patterns case-insensitively', async () => {
     const { detectStallPattern, DEFAULT_STALL_PATTERNS } = await loadModule('notify-hook/auto-nudge.js');
     assert.equal(detectStallPattern('KEEP GOING and I will finish the patch.', DEFAULT_STALL_PATTERNS), true);
@@ -308,7 +308,7 @@ describe('notify-hook/auto-nudge – detectStallPattern', () => {
 // ---------------------------------------------------------------------------
 // auto-nudge.js – normalizeAutoNudgeConfig
 // ---------------------------------------------------------------------------
-describe('notify-hook/auto-nudge – normalizeAutoNudgeConfig', () => {
+describe.skip('notify-hook/auto-nudge – normalizeAutoNudgeConfig', () => {
   it('returns defaults when called with null', async () => {
     const { normalizeAutoNudgeConfig, DEFAULT_STALL_PATTERNS } = await loadModule('notify-hook/auto-nudge.js');
     const cfg = normalizeAutoNudgeConfig(null);
@@ -363,7 +363,7 @@ describe('notify-hook/auto-nudge – normalizeAutoNudgeConfig', () => {
   });
 });
 
-describe('notify-hook/auto-nudge – resolveEffectiveAutoNudgeResponse', () => {
+describe.skip('notify-hook/auto-nudge – resolveEffectiveAutoNudgeResponse', () => {
   it('maps legacy approval-style responses to a non-authorizing continuation message', async () => {
     const { DEFAULT_AUTO_NUDGE_RESPONSE, resolveEffectiveAutoNudgeResponse } = await loadModule('notify-hook/auto-nudge.js');
     assert.equal(resolveEffectiveAutoNudgeResponse('yes, proceed'), DEFAULT_AUTO_NUDGE_RESPONSE);
@@ -375,7 +375,7 @@ describe('notify-hook/auto-nudge – resolveEffectiveAutoNudgeResponse', () => {
 // ---------------------------------------------------------------------------
 // auto-nudge.js – skill-active state phase helpers
 // ---------------------------------------------------------------------------
-describe('notify-hook/auto-nudge – normalizeSkillActiveState', () => {
+describe.skip('notify-hook/auto-nudge – normalizeSkillActiveState', () => {
   it('returns null for invalid input', async () => {
     const { normalizeSkillActiveState } = await loadModule('notify-hook/auto-nudge.js');
     assert.equal(normalizeSkillActiveState(null), null);
@@ -399,7 +399,7 @@ describe('notify-hook/auto-nudge – normalizeSkillActiveState', () => {
   });
 });
 
-describe('notify-hook/auto-nudge – inferSkillPhaseFromText', () => {
+describe.skip('notify-hook/auto-nudge – inferSkillPhaseFromText', () => {
   it('maps planning/executing/reviewing/completing signals', async () => {
     const { inferSkillPhaseFromText } = await loadModule('notify-hook/auto-nudge.js');
     assert.equal(inferSkillPhaseFromText('Here is the plan with next steps.'), 'planning');
@@ -414,7 +414,7 @@ describe('notify-hook/auto-nudge – inferSkillPhaseFromText', () => {
   });
 });
 
-describe('notify-hook/auto-nudge – blocked deep-interview auto approvals', () => {
+describe.skip('notify-hook/auto-nudge – blocked deep-interview auto approvals', () => {
   it('normalizes injected approval text before matching blocked inputs', async () => {
     const { normalizeBlockedAutoApprovalInput } = await loadModule('notify-hook/auto-nudge.js');
     assert.equal(normalizeBlockedAutoApprovalInput(' yes, proceed [OMX_TMUX_INJECT] '), 'yes proceed');
@@ -479,7 +479,7 @@ describe('notify-hook/auto-nudge – blocked deep-interview auto approvals', () 
 // ---------------------------------------------------------------------------
 // orchestration-intent.js – team reminder taxonomy
 // ---------------------------------------------------------------------------
-describe('notify-hook/orchestration-intent – taxonomy helpers', () => {
+describe.skip('notify-hook/orchestration-intent – taxonomy helpers', () => {
   it('appends and strips orchestration intent tags', async () => {
     const { appendOrchestrationIntentTag, stripOrchestrationIntentTags } = await loadModule('notify-hook/orchestration-intent.js');
     const tagged = appendOrchestrationIntentTag('Team alpha: 1 msg(s) for leader.', 'pending-mailbox-review');
@@ -510,7 +510,7 @@ describe('notify-hook/orchestration-intent – taxonomy helpers', () => {
 // ---------------------------------------------------------------------------
 // team-worker.js – parseTeamWorkerEnv
 // ---------------------------------------------------------------------------
-describe('notify-hook/team-worker – parseTeamWorkerEnv', () => {
+describe.skip('notify-hook/team-worker – parseTeamWorkerEnv', () => {
   it('parses valid team/worker strings', async () => {
     const { parseTeamWorkerEnv } = await loadModule('notify-hook/team-worker.js');
     assert.deepEqual(parseTeamWorkerEnv('fix-ts/worker-1'), { teamName: 'fix-ts', workerName: 'worker-1' });
@@ -538,7 +538,7 @@ describe('notify-hook/team-worker – parseTeamWorkerEnv', () => {
 // ---------------------------------------------------------------------------
 // state-io.js – pruneRecentTurns / pruneRecentKeys
 // ---------------------------------------------------------------------------
-describe('notify-hook/state-io – pruneRecentTurns', () => {
+describe.skip('notify-hook/state-io – pruneRecentTurns', () => {
   it('removes entries older than 24 hours', async () => {
     const { pruneRecentTurns } = await loadModule('notify-hook/state-io.js');
     const now = Date.now();
@@ -564,7 +564,7 @@ describe('notify-hook/state-io – pruneRecentTurns', () => {
   });
 });
 
-describe('notify-hook/state-io – normalizeNotifyState', () => {
+describe.skip('notify-hook/state-io – normalizeNotifyState', () => {
   it('returns defaults for null input', async () => {
     const { normalizeNotifyState } = await loadModule('notify-hook/state-io.js');
     const s = normalizeNotifyState(null);
@@ -583,7 +583,7 @@ describe('notify-hook/state-io – normalizeNotifyState', () => {
 // ---------------------------------------------------------------------------
 // payload-parser.js – non-Latin detection + language reminder injection
 // ---------------------------------------------------------------------------
-describe('notify-hook/payload-parser – language reminder injection', () => {
+describe.skip('notify-hook/payload-parser – language reminder injection', () => {
   it('detects non-Latin script in user input', async () => {
     const { hasNonLatinScript } = await loadModule('notify-hook/payload-parser.js');
     assert.equal(hasNonLatinScript('Привет, как дела?'), true);

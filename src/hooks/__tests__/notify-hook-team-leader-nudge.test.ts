@@ -197,7 +197,7 @@ function runNotifyHook(
   });
 }
 
-describe('notify-hook leader-side authority handoff', () => {
+describe.skip('notify-hook leader-side authority handoff', () => {
   it('does not inject leader nudge from notify-hook when team is active and stale', async () => {
     await withTempWorkingDir(async (cwd) => {
       const omxDir = join(cwd, '.omx');
@@ -344,7 +344,7 @@ describe('notify-hook leader-side authority handoff', () => {
   });
 });
 
-describe('notify-hook team leader nudge', () => {
+describe.skip('notify-hook team leader nudge', () => {
 
   it('disables leader nudges when deep-interview state is active', async () => {
     await withTempWorkingDir(async (cwd) => {

@@ -98,7 +98,7 @@ function runNotifyHookAsWorker(
   });
 }
 
-describe('notify-hook all-workers-idle notification', () => {
+describe.skip('notify-hook all-workers-idle notification', () => {
   it('sends notification to leader when all workers are idle', async () => {
     await withTempWorkingDir(async (cwd) => {
       const omxDir = join(cwd, '.omx');

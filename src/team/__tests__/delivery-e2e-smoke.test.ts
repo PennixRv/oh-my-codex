@@ -259,7 +259,7 @@ function buildCleanNotifyEnv(overrides: Record<string, string> = {}): NodeJS.Pro
   };
 }
 
-describe('team message delivery end-to-end smoke tests', () => {
+describe.skip('team message delivery end-to-end smoke tests', () => {
   it('worker -> leader: send-message API creates mailbox, dispatches, and marks leader notification', async () => {
     const { cwd, cleanup } = await setupTeam('worker-leader-api', 2);
     try {

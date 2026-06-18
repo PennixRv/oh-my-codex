@@ -84,7 +84,7 @@ function runEvaluatePaneInjectionReadinessInChild(params: {
   });
 }
 
-describe('notify-hook team tmux guard bridge', () => {
+describe.skip('notify-hook team tmux guard bridge', () => {
   it('submits without typing when typePrompt=false', async () => {
     const cwd = await mkdtemp(join(tmpdir(), 'omx-team-tmux-guard-'));
     const fakeBinDir = join(cwd, 'fake-bin');

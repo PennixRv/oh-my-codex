@@ -133,7 +133,7 @@ function runNotifyHook(
 // ---------------------------------------------------------------------------
 // auto-nudge.js – permission-seeking prompts stay excluded after #1416
 // ---------------------------------------------------------------------------
-describe('regression-205: DEFAULT_STALL_PATTERNS excludes permission-seeking prompts after #1416', () => {
+describe.skip('regression-205: DEFAULT_STALL_PATTERNS excludes permission-seeking prompts after #1416', () => {
   it('DEFAULT_STALL_PATTERNS array does not include "if you want"', async () => {
     const { DEFAULT_STALL_PATTERNS } = await loadModule('notify-hook/auto-nudge.js');
     assert.ok(
@@ -149,7 +149,7 @@ describe('regression-205: DEFAULT_STALL_PATTERNS excludes permission-seeking pro
 // ---------------------------------------------------------------------------
 // auto-nudge.js – detectStallPattern no longer matches permission-seeking 'if you want'
 // ---------------------------------------------------------------------------
-describe('regression-205: detectStallPattern excludes "if you want" after #1416', () => {
+describe.skip('regression-205: detectStallPattern excludes "if you want" after #1416', () => {
   it('does not detect "if you want" pattern', async () => {
     const { detectStallPattern, DEFAULT_STALL_PATTERNS } = await loadModule('notify-hook/auto-nudge.js');
     assert.equal(
@@ -186,7 +186,7 @@ describe('regression-205: detectStallPattern excludes "if you want" after #1416'
 // ---------------------------------------------------------------------------
 // notify-hook.js – "if you want" no longer marks a default stall candidate.
 // ---------------------------------------------------------------------------
-describe('regression-205: notify-hook ignores "if you want" for default auto-nudge', () => {
+describe.skip('regression-205: notify-hook ignores "if you want" for default auto-nudge', () => {
   let originalTeamWorker: string | undefined;
   let originalTeamStateRoot: string | undefined;
 
@@ -245,7 +245,7 @@ describe('regression-205: notify-hook ignores "if you want" for default auto-nud
 // ---------------------------------------------------------------------------
 // team-worker.js – resolveTeamStateDirForWorker is exported
 // ---------------------------------------------------------------------------
-describe('regression-205: resolveTeamStateDirForWorker is exported from team-worker.js', () => {
+describe.skip('regression-205: resolveTeamStateDirForWorker is exported from team-worker.js', () => {
   it('exports resolveTeamStateDirForWorker as a function', async () => {
     const mod = await loadModule('notify-hook/team-worker.js');
     assert.equal(

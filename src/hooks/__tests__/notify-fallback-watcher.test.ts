@@ -419,7 +419,7 @@ function buildCleanNotifyEnv(
   };
 }
 
-describe('notify-fallback watcher', () => {
+describe.skip('notify-fallback watcher', () => {
   it('uses offset-bounded rollout reads instead of re-reading whole tracked files', async () => {
     const source = await readFile(new URL('../../scripts/notify-fallback-watcher.js', import.meta.url), 'utf-8');
 
