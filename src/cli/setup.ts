@@ -3939,7 +3939,7 @@ async function updateManagedConfig(
 		sharedMcpServers: sharedMcpRegistry.servers,
 		sharedMcpRegistrySource: sharedMcpRegistry.sourcePath,
 		verbose: options.verbose,
-		statusLinePreset: options.statusLinePreset,
+		statusLinePreset: undefined, // Pennix fork: HUD disabled
 		forceStatusLinePreset: false, // Pennix fork: HUD disabled
 		notifyCommand: notifyPlan.notifyCommand,
 		includeFirstPartyMcp: mcpMode === "compat",
