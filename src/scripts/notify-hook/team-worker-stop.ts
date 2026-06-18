@@ -361,10 +361,6 @@ export async function maybeNudgeLeaderForAllowedWorkerStop({
     + `Run \`omx team status ${teamName}\`, read worker messages/results, then assign next task, reconcile completion, or shut down. `
     + DEFAULT_MARKER;
 
-    if (process.env.OMX_TEAM_NO_INJECT) {
-      await logTmuxHookEvent(logsDir, { ...baseLog, event: 'injection_skipped', reason: 'no_inject_env' });
-      return { ok: true, result: 'deferred_no_inject' };
-    }
     const leaderHasActiveTask = paneHasActiveTask(paneGuard.paneCapture);
     const sendResult = await sendPaneInput({
       paneTarget: tmuxTarget,

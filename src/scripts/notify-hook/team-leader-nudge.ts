@@ -974,14 +974,6 @@ export async function maybeNudgeTeamLeader({
     }
 
     try {
-      if (process.env.OMX_TEAM_NO_INJECT) {
-        nudgeState.last_nudged_by_team[teamName] = {
-          at: nowIso, last_message_id: newestId || prevMsgId || '', reason: nudgeReason,
-          orchestration_intent: orchestrationIntent,
-        };
-        await logTmuxHookEvent(logsDir, { timestamp: nowIso, type: 'team_leader_nudge', team: teamName, reason: nudgeReason, delivery: 'deferred_no_inject' });
-        continue;
-      }
       const leaderHasActiveTask = paneHasActiveTask(paneGuard.paneCapture);
       let deliveryMode = 'sent';
       if (leaderHasActiveTask) {
