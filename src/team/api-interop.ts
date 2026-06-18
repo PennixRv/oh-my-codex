@@ -847,8 +847,8 @@ export async function executeTeamApiOperation(
       case 'transition-task-status': {
         const teamName = String(opArgs.team_name || '').trim();
         const taskId = String(opArgs.task_id || '').trim();
-        const from = String(opArgs.from || '').trim();
-        const to = String(opArgs.to || '').trim();
+        const from = String(opArgs.from || opArgs.from_status || '').trim();
+        const to = String(opArgs.to || opArgs.to_status || '').trim();
         const claimToken = String(opArgs.claim_token || '').trim();
         const transitionResult = opArgs.result;
         const transitionError = opArgs.error;
