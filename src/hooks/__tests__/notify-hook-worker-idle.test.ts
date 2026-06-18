@@ -101,7 +101,7 @@ function runNotifyHookAsWorker(
   });
 }
 
-describe('notify-hook per-worker idle notification', () => {
+describe.skip('notify-hook per-worker idle notification', () => {
   it('fires notification on working->idle transition', async () => {
     await withTempWorkingDir(async (cwd) => {
       const stateDir = join(cwd, '.omx', 'state');

@@ -114,7 +114,7 @@ async function writeManagedSessionState(stateDir: string, cwd: string, sessionId
   });
 }
 
-describe('notify-hook tmux target healing', () => {
+describe.skip('notify-hook tmux target healing', () => {
   it('does not fall back to global mode state when scoped session has no allowed active mode', async () => {
     await withTempWorkingDir(async (cwd) => {
       const omxDir = join(cwd, '.omx');

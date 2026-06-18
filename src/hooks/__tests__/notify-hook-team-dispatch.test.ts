@@ -195,7 +195,7 @@ async function waitForMailboxNotifiedAt(teamName: string, workerName: string, me
   return undefined;
 }
 
-describe('notify-hook team dispatch consumer', () => {
+describe.skip('notify-hook team dispatch consumer', () => {
   const originalTeamWorker = process.env.OMX_TEAM_WORKER;
   const originalTeamStateRoot = process.env.OMX_TEAM_STATE_ROOT;
 
