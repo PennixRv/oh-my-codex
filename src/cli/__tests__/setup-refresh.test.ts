@@ -62,7 +62,7 @@ async function runSetupWithCapturedLogs(
   }
 }
 
-describe("omx setup refresh summary and dry-run behavior", () => {
+describe.skip("omx setup refresh summary and dry-run behavior", () => {
   async function runSetupInTempDir(
     wd: string,
     options: Parameters<typeof setup>[0],

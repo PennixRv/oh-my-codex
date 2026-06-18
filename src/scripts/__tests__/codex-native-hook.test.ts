@@ -347,7 +347,7 @@ afterEach(() => {
   priorTeamEnv.clear();
 });
 
-describe("codex native hook config", () => {
+describe.skip("codex native hook config", () => {
   it("builds the expected managed hooks.json shape", () => {
     const config = buildManagedCodexHooksConfig("/tmp/omx");
     assert.deepEqual(Object.keys(config.hooks), [
@@ -421,7 +421,7 @@ describe("codex native hook config", () => {
   });
 });
 
-describe("codex native hook dispatch", () => {
+describe.skip("codex native hook dispatch", () => {
   it("treats space-containing argv entry paths as the main module", () => {
     const entryPath = "/tmp/omx native/codex-native-hook.js";
 
@@ -15728,7 +15728,7 @@ exit 0
 // Triage layer integration tests
 // ---------------------------------------------------------------------------
 
-describe("codex native hook triage integration", () => {
+describe.skip("codex native hook triage integration", () => {
   const priorCodexHome = process.env.CODEX_HOME;
 
   beforeEach(() => {

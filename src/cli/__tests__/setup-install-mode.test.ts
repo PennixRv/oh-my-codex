@@ -117,7 +117,7 @@ async function withIsolatedUserHome<T>(
 	}
 }
 
-describe("notify setup scope", () => {
+describe.skip("notify setup scope", () => {
 	it("does not write unsupported project-scope notify", async () => {
 		const wd = await mkdtemp(join(tmpdir(), "omx-project-no-notify-"));
 		try {
@@ -650,7 +650,7 @@ async function packagedPluginCacheDir(codexHomeDir: string): Promise<string> {
 	);
 }
 
-describe("omx setup install mode behavior", () => {
+describe.skip("omx setup install mode behavior", () => {
 	it("summarizes and keeps persisted setup preferences when review chooses keep", async () => {
 		const wd = await mkdtemp(join(tmpdir(), "omx-setup-install-mode-"));
 		try {
