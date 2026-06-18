@@ -3896,7 +3896,7 @@ async function updateManagedConfig(
 	summary: SetupCategorySummary,
 	backupContext: SetupBackupContext,
 	options: Pick<SetupOptions, "dryRun" | "verbose" | "modelUpgradePrompt"> & {
-		statusLinePreset?: HudPreset;
+		statusLinePreset?: HudPreset | null;
 		forceStatusLinePreset?: boolean;
 		codexHookFeatureFlag: CodexHookFeatureFlag;
 	},
@@ -3939,7 +3939,7 @@ async function updateManagedConfig(
 		sharedMcpServers: sharedMcpRegistry.servers,
 		sharedMcpRegistrySource: sharedMcpRegistry.sourcePath,
 		verbose: options.verbose,
-		statusLinePreset: undefined, // Pennix fork: HUD disabled
+		statusLinePreset: null, // Pennix fork: HUD disabled
 		forceStatusLinePreset: false, // Pennix fork: HUD disabled
 		notifyCommand: notifyPlan.notifyCommand,
 		includeFirstPartyMcp: mcpMode === "compat",

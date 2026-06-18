@@ -47,7 +47,7 @@ interface MergeOptions {
   sharedMcpServers?: UnifiedMcpRegistryServer[];
   sharedMcpRegistrySource?: string;
   verbose?: boolean;
-  statusLinePreset?: HudPreset;
+  statusLinePreset?: HudPreset | null;
   forceStatusLinePreset?: boolean;
   notifyCommand?: string[] | false;
   includeFirstPartyMcp?: boolean;
@@ -2326,7 +2326,7 @@ export function mergeSharedMcpRegistryBlock(
 function getOmxTablesBlock(
   pkgRoot: string,
   includeTui = true,
-  statusLinePreset: HudPreset | undefined = undefined,
+  statusLinePreset: HudPreset | null = null,
   codexHooksFile?: string,
   hookOptions: ManagedCodexHookOptions = {},
   includeFirstPartyMcp = false,
@@ -2419,8 +2419,7 @@ export function buildMergedConfig(
       ? extractFirstPartyOmxMcpSections(existing)
       : "";
   const includeTui = options.includeTui !== false;
-  const statusLinePreset =
-    options.statusLinePreset ?? DEFAULT_STATUS_LINE_PRESET;
+  const statusLinePreset = options.statusLinePreset ?? null;
   const customizedManagedTuiSections =
     extractCustomizedTuiSectionsFromOmxBlocks(existing);
 
@@ -2469,7 +2468,7 @@ export function buildMergedConfig(
   existing = upsertEnvSettings(existing);
   existing = upsertAgentsSettings(existing);
   const tuiUpsert = includeTui
-    ? upsertTuiStatusLine(existing, statusLinePreset, {
+    ? upsertTuiStatusLine(existing, statusLinePreset ?? undefined, {
         forceStatusLinePreset: options.forceStatusLinePreset,
       })
     : { cleaned: existing, hadExistingTui: false };
