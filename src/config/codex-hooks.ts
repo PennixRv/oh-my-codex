@@ -675,21 +675,10 @@ export function mergeManagedCodexHooksConfig(
     ...existingRootState,
   };
 
-  const managedTrustState = hooksPath
-    ? buildManagedCodexHookTrustState(hooksPath, pkgRoot, resolvedOptions)
-    : {};
-  for (const [key, hookState] of Object.entries(managedTrustState)) {
-    const existingHookState = isPlainObject(nextState[key])
-      ? nextState[key]
-      : {};
-    nextState[key] = {
-      ...existingHookState,
-      trusted_hash: hookState.trusted_hash,
-    };
-  }
-  if (Object.keys(nextState).length > 0) {
-    nextRoot.state = nextState;
-  } else if (isPlainObject(nextRoot.state)) {
+  // Pennix fork: trust state belongs in config.toml [hooks.state], not hooks.json
+  // Codex rejects hooks.json with top-level "state" key.
+  // Remove any misplaced state from hooks.json.
+  if (isPlainObject(nextRoot.state)) {
     delete nextRoot.state;
   }
 

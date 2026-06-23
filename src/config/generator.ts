@@ -741,6 +741,7 @@ function upsertFeatureFlags(
       "child_agents_md = true",
       hookFeatureFlagLine,
       "goals = true",
+      "suppress_unstable_features_warning = true",
       "",
     ].join("\n");
     if (base.length === 0) {
@@ -798,15 +799,24 @@ function upsertFeatureFlags(
   ));
 
   let goalsIdx = -1;
+  let suppressIdx = -1;
   for (let i = featuresStart + 1; i < sectionEnd; i++) {
     if (/^\s*goals\s*=/.test(lines[i])) {
       goalsIdx = i;
+    } else if (/^\s*suppress_unstable_features_warning\s*=/.test(lines[i])) {
+      suppressIdx = i;
     }
   }
   if (goalsIdx >= 0) {
     lines[goalsIdx] = "goals = true";
   } else {
     lines.splice(sectionEnd, 0, "goals = true");
+    sectionEnd += 1;
+  }
+  if (suppressIdx >= 0) {
+    lines[suppressIdx] = "suppress_unstable_features_warning = true";
+  } else {
+    lines.splice(sectionEnd, 0, "suppress_unstable_features_warning = true");
   }
 
   return lines.join("\n");
