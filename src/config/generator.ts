@@ -470,12 +470,10 @@ function getOmxTopLevelLines(
     ...(rootValues.has("model_reasoning_effort")
       ? []
       : []),
-    `developer_instructions = "${escapeTomlString(OMX_DEVELOPER_INSTRUCTIONS)}"`,
+    // Pennix fork: never override developer_instructions
   ];
 
   const existingModel = rootValues.get("model");
-  const existingContextWindow = rootValues.get("model_context_window");
-  const existingAutoCompact = rootValues.get("model_auto_compact_token_limit");
   const selectedModel =
     modelOverride ?? unwrapTomlString(existingModel) ?? DEFAULT_SETUP_MODEL;
 
@@ -483,24 +481,8 @@ function getOmxTopLevelLines(
     lines.push(`model = "${selectedModel}"`);
   }
 
-  if (selectedModel === DEFAULT_SETUP_MODEL) {
-    const seededBehavioralDefaults: string[] = [];
-    if (!existingContextWindow) {
-      seededBehavioralDefaults.push(
-        `model_context_window = ${DEFAULT_SETUP_MODEL_CONTEXT_WINDOW}`,
-      );
-    }
-    if (!existingAutoCompact) {
-      seededBehavioralDefaults.push(
-        `model_auto_compact_token_limit = ${DEFAULT_SETUP_MODEL_AUTO_COMPACT_TOKEN_LIMIT}`,
-      );
-    }
-    if (seededBehavioralDefaults.length > 0) {
-      lines.push(OMX_SEEDED_BEHAVIORAL_DEFAULTS_START_MARKER);
-      lines.push(...seededBehavioralDefaults);
-      lines.push(OMX_SEEDED_BEHAVIORAL_DEFAULTS_END_MARKER);
-    }
-  }
+  // Pennix fork: never write model_context_window or model_auto_compact_token_limit
+  // Users should configure these themselves if needed
 
   return lines;
 }
