@@ -3,6 +3,9 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
+import {
+  OMX_DISPLAY_NAME,
+} from '../utils/package.js';
 
 export interface Contributor {
   displayName: string;
@@ -182,7 +185,7 @@ function replaceTitle(markdown: string, currentTag: string): string {
   if (!/^#\s+/m.test(markdown)) {
     throw new Error('release body template is missing a top-level title');
   }
-  return markdown.replace(/^#\s+.*$/m, `# oh-my-codex ${currentTag}`);
+  return markdown.replace(/^#\s+.*$/m, `# ${OMX_DISPLAY_NAME} ${currentTag}`);
 }
 
 function findSectionEnd(lines: string[], startIndex: number): number {
@@ -241,7 +244,7 @@ export async function getGitHubCompareContributors(
     headers: {
       Accept: 'application/vnd.github+json',
       Authorization: `Bearer ${githubToken}`,
-      'User-Agent': 'oh-my-codex-release-body-generator',
+      'User-Agent': `${OMX_DISPLAY_NAME}-release-body-generator`,
       'X-GitHub-Api-Version': '2022-11-28',
     },
   });

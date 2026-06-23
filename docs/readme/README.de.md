@@ -1,16 +1,16 @@
-# oh-my-codex (OMX)
+# Pennix OMX
 
 <p align="center">
-  <img src="https://yeachan-heo.github.io/oh-my-codex-website/omx-character-nobg.png" alt="oh-my-codex character" width="280">
+  <img src="../shared/omx-character-spark-initiative.jpg" alt="oh-my-codex character" width="280">
   <br>
   <em>Dein Codex ist nicht allein.</em>
 </p>
 
-[![npm version](https://img.shields.io/npm/v/oh-my-codex)](https://www.npmjs.com/package/oh-my-codex)
+[![npm version](https://img.shields.io/npm/v/oh-my-codex-pennix)](https://www.npmjs.com/package/oh-my-codex-pennix)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Node.js](https://img.shields.io/badge/node-%3E%3D20-brightgreen)](https://nodejs.org)
 
-> **[Website](https://yeachan-heo.github.io/oh-my-codex-website/)** | **[Documentation](https://yeachan-heo.github.io/oh-my-codex-website/docs.html)** | **[CLI Reference](https://yeachan-heo.github.io/oh-my-codex-website/docs.html#cli-reference)** | **[Workflows](https://yeachan-heo.github.io/oh-my-codex-website/docs.html#workflows)** | **[OpenClaw-Integrationsleitfaden](../openclaw-integration.de.md)** | **[GitHub](https://github.com/Yeachan-Heo/oh-my-codex)** | **[npm](https://www.npmjs.com/package/oh-my-codex)**
+> **[Website](https://github.com/PennixRv/oh-my-codex)** | **[Documentation](../index.html)** | **[CLI Reference](../index.html#cli-reference)** | **[Workflows](../index.html#workflows)** | **[OpenClaw-Integrationsleitfaden](../openclaw-integration.de.md)** | **[GitHub](https://github.com/PennixRv/oh-my-codex)** | **[npm](https://www.npmjs.com/package/oh-my-codex-pennix)**
 
 Multi-Agenten-Orchestrierungsschicht für [OpenAI Codex CLI](https://github.com/openai/codex).
 
@@ -231,7 +231,7 @@ oh-my-codex/
 ## Entwicklung
 
 ```bash
-git clone https://github.com/Yeachan-Heo/oh-my-codex.git
+git clone https://github.com/PennixRv/oh-my-codex.git
 cd oh-my-codex
 npm install
 npm run build
@@ -240,11 +240,11 @@ npm test
 
 ## Dokumentation
 
-- **[Vollständige Dokumentation](https://yeachan-heo.github.io/oh-my-codex-website/docs.html)** — Kompletter Leitfaden
-- **[CLI-Referenz](https://yeachan-heo.github.io/oh-my-codex-website/docs.html#cli-reference)** — Alle `omx`-Befehle, Flags und Tools
-- **[Benachrichtigungs-Leitfaden](https://yeachan-heo.github.io/oh-my-codex-website/docs.html#notifications)** — Discord, Telegram, Slack und Webhook-Einrichtung
-- **[Empfohlene Workflows](https://yeachan-heo.github.io/oh-my-codex-website/docs.html#workflows)** — Praxiserprobte Skill-Ketten für häufige Aufgaben
-- **[Versionshinweise](https://yeachan-heo.github.io/oh-my-codex-website/docs.html#release-notes)** — Neuheiten in jeder Version
+- **[Vollständige Dokumentation](../index.html)** — Kompletter Leitfaden
+- **[CLI-Referenz](../index.html#cli-reference)** — Alle `omx`-Befehle, Flags und Tools
+- **[Benachrichtigungs-Leitfaden](../index.html#notifications)** — Discord, Telegram, Slack und Webhook-Einrichtung
+- **[Empfohlene Workflows](../index.html#workflows)** — Praxiserprobte Skill-Ketten für häufige Aufgaben
+- **[Versionshinweise](../index.html#release-notes)** — Neuheiten in jeder Version
 
 ## Hinweise
 

@@ -579,7 +579,7 @@ exit 7
         await writeFile(commandPath, '@echo off\r\nfor /L %%i in (1,1,1100000) do <nul set /p=x\r\n', 'utf-8');
       } else {
         await writeFile(commandPath, `#!/bin/sh
-head -c 1100000 /dev/zero | tr '\0' x
+head -c 1100000 /dev/zero | tr '\\0' x
 `, 'utf-8');
         await chmod(commandPath, 0o755);
       }
@@ -1003,7 +1003,7 @@ process.stdin.on('end', () => {
     const combinedDocs = await Promise.all(docsToCheck.map((docPath) => readFile(join(root, docPath), 'utf-8')));
     const combined = combinedDocs.join('\n');
     assert.match(combined, /plugins\/cache\/\$MARKETPLACE_NAME\/oh-my-codex\/\$VERSION\//);
-    assert.match(combined, /not a replacement for `npm install -g oh-my-codex` plus `omx setup`/);
+    assert.match(combined, /not a replacement for `npm install -g oh-my-codex-pennix` plus `omx setup`/);
     assert.match(combined, /legacy setup mode installs native agents(?:\/| and )prompts|plugin setup mode archives stale legacy prompt\/native-agent files/);
     assert.match(combined, /plugin-scoped companion metadata for official Codex lifecycle hooks/i);
     assert.match(combined, /legacy\/fallback native Codex hook registrations|legacy setup mode installs prompts\/native agents and \.codex\/hooks\.json/i);

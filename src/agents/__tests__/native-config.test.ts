@@ -12,6 +12,7 @@ import {
   generateAgentToml,
   installNativeAgentConfigs,
 } from "../native-config.js";
+import { OMX_DISPLAY_NAME } from "../../utils/package.js";
 
 function manifestWithAgents(names: string[]): CatalogManifest {
   return {
@@ -90,7 +91,7 @@ describe("agents/native-config", () => {
     const prompt = `---\ntitle: demo\n---\n\nInstruction line\n\"\"\"danger\"\"\"`;
     const toml = generateAgentToml(agent, prompt);
 
-    assert.match(toml, /# oh-my-codex agent: executor/);
+    assert.match(toml, new RegExp(`# ${OMX_DISPLAY_NAME} agent: executor`));
     assert.match(toml, /model = "gpt-5\.5"/);
     assert.match(toml, /model_reasoning_effort = "medium"/);
     assert.ok(!toml.includes("title: demo"));

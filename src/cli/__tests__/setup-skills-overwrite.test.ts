@@ -39,7 +39,7 @@ describe('omx setup skills overwrite behavior', () => {
 
       assert.ok(
         (await readFile(installedSetupSkill, 'utf-8')).includes(
-          'description: "[OMX] Setup and configure oh-my-codex using current CLI behavior"',
+          'description: "[OMX] Setup and configure Pennix OMX using current CLI behavior"',
         ),
       );
       assert.ok(
@@ -269,7 +269,7 @@ describe('omx setup skills overwrite behavior', () => {
 
       const installedSetupSkill = join(wd, '.codex', 'skills', 'omx-setup', 'SKILL.md');
       const content = await readFile(installedSetupSkill, 'utf-8');
-      const matches = content.match(/\[OMX\] Setup and configure oh-my-codex using current CLI behavior/g) ?? [];
+      const matches = content.match(/\[OMX\] Setup and configure Pennix OMX using current CLI behavior/g) ?? [];
       assert.equal(matches.length, 1);
       assert.doesNotMatch(content, /\[OMX\] \[OMX\]/);
     } finally {

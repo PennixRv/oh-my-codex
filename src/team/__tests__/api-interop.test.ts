@@ -2256,14 +2256,27 @@ describe('executeTeamApiOperation: cleanup', () => {
 
 describe('executeTeamApiOperation: orphan-cleanup', () => {
   it('uses destructive orphan cleanup explicitly', async () => {
-    const { cwd } = await setupTeam('cleanup-orphan');
-    const result = await executeTeamApiOperation('orphan-cleanup', {
-      team_name: 'cleanup-orphan',
-    }, cwd);
-    assert.equal(result.ok, true);
-    if (result.ok) {
-      assert.equal(result.data.team_name, 'cleanup-orphan');
-      assert.equal(result.data.cleanup_mode, 'orphan_cleanup');
+    const { cwd, cleanup } = await setupTeam('cleanup-orphan');
+    try {
+      const runtimeTeamRoot = join(cwd, '.omx', 'team', 'cleanup-orphan');
+      const workerWorktree = join(runtimeTeamRoot, 'worktrees', 'worker-1');
+      await mkdir(join(workerWorktree, '.git'), { recursive: true });
+      await writeFile(join(runtimeTeamRoot, 'scratch.txt'), 'runtime artifact', 'utf8');
+
+      const result = await executeTeamApiOperation('orphan-cleanup', {
+        team_name: 'cleanup-orphan',
+      }, cwd);
+      assert.equal(result.ok, true);
+      if (result.ok) {
+        assert.equal(result.data.team_name, 'cleanup-orphan');
+        assert.equal(result.data.cleanup_mode, 'orphan_cleanup');
+      }
+
+      const stateRoot = join(cwd, '.omx', 'state', 'team', 'cleanup-orphan');
+      await assert.rejects(readFile(stateRoot, 'utf8'));
+      await assert.rejects(readFile(runtimeTeamRoot, 'utf8'));
+    } finally {
+      await cleanup();
     }
   });
 

@@ -1795,8 +1795,8 @@ describe.skip("resolveCliInvocation", () => {
 
   it("advertises the explicit update command in top-level help", () => {
     assert.match(HELP, /omx update\s+Install the stable channel now, then refresh setup/);
-    assert.match(HELP, /omx update --stable\s+Install\/rollback to npm stable \(oh-my-codex@latest\), then refresh setup/);
-    assert.match(HELP, /omx update --dev\s+Install the upstream dev branch, then refresh setup/);
+    assert.match(HELP, /omx update --stable\s+Install\/rollback to npm stable \(oh-my-codex-pennix@latest\), then refresh setup/);
+    assert.match(HELP, /omx update --dev\s+Install the fork dev branch, then refresh setup/);
   });
 
   it("advertises concise launch policy controls in top-level help", () => {

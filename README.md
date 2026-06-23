@@ -1,17 +1,17 @@
-# oh-my-codex (OMX)
+# Pennix OMX
 
 <p align="center">
-  <img src="https://yeachan-heo.github.io/oh-my-codex-website/omx-character-nobg.png" alt="oh-my-codex character" width="280">
+  <img src="docs/shared/omx-character-spark-initiative.jpg" alt="oh-my-codex character" width="280">
   <br>
   <em>Start Codex stronger, then let OMX add better prompts, workflows, and runtime help when the work grows.</em>
 </p>
 
-[![npm version](https://img.shields.io/npm/v/oh-my-codex)](https://www.npmjs.com/package/oh-my-codex)
+[![npm version](https://img.shields.io/npm/v/oh-my-codex-pennix)](https://www.npmjs.com/package/oh-my-codex-pennix)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Node.js](https://img.shields.io/badge/node-%3E%3D20-brightgreen)](https://nodejs.org)
 [![Discord](https://img.shields.io/discord/1452487457085063218?color=5865F2&logo=discord&logoColor=white&label=Discord)](https://discord.gg/sj4exxQ9v)
 
-**Website:** https://yeachan-heo.github.io/oh-my-codex-website/
+**Repository:** https://github.com/PennixRv/oh-my-codex
 
 **Docs:** [Getting Started](./docs/getting-started.html) · [Agents](./docs/agents.html) · [Skills](./docs/skills.html) · [Integrations](./docs/integrations.html) · [Demo](./DEMO.md) · [OpenClaw guide](./docs/openclaw-integration.md)
 
@@ -19,9 +19,9 @@
 
 ## Official project and package
 
-The official/original OMX project is this repository, [`Yeachan-Heo/oh-my-codex`](https://github.com/Yeachan-Heo/oh-my-codex), and the official npm package for this project is [`oh-my-codex`](https://www.npmjs.com/package/oh-my-codex). Install this project with `npm install -g oh-my-codex` (or alongside Codex CLI as shown below).
+The Pennix fork of OMX is this repository, [`PennixRv/oh-my-codex`](https://github.com/PennixRv/oh-my-codex), and this fork's npm package is [`oh-my-codex-pennix`](https://www.npmjs.com/package/oh-my-codex-pennix). Install this project with `npm install -g oh-my-codex-pennix` (or alongside Codex CLI as shown below).
 
-Third-party projects or forks that use names such as “OMX v2” are not official continuations, replacements, or release lines for this repository unless this README or the docs explicitly say so. When in doubt, trust this repository and the `oh-my-codex` package as the official install target.
+Third-party projects or forks that use names such as “OMX v2” are not official continuations, replacements, or release lines for this repository unless this README or the docs explicitly say so. When in doubt, trust this repository and the `oh-my-codex-pennix` package as the official install target for this fork.
 
 OMX is a workflow layer for [OpenAI Codex CLI](https://github.com/openai/codex).
 
@@ -69,7 +69,7 @@ Choose one install path. If Codex CLI is already installed (Homebrew, npm, or an
 
 ```bash
 codex --version
-npm install -g oh-my-codex
+npm install -g oh-my-codex-pennix
 omx setup
 # from the git project you want Codex to edit; choose a task-specific name
 omx --worktree=feat/task --madmax --high
@@ -79,17 +79,17 @@ If you do not have Codex CLI yet and want npm to manage it:
 
 ```bash
 npm install -g @openai/codex
-npm install -g oh-my-codex
+npm install -g oh-my-codex-pennix
 omx setup
 ```
 
-Do not run a combined `npm install -g @openai/codex oh-my-codex` over an existing Homebrew-owned `codex` binary such as `/opt/homebrew/bin/codex`; npm may fail with `EEXIST` when `@openai/codex` tries to create the same binary. OMX only needs a working, authenticated `codex` command on `PATH`; it does not require Codex to be installed through npm.
+Do not run a combined `npm install -g @openai/codex oh-my-codex-pennix` over an existing Homebrew-owned `codex` binary such as `/opt/homebrew/bin/codex`; npm may fail with `EEXIST` when `@openai/codex` tries to create the same binary. OMX only needs a working, authenticated `codex` command on `PATH`; it does not require Codex to be installed through npm.
 
-On a real `oh-my-codex` version bump, the global npm install now prints an explicit reminder instead of launching `omx setup` automatically. When you're ready, run `omx setup` manually or use `omx update` to check npm and then run the same setup refresh path.
+On a real `oh-my-codex-pennix` version bump, the global npm install now prints an explicit reminder instead of launching `omx setup` automatically. When you're ready, run `omx setup` manually or use `omx update` to check npm and then run the same setup refresh path.
 
 OMX also checks for npm updates at launch on a throttled cadence and prompts before scheduling the update after the current session exits. Set `OMX_AUTO_UPDATE=0` to disable the launch-time check, or set `OMX_AUTO_UPDATE=defer` to schedule the same deferred update without prompting.
 
-**Codex plugin install note:** this repo also ships an official Codex plugin layout at `plugins/oh-my-codex` with marketplace metadata in `.agents/plugins/marketplace.json`. That plugin bundles the mirrored skill surface plus plugin-scoped companion metadata for official Codex lifecycle hooks, optional MCP compatibility servers, and apps. It is still **not** a replacement for `npm install -g oh-my-codex` plus `omx setup`: plugin-scoped hooks launch the installed `omx` CLI, legacy setup mode installs native agents and prompts, and plugin setup mode relies on plugin discovery for bundled skills while archiving/removing legacy OMX-managed prompts/native-agent TOMLs so stale role files cannot shadow plugin behavior. Plugin mode still needs a persistent scope `AGENTS.md` (`~/.codex/AGENTS.md` for user setup or `./AGENTS.md` for project setup) as the durable orchestration guidance layer; session-scoped AGENTS files only compose that durable guidance with runtime overlays and are not a replacement.
+**Codex plugin install note:** this repo also ships a Codex plugin layout at the internal compatibility path `plugins/oh-my-codex` with marketplace metadata in `.agents/plugins/marketplace.json`. That plugin bundles the mirrored skill surface plus plugin-scoped companion metadata for official Codex lifecycle hooks, optional MCP compatibility servers, and apps. It is still **not** a replacement for `npm install -g oh-my-codex-pennix` plus `omx setup`: plugin-scoped hooks launch the installed `omx` CLI, legacy setup mode installs native agents and prompts, and plugin setup mode relies on plugin discovery for bundled skills while archiving/removing legacy OMX-managed prompts/native-agent TOMLs so stale role files cannot shadow plugin behavior. Plugin mode still needs a persistent scope `AGENTS.md` (`~/.codex/AGENTS.md` for user setup or `./AGENTS.md` for project setup) as the durable orchestration guidance layer; session-scoped AGENTS files only compose that durable guidance with runtime overlays and are not a replacement.
 
 Then work normally inside Codex:
 
@@ -247,7 +247,7 @@ Most users should think of OMX as **better task routing + better workflow + bett
 
 ## Start here if you are new
 
-1. If Codex CLI already exists, verify it with `codex --version` and install or update OMX with `npm install -g oh-my-codex`; otherwise install `@openai/codex` separately first if you want npm to manage Codex
+1. If Codex CLI already exists, verify it with `codex --version` and install or update OMX with `npm install -g oh-my-codex-pennix`; otherwise install `@openai/codex` separately first if you want npm to manage Codex
 2. After install or real OMX version bumps, run `omx setup` yourself when you're ready, or use `omx update` when you also want npm to check for and install the latest build before refreshing setup
 3. Run `omx doctor`
 4. Run a real execution smoke test: `codex login status` and `omx exec --skip-git-repo-check -C . "Reply with exactly OMX-EXEC-OK"`
@@ -313,7 +313,7 @@ These are operator/support surfaces:
 - `omx hud --watch` is a monitoring/status surface, not the primary user workflow
 
 For non-team sessions, native Codex hooks are now the canonical lifecycle surface:
-- `plugins/oh-my-codex/hooks/hooks.json` = official plugin-scoped hook registrations for plugin installs
+- `plugins/oh-my-codex/hooks/hooks.json` = plugin-scoped hook registrations for plugin installs
 - `.codex/hooks.json` = legacy/fallback native Codex hook registrations preserved for legacy installs and older Codex versions
 - `.omx/hooks/*.mjs` = OMX plugin hooks
 - `omx tmux-hook` / notify-hook / derived watcher = tmux + runtime fallback paths
@@ -438,7 +438,7 @@ If this happens, try:
 
 ## Star History
 
-[![Star History Chart](https://api.star-history.com/svg?repos=Yeachan-Heo/oh-my-codex&type=date&legend=top-left)](https://www.star-history.com/#Yeachan-Heo/oh-my-codex&type=date&legend=top-left)
+[![Star History Chart](https://api.star-history.com/svg?repos=PennixRv/oh-my-codex&type=date&legend=top-left)](https://www.star-history.com/#PennixRv/oh-my-codex&type=date&legend=top-left)
 
 ## License
 

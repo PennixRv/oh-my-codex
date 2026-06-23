@@ -643,9 +643,6 @@ export function mergeManagedCodexHooksConfig(
 
   const nextRoot = parsed ? cloneJson(parsed.root) : {};
   const nextHooks = parsed ? cloneJson(parsed.hooks) : {};
-  const misplacedHookState = isPlainObject(nextHooks.state)
-    ? cloneJson(nextHooks.state)
-    : {};
   delete nextHooks.state;
 
   for (const eventName of MANAGED_HOOK_EVENTS) {
@@ -666,14 +663,6 @@ export function mergeManagedCodexHooksConfig(
       ...managedConfig.hooks[eventName].map((entry) => cloneJson(entry)),
     ];
   }
-
-  const existingRootState = isPlainObject(nextRoot.state)
-    ? cloneJson(nextRoot.state)
-    : {};
-  const nextState = {
-    ...misplacedHookState,
-    ...existingRootState,
-  };
 
   // Pennix fork: trust state belongs in config.toml [hooks.state], not hooks.json
   // Codex rejects hooks.json with top-level "state" key.

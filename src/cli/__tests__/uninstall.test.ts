@@ -858,7 +858,7 @@ describe('omx uninstall', () => {
           + 'IF BLOCKED, TRY AN ALTERNATIVE APPROACH. ONLY ASK WHEN TRULY AMBIGUOUS OR DESTRUCTIVE.\n'
           + '<!-- END AUTONOMY DIRECTIVE -->\n'
           + '<!-- omx:generated:agents-md -->\n'
-          + '# oh-my-codex - Intelligent Multi-Agent Orchestration\n',
+          + '# Pennix OMX - Intelligent Multi-Agent Orchestration\n',
       );
 
       const res = runOmx(wd, ['uninstall', '--keep-config'], { HOME: home });

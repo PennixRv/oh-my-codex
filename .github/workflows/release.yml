@@ -60,11 +60,15 @@ jobs:
 
       - name: Prepare release notes
         run: |
-          VERSION="${GITHUB_REF_NAME#v}"
           if [ -s RELEASE_BODY.md ]; then
-            echo "Using committed RELEASE_BODY.md"
-            cp RELEASE_BODY.md release-notes.md
+            echo "Generating release notes from RELEASE_BODY.md template"
+            node dist/scripts/generate-release-body.js \
+              --template RELEASE_BODY.md \
+              --out release-notes.md \
+              --current-tag "$GITHUB_REF_NAME" \
+              --repo "$GITHUB_REPOSITORY"
           else
+            VERSION="${GITHUB_REF_NAME#v}"
             echo "Falling back to minimal release notes"
             echo "## oh-my-codex-pennix v${VERSION}" > release-notes.md
             echo "" >> release-notes.md
@@ -73,8 +77,8 @@ jobs:
             echo "npm install -g oh-my-codex-pennix@${VERSION}" >> release-notes.md
             echo '```' >> release-notes.md
             echo "" >> release-notes.md
-            echo "### Upstream" >> release-notes.md
-            echo "Forked from [Yeachan-Heo/oh-my-codex](https://github.com/Yeachan-Heo/oh-my-codex)." >> release-notes.md
+            echo "### Provenance" >> release-notes.md
+            echo "Forked from upstream source [Yeachan-Heo/oh-my-codex](https://github.com/Yeachan-Heo/oh-my-codex)." >> release-notes.md
           fi
 
       - name: Create GitHub Release

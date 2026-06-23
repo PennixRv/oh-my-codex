@@ -161,6 +161,20 @@ function withMockPromptModeCodexAllowed<T>(fn: () => T): T {
   }
 }
 
+async function initGitRepo(cwd: string): Promise<void> {
+  execFileSync('git', ['init'], { cwd, stdio: 'ignore' });
+  execFileSync('git', ['config', 'user.email', 'test@example.com'], { cwd, stdio: 'ignore' });
+  execFileSync('git', ['config', 'user.name', 'Test User'], { cwd, stdio: 'ignore' });
+  await writeFile(join(cwd, 'README.md'), 'fixture\n', 'utf-8');
+  execFileSync('git', ['add', 'README.md'], { cwd, stdio: 'ignore' });
+  execFileSync('git', ['commit', '-m', 'init'], { cwd, stdio: 'ignore' });
+}
+
+function commitAll(cwd: string, message: string): void {
+  execFileSync('git', ['add', '-A'], { cwd, stdio: 'ignore' });
+  execFileSync('git', ['commit', '-m', message], { cwd, stdio: 'ignore' });
+}
+
 async function runNodeCli(
   args: string[],
   options: {
@@ -3251,6 +3265,8 @@ process.on('SIGTERM', () => process.exit(0));
     let runtimeTeamName: string | null = null;
     try {
       process.chdir(wd);
+      await initGitRepo(wd);
+      commitAll(wd, 'seed team reasoning fixture');
       process.env.PATH = `${binDir}:${previousPath ?? ''}`;
       delete process.env.CODEX_HOME;
       delete process.env.TMUX;
@@ -3379,6 +3395,8 @@ process.on('SIGTERM', () => process.exit(0));
 
     try {
       process.chdir(wd);
+      await initGitRepo(wd);
+      commitAll(wd, 'seed prompt dead worker fixture');
       process.env.PATH = `${binDir}:${previousPath ?? ''}`;
       delete process.env.TMUX;
       process.env.OMX_TEAM_WORKER_LAUNCH_MODE = 'prompt';
@@ -3458,6 +3476,8 @@ process.on('SIGTERM', () => process.exit(0));
 
     try {
       process.chdir(wd);
+      await initGitRepo(wd);
+      commitAll(wd, 'seed team mode state fixture');
       process.env.PATH = `${binDir}:${previousPath ?? ''}`;
       delete process.env.TMUX;
       process.env.OMX_TEAM_WORKER_LAUNCH_MODE = 'prompt';
@@ -3521,6 +3541,8 @@ process.on('SIGTERM', () => process.exit(0));
 
     try {
       process.chdir(wd);
+      await initGitRepo(wd);
+      commitAll(wd, 'seed terminal team mode fixture');
       process.env.PATH = `${binDir}:${previousPath ?? ''}`;
       delete process.env.TMUX;
       process.env.OMX_TEAM_WORKER_LAUNCH_MODE = 'prompt';

@@ -7,6 +7,7 @@ import { tmpdir } from 'node:os';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { agentsInit } from '../agents-init.js';
+import { OMX_AGENTS_CONTRACT_HEADING } from '../../utils/agents-md.js';
 
 function runOmx(
   cwd: string,
@@ -78,8 +79,14 @@ describe('omx agents-init', () => {
 
       assert.match(rootAgents, /OMX:AGENTS-INIT:MANAGED/);
       assert.match(rootAgents, /<!-- AUTONOMY DIRECTIVE — DO NOT REMOVE -->/);
-      assert.match(rootAgents, /<!-- END AUTONOMY DIRECTIVE -->\n\n# oh-my-codex - Intelligent Multi-Agent Orchestration/);
-      assert.match(rootAgents, /# oh-my-codex - Intelligent Multi-Agent Orchestration/);
+      assert.match(
+        rootAgents,
+        new RegExp(`<!-- END AUTONOMY DIRECTIVE -->\\n\\n${OMX_AGENTS_CONTRACT_HEADING.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`),
+      );
+      assert.match(
+        rootAgents,
+        new RegExp(OMX_AGENTS_CONTRACT_HEADING.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')),
+      );
       assert.match(rootAgents, /\.\/\.codex/);
       assert.match(srcAgents, /<!-- Parent: ..\/AGENTS\.md -->/);
       assert.match(srcAgents, /`index\.ts`/);

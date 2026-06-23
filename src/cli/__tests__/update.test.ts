@@ -22,7 +22,8 @@ import {
   writeUserInstallStamp,
 } from '../update.js';
 
-const PACKAGE_NAME = 'oh-my-codex';
+const PACKAGE_NAME = 'oh-my-codex-pennix';
+const DEV_INSTALL_SOURCE = 'github:PennixRv/oh-my-codex#dev';
 
 describe('isNewerVersion', () => {
   it('returns true when latest has higher major', () => {
@@ -453,7 +454,7 @@ describe('maybeCheckAndPromptUpdate', () => {
             installed_version: '0.18.10',
             setup_completed_version: '0.18.10',
             install_channel: 'dev',
-            install_source: 'github:Yeachan-Heo/oh-my-codex#dev',
+            install_source: 'github:PennixRv/oh-my-codex#dev',
             install_revision: '8214377e3c1d',
             dev_base_version: '0.18.11',
             updated_at: '2026-06-09T20:21:24.070Z',
@@ -491,7 +492,7 @@ describe('maybeCheckAndPromptUpdate', () => {
         installed_version: '0.18.10',
         setup_completed_version: '0.18.10',
         install_channel: 'dev',
-        install_source: 'github:Yeachan-Heo/oh-my-codex#dev',
+        install_source: 'github:PennixRv/oh-my-codex#dev',
         install_revision: '8214377e3c1d',
         updated_at: '2026-06-09T20:21:24.070Z',
       }, null, 2));
@@ -539,7 +540,7 @@ describe('maybeCheckAndPromptUpdate', () => {
             installed_version: '0.18.12',
             setup_completed_version: '0.18.12',
             install_channel: 'dev',
-            install_source: 'github:Yeachan-Heo/oh-my-codex#dev',
+            install_source: 'github:PennixRv/oh-my-codex#dev',
             install_revision: '8214377e3c1d',
             dev_base_version: '0.18.11',
             updated_at: '2026-06-09T20:21:24.070Z',
@@ -615,8 +616,8 @@ describe('direct npm spawn fallback', () => {
 
     assert.equal(result.ok, true);
     assert.deepEqual(calls.map((call) => call.command), ['npm', 'npm.cmd']);
-    assert.deepEqual(calls[0].args, ['install', '-g', 'oh-my-codex@latest']);
-    assert.deepEqual(calls[1].args, ['install', '-g', 'oh-my-codex@latest']);
+    assert.deepEqual(calls[0].args, ['install', '-g', `${PACKAGE_NAME}@latest`]);
+    assert.deepEqual(calls[1].args, ['install', '-g', `${PACKAGE_NAME}@latest`]);
   });
 
   it('does not fall back to npm.cmd for non-Windows ENOENT failures', () => {
@@ -644,7 +645,7 @@ describe('direct npm spawn fallback', () => {
 
     try {
       const result = runGlobalUpdate(
-        'github:Yeachan-Heo/oh-my-codex#dev',
+        DEV_INSTALL_SOURCE,
         ((command: string, args: readonly string[], options?: { cwd?: string; env?: NodeJS.ProcessEnv }) => {
           calls.push({ command, args: args as string[], cwd: options?.cwd, env: options?.env });
           if (command === 'git' && args[0] === 'clone') {
@@ -674,7 +675,7 @@ describe('direct npm spawn fallback', () => {
       const dependencyInstall = calls.find((call) => call.command === 'npm' && call.args[0] === 'install' && call.args.includes('--include=dev'));
       assert.equal(dependencyInstall?.env?.npm_config_global, 'false');
       assert.equal(dependencyInstall?.env?.npm_config_location, 'project');
-      assert.equal(calls.some((call) => call.args.includes('github:Yeachan-Heo/oh-my-codex#dev')), false);
+      assert.equal(calls.some((call) => call.args.includes(DEV_INSTALL_SOURCE)), false);
     } finally {
       if (typeof originalNpmLocation === 'string') {
         process.env.npm_config_location = originalNpmLocation;
@@ -754,8 +755,8 @@ describe('runImmediateUpdate', () => {
       assert.equal(setupCalls, 1);
       assert.deepEqual(refreshCwds, [cwd]);
       assert.match(logs.join('\n'), /Selected update channel: stable/);
-      assert.match(logs.join('\n'), /Install source: oh-my-codex@latest/);
-      assert.match(logs.join('\n'), /Running: npm install -g oh-my-codex@latest/);
+      assert.match(logs.join('\n'), new RegExp(`Install source: ${PACKAGE_NAME}@latest`));
+      assert.match(logs.join('\n'), new RegExp(`Running: npm install -g ${PACKAGE_NAME}@latest`));
       assert.match(logs.join('\n'), /Updated stable channel to v0\.14\.1/);
 
       const stamp = JSON.parse(await readFile(stampPath, 'utf-8')) as {
@@ -822,7 +823,7 @@ describe('runImmediateUpdate', () => {
       assert.equal(refreshCalls, 1);
       assert.deepEqual(installSources, [`${PACKAGE_NAME}@latest`]);
       assert.match(logs.join('\n'), /Selected update channel: stable/);
-      assert.match(logs.join('\n'), /Running: npm install -g oh-my-codex@latest/);
+      assert.match(logs.join('\n'), new RegExp(`Running: npm install -g ${PACKAGE_NAME}@latest`));
     } finally {
       console.log = originalLog;
       if (typeof originalCodexHome === 'string') {
@@ -890,7 +891,7 @@ describe('runImmediateUpdate', () => {
       assert.deepEqual(installSources, [`${PACKAGE_NAME}@latest`]);
       assert.equal(refreshCalls, 1);
       assert.match(logs.join('\n'), /Selected update channel: stable/);
-      assert.match(logs.join('\n'), /Install source: oh-my-codex@latest/);
+      assert.match(logs.join('\n'), new RegExp(`Install source: ${PACKAGE_NAME}@latest`));
 
       const stamp = JSON.parse(await readFile(stampPath, 'utf-8')) as {
         installed_version: string;
@@ -912,7 +913,7 @@ describe('runImmediateUpdate', () => {
     }
   });
 
-  it('installs the upstream dev branch without implying npm latest', async () => {
+  it('installs the fork dev branch without implying npm latest', async () => {
     const cwd = await mkdtemp(join(tmpdir(), 'omx-update-now-dev-'));
     const stampPath = join(cwd, '.codex', '.omx', 'install-state.json');
     const originalCodexHome = process.env.CODEX_HOME;
@@ -949,11 +950,11 @@ describe('runImmediateUpdate', () => {
       assert.equal(result.status, 'updated');
       assert.equal(latestCalls, 1);
       assert.equal(refreshCalls, 1);
-      assert.deepEqual(installSources, ['github:Yeachan-Heo/oh-my-codex#dev']);
+      assert.deepEqual(installSources, [DEV_INSTALL_SOURCE]);
       assert.match(logs.join('\n'), /Selected update channel: dev/);
-      assert.match(logs.join('\n'), /Install source: github:Yeachan-Heo\/oh-my-codex#dev/);
+      assert.match(logs.join('\n'), /Install source: github:PennixRv\/oh-my-codex#dev/);
       assert.match(logs.join('\n'), /Running: clone dev branch, run prepack, then npm install -g the packed tarball/);
-      assert.doesNotMatch(logs.join('\n'), /dev.*oh-my-codex@latest/i);
+      assert.doesNotMatch(logs.join('\n'), new RegExp(`dev.*${PACKAGE_NAME}@latest`, 'i'));
 
       const stamp = JSON.parse(await readFile(stampPath, 'utf-8')) as {
         installed_version: string;
@@ -966,7 +967,7 @@ describe('runImmediateUpdate', () => {
       assert.equal(stamp.installed_version, '0.15.0');
       assert.equal(stamp.setup_completed_version, '0.15.0');
       assert.equal(stamp.install_channel, 'dev');
-      assert.equal(stamp.install_source, 'github:Yeachan-Heo/oh-my-codex#dev');
+      assert.equal(stamp.install_source, DEV_INSTALL_SOURCE);
       assert.equal(stamp.install_revision, '1234567890ab');
       assert.equal(stamp.dev_base_version, '0.15.0');
     } finally {
@@ -1130,9 +1131,9 @@ describe('runImmediateUpdate failure diagnostics', () => {
 
       assert.equal(result.status, 'failed');
       assert.equal(refreshCalls, 0);
-      assert.match(logs.join('\n'), /Update failed while running npm install -g oh-my-codex@latest/);
+      assert.match(logs.join('\n'), new RegExp(`Update failed while running npm install -g ${PACKAGE_NAME}@latest`));
       assert.match(logs.join('\n'), /npm stderr: EPERM: file is locked/);
-      assert.match(logs.join('\n'), /npm install -g oh-my-codex@latest && omx setup/);
+      assert.match(logs.join('\n'), new RegExp(`npm install -g ${PACKAGE_NAME}@latest && omx setup`));
     } finally {
       console.log = originalLog;
       await rm(cwd, { recursive: true, force: true });
@@ -1177,7 +1178,7 @@ describe('runDeferredGlobalUpdate', () => {
       assert.equal((calls[0].options.env as NodeJS.ProcessEnv | undefined)?.OMX_DEFERRED_UPDATE_PARENT_PID, '12345');
       assert.equal((calls[0].options.env as NodeJS.ProcessEnv | undefined)?.OMX_DEFERRED_UPDATE_LOG, result.logPath);
       assert.match(calls[0].args[4], /Get-Process -Id \$parentPid/);
-      assert.match(calls[0].args[4], /npm install -g oh-my-codex@latest/);
+      assert.match(calls[0].args[4], new RegExp(`npm install -g ${PACKAGE_NAME}@latest`));
       assert.match(calls[0].args[4], /& 'omx' 'setup'/);
     } finally {
       await rm(cwd, { recursive: true, force: true });

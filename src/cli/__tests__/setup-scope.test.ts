@@ -55,7 +55,7 @@ function shouldSkipForSpawnPermissions(err: string): boolean {
 
 const MINIMAL_OMX_AGENTS_CONTRACT = [
   "<!-- omx:generated:agents-md -->",
-  "# oh-my-codex - Intelligent Multi-Agent Orchestration",
+  "# Pennix OMX - Intelligent Multi-Agent Orchestration",
   "AGENTS.md is the top-level operating contract for the workspace.",
   "",
 ].join("\n");
@@ -509,7 +509,7 @@ describe("omx setup scope behavior", () => {
       assert.match(overwritten, /^<!-- AUTONOMY DIRECTIVE — DO NOT REMOVE -->/);
       assert.match(
         overwritten,
-        /# oh-my-codex - Intelligent Multi-Agent Orchestration/,
+        /# Pennix OMX - Intelligent Multi-Agent Orchestration/,
       );
       assert.doesNotMatch(overwritten, /# old custom file/);
       assert.match(

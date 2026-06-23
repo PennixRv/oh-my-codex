@@ -17,7 +17,9 @@ import {
   generateTaskAssignmentInbox,
   generateShutdownInbox,
   generateTriggerMessage,
+  generateStartupTriggerMessage,
   buildTriggerDirective,
+  buildStartupTriggerDirective,
   generateMailboxTriggerMessage,
   buildMailboxTriggerDirective,
   generateLeaderMailboxTriggerMessage,
@@ -990,8 +992,32 @@ describe("worker bootstrap", () => {
     assert.doesNotMatch(directive.text, /OMX_INTENT/);
   });
 
+  it("buildStartupTriggerDirective uses a startup-only orchestration intent", () => {
+    const directive = buildStartupTriggerDirective("worker-9", "team-path");
+    assert.equal(directive.intent, "startup-trigger");
+    assert.match(directive.text, /\.omx\/state\/team\/team-path\/workers\/worker-9\/inbox\.md/);
+    assert.doesNotMatch(directive.text, /OMX_INTENT/);
+  });
+
   it("generateTriggerMessage uses provided state-root reference for worktree workers", () => {
     const message = generateTriggerMessage(
+      "worker-9",
+      "team-path",
+      "$OMX_TEAM_STATE_ROOT",
+    );
+    assert.match(
+      message,
+      /\$OMX_TEAM_STATE_ROOT\/team\/team-path\/workers\/worker-9\/inbox\.md/,
+    );
+    assert.match(message, /work now/i);
+    assert.match(message, /report progress/i);
+    assert.match(message, /continue assigned work/i);
+    assert.match(message, /next feasible task/i);
+    assert.ok(message.length < 200);
+  });
+
+  it("generateStartupTriggerMessage uses provided state-root reference for worktree workers", () => {
+    const message = generateStartupTriggerMessage(
       "worker-9",
       "team-path",
       "$OMX_TEAM_STATE_ROOT",

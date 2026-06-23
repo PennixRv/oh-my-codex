@@ -1,4 +1,4 @@
-# Contributing to oh-my-codex
+# Contributing to oh-my-codex-pennix
 
 Thanks for contributing.
 

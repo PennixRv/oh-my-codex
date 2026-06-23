@@ -1,17 +1,17 @@
-# oh-my-codex (OMX)
+# Pennix OMX
 
 <p align="center">
-  <img src="https://yeachan-heo.github.io/oh-my-codex-website/omx-character-nobg.png" alt="oh-my-codex character" width="280">
+  <img src="../shared/omx-character-spark-initiative.jpg" alt="oh-my-codex character" width="280">
   <br>
   <em>你的 codex 并不孤单。</em>
 </p>
 
-[![npm version](https://img.shields.io/npm/v/oh-my-codex)](https://www.npmjs.com/package/oh-my-codex)
+[![npm version](https://img.shields.io/npm/v/oh-my-codex-pennix)](https://www.npmjs.com/package/oh-my-codex-pennix)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Node.js](https://img.shields.io/badge/node-%3E%3D20-brightgreen)](https://nodejs.org)
 [![Discord](https://img.shields.io/discord/1452487457085063218?color=5865F2&logo=discord&logoColor=white&label=Discord)](https://discord.gg/sj4exxQ9v)
 
-> **[Website](https://yeachan-heo.github.io/oh-my-codex-website/)** | **[Documentation](https://yeachan-heo.github.io/oh-my-codex-website/docs.html)** | **[CLI Reference](https://yeachan-heo.github.io/oh-my-codex-website/docs.html#cli-reference)** | **[Workflows](https://yeachan-heo.github.io/oh-my-codex-website/docs.html#workflows)** | **[OpenClaw 集成指南](../openclaw-integration.zh.md)** | **[GitHub](https://github.com/Yeachan-Heo/oh-my-codex)** | **[npm](https://www.npmjs.com/package/oh-my-codex)**
+> **[Website](https://github.com/PennixRv/oh-my-codex)** | **[Documentation](../index.html)** | **[CLI Reference](../index.html#cli-reference)** | **[Workflows](../index.html#workflows)** | **[OpenClaw 集成指南](../openclaw-integration.zh.md)** | **[GitHub](https://github.com/PennixRv/oh-my-codex)** | **[npm](https://www.npmjs.com/package/oh-my-codex-pennix)**
 
 [OpenAI Codex CLI](https://github.com/openai/codex) 的多智能体编排层。
 
@@ -232,7 +232,7 @@ oh-my-codex/
 ## 开发
 
 ```bash
-git clone https://github.com/Yeachan-Heo/oh-my-codex.git
+git clone https://github.com/PennixRv/oh-my-codex.git
 cd oh-my-codex
 npm install
 npm run build
@@ -241,11 +241,11 @@ npm test
 
 ## 文档
 
-- **[完整文档](https://yeachan-heo.github.io/oh-my-codex-website/docs.html)** — 完整指南
-- **[CLI 参考](https://yeachan-heo.github.io/oh-my-codex-website/docs.html#cli-reference)** — 所有 `omx` 命令、标志和工具
-- **[通知指南](https://yeachan-heo.github.io/oh-my-codex-website/docs.html#notifications)** — Discord、Telegram、Slack 和 webhook 设置
-- **[推荐工作流](https://yeachan-heo.github.io/oh-my-codex-website/docs.html#workflows)** — 用于常见任务的经过实战检验的 skill 链
-- **[发行说明](https://yeachan-heo.github.io/oh-my-codex-website/docs.html#release-notes)** — 每个版本的新功能
+- **[完整文档](../index.html)** — 完整指南
+- **[CLI 参考](../index.html#cli-reference)** — 所有 `omx` 命令、标志和工具
+- **[通知指南](../index.html#notifications)** — Discord、Telegram、Slack 和 webhook 设置
+- **[推荐工作流](../index.html#workflows)** — 用于常见任务的经过实战检验的 skill 链
+- **[发行说明](../index.html#release-notes)** — 每个版本的新功能
 
 ## 备注
 

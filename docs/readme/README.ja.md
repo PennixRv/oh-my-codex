@@ -1,17 +1,17 @@
-# oh-my-codex (OMX)
+# Pennix OMX
 
 <p align="center">
-  <img src="https://yeachan-heo.github.io/oh-my-codex-website/omx-character-nobg.png" alt="oh-my-codex character" width="280">
+  <img src="../shared/omx-character-spark-initiative.jpg" alt="oh-my-codex character" width="280">
   <br>
   <em>あなたのcodexは一人じゃない。</em>
 </p>
 
-[![npm version](https://img.shields.io/npm/v/oh-my-codex)](https://www.npmjs.com/package/oh-my-codex)
+[![npm version](https://img.shields.io/npm/v/oh-my-codex-pennix)](https://www.npmjs.com/package/oh-my-codex-pennix)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Node.js](https://img.shields.io/badge/node-%3E%3D20-brightgreen)](https://nodejs.org)
 [![Discord](https://img.shields.io/discord/1452487457085063218?color=5865F2&logo=discord&logoColor=white&label=Discord)](https://discord.gg/sj4exxQ9v)
 
-> **[Website](https://yeachan-heo.github.io/oh-my-codex-website/)** | **[Documentation](https://yeachan-heo.github.io/oh-my-codex-website/docs.html)** | **[CLI Reference](https://yeachan-heo.github.io/oh-my-codex-website/docs.html#cli-reference)** | **[Workflows](https://yeachan-heo.github.io/oh-my-codex-website/docs.html#workflows)** | **[OpenClaw 統合ガイド](../openclaw-integration.ja.md)** | **[GitHub](https://github.com/Yeachan-Heo/oh-my-codex)** | **[npm](https://www.npmjs.com/package/oh-my-codex)**
+> **[Website](https://github.com/PennixRv/oh-my-codex)** | **[Documentation](../index.html)** | **[CLI Reference](../index.html#cli-reference)** | **[Workflows](../index.html#workflows)** | **[OpenClaw 統合ガイド](../openclaw-integration.ja.md)** | **[GitHub](https://github.com/PennixRv/oh-my-codex)** | **[npm](https://www.npmjs.com/package/oh-my-codex-pennix)**
 
 [OpenAI Codex CLI](https://github.com/openai/codex)のためのマルチエージェントオーケストレーションレイヤー。
 
@@ -232,7 +232,7 @@ oh-my-codex/
 ## 開発
 
 ```bash
-git clone https://github.com/Yeachan-Heo/oh-my-codex.git
+git clone https://github.com/PennixRv/oh-my-codex.git
 cd oh-my-codex
 npm install
 npm run build
@@ -241,11 +241,11 @@ npm test
 
 ## ドキュメント
 
-- **[完全なドキュメント](https://yeachan-heo.github.io/oh-my-codex-website/docs.html)** — 完全ガイド
-- **[CLIリファレンス](https://yeachan-heo.github.io/oh-my-codex-website/docs.html#cli-reference)** — すべての`omx`コマンド、フラグ、ツール
-- **[通知ガイド](https://yeachan-heo.github.io/oh-my-codex-website/docs.html#notifications)** — Discord、Telegram、Slack、webhookの設定
-- **[推奨ワークフロー](https://yeachan-heo.github.io/oh-my-codex-website/docs.html#workflows)** — 一般的なタスクのための実戦で検証されたスキルチェーン
-- **[リリースノート](https://yeachan-heo.github.io/oh-my-codex-website/docs.html#release-notes)** — 各バージョンの新機能
+- **[完全なドキュメント](../index.html)** — 完全ガイド
+- **[CLIリファレンス](../index.html#cli-reference)** — すべての`omx`コマンド、フラグ、ツール
+- **[通知ガイド](../index.html#notifications)** — Discord、Telegram、Slack、webhookの設定
+- **[推奨ワークフロー](../index.html#workflows)** — 一般的なタスクのための実戦で検証されたスキルチェーン
+- **[リリースノート](../index.html#release-notes)** — 各バージョンの新機能
 
 ## 備考
 

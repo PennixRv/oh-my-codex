@@ -7,6 +7,7 @@ import { tmpdir } from 'node:os';
 import { setup } from '../setup.js';
 import {
   addGeneratedAgentsMarker,
+  OMX_AGENTS_CONTRACT_HEADING,
   OMX_MANAGED_AGENTS_END_MARKER,
   OMX_MANAGED_AGENTS_START_MARKER,
 } from '../../utils/agents-md.js';
@@ -46,6 +47,10 @@ function normalizeDarwinTmpPath(value: string): string {
 
 function countOccurrences(value: string, needle: string): number {
   return value.split(needle).length - 1;
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 async function runSetupWithCapturedLogs(
@@ -119,7 +124,7 @@ describe('omx setup AGENTS refresh behavior', () => {
     const restoreTty = setMockTty(true);
     const home = join(wd, 'home');
     const restoreHome = setMockHome(home);
-    const existing = '# oh-my-codex - Intelligent Multi-Agent Orchestration\n\nUser-owned guidance.\n';
+    const existing = `${OMX_AGENTS_CONTRACT_HEADING}\n\nUser-owned guidance.\n`;
     try {
       await mkdir(join(wd, '.omx', 'state'), { recursive: true });
       await writeFile(join(wd, 'AGENTS.md'), existing);
@@ -135,7 +140,7 @@ describe('omx setup AGENTS refresh behavior', () => {
       assert.match(normalizeDarwinTmpPath(output), new RegExp(`Backed up existing AGENTS\\.md to ${normalizeDarwinTmpPath(backupPath).replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&')}\\.`));
       assert.match(output, /agents_md: updated=1, unchanged=0, backed_up=1, skipped=0, removed=0/);
       assert.match(agentsContent, /^<!-- AUTONOMY DIRECTIVE — DO NOT REMOVE -->/);
-      assert.match(agentsContent, /# oh-my-codex - Intelligent Multi-Agent Orchestration/);
+      assert.match(agentsContent, new RegExp(escapeRegExp(OMX_AGENTS_CONTRACT_HEADING)));
       assert.doesNotMatch(agentsContent, /User-owned guidance\./);
       assert.equal(existsSync(backupPath), true);
       assert.equal(existsSync(join(wd, '.omx', 'backups', 'setup')), false);
@@ -281,7 +286,7 @@ describe('omx setup AGENTS refresh behavior', () => {
     const restoreTty = setMockTty(false);
     const home = join(wd, 'home');
     const restoreHome = setMockHome(home);
-    const existing = '# oh-my-codex - Intelligent Multi-Agent Orchestration\n\nUser-owned guidance.\n';
+    const existing = `${OMX_AGENTS_CONTRACT_HEADING}\n\nUser-owned guidance.\n`;
     try {
       await mkdir(join(wd, '.omx', 'state'), { recursive: true });
       await writeFile(join(wd, 'AGENTS.md'), existing);
@@ -316,7 +321,7 @@ describe('omx setup AGENTS refresh behavior', () => {
       await mkdir(join(home, '.codex'), { recursive: true });
       await writeFile(
         dotfilesAgentsPath,
-        addGeneratedAgentsMarker('# oh-my-codex - Intelligent Multi-Agent Orchestration\n\nDotfiles-owned guidance.\n'),
+        addGeneratedAgentsMarker(`${OMX_AGENTS_CONTRACT_HEADING}\n\nDotfiles-owned guidance.\n`),
       );
       await symlink(dotfilesAgentsPath, codexAgentsPath);
 
@@ -363,7 +368,7 @@ describe('omx setup AGENTS refresh behavior', () => {
       assert.match(agentsContent, new RegExp(OMX_MANAGED_AGENTS_START_MARKER));
       assert.match(agentsContent, new RegExp(OMX_MANAGED_AGENTS_END_MARKER));
       assert.match(agentsContent, /<!-- omx:generated:agents-md -->/);
-      assert.match(agentsContent, /# oh-my-codex - Intelligent Multi-Agent Orchestration/);
+      assert.match(agentsContent, new RegExp(escapeRegExp(OMX_AGENTS_CONTRACT_HEADING)));
       assert.equal(existsSync(join(home, '.omx', 'backups', 'setup')), true);
     } finally {
       restoreHome();
@@ -401,7 +406,7 @@ describe('omx setup AGENTS refresh behavior', () => {
       assert.match(output, /agents_md: updated=0, unchanged=1, backed_up=0, skipped=0, removed=0/);
       assert.equal(countOccurrences(secondContent, OMX_MANAGED_AGENTS_START_MARKER), 1);
       assert.equal(countOccurrences(secondContent, OMX_MANAGED_AGENTS_END_MARKER), 1);
-      assert.equal(countOccurrences(secondContent, '# oh-my-codex - Intelligent Multi-Agent Orchestration'), 1);
+      assert.equal(countOccurrences(secondContent, OMX_AGENTS_CONTRACT_HEADING), 1);
     } finally {
       restoreHome();
       restoreTty();
@@ -593,7 +598,7 @@ describe('omx setup AGENTS refresh behavior', () => {
       assert.match(agentsContent, /Keep this custom guidance\./);
       assert.match(agentsContent, new RegExp(OMX_MANAGED_AGENTS_START_MARKER));
       assert.match(agentsContent, new RegExp(OMX_MANAGED_AGENTS_END_MARKER));
-      assert.match(agentsContent, /# oh-my-codex - Intelligent Multi-Agent Orchestration/);
+      assert.match(agentsContent, new RegExp(escapeRegExp(OMX_AGENTS_CONTRACT_HEADING)));
       assert.equal(existsSync(join(wd, '.omx', 'backups', 'setup')), true);
     } finally {
       restoreHome();
@@ -627,7 +632,7 @@ describe('omx setup AGENTS refresh behavior', () => {
       assert.match(output, /agents_md: updated=0, unchanged=1, backed_up=0, skipped=0, removed=0/);
       assert.equal(countOccurrences(secondContent, OMX_MANAGED_AGENTS_START_MARKER), 1);
       assert.equal(countOccurrences(secondContent, OMX_MANAGED_AGENTS_END_MARKER), 1);
-      assert.equal(countOccurrences(secondContent, '# oh-my-codex - Intelligent Multi-Agent Orchestration'), 1);
+      assert.equal(countOccurrences(secondContent, OMX_AGENTS_CONTRACT_HEADING), 1);
     } finally {
       restoreHome();
       restoreTty();

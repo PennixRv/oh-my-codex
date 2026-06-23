@@ -1,4 +1,5 @@
 export const TEAM_REMINDER_INTENTS = [
+  'startup-trigger',
   'followup-reuse',
   'followup-relaunch',
   'stalled-unblock',

@@ -1,5 +1,5 @@
 /**
- * oh-my-codex CLI
+ * oh-my-codex-pennix CLI
  * Multi-agent orchestration for OpenAI Codex CLI
  */
 
@@ -126,7 +126,11 @@ import {
   isTmuxAvailable,
   mitigateCopyModeUnderlineArtifacts,
 } from "../team/tmux-session.js";
-import { getPackageRoot } from "../utils/package.js";
+import {
+  OMX_DISPLAY_NAME,
+  OMX_PACKAGE_NAME,
+  getPackageRoot,
+} from "../utils/package.js";
 import { codexConfigPath, omxRoot, rememberOmxLaunchContext, resolveOmxCliEntryPath } from "../utils/paths.js";
 import { cleanCodexModelAvailabilityNuxIfNeeded, extractSharedMcpRegistryServersFromConfig, repairConfigIfNeeded, repairProjectScopeTrustStateForLaunch, syncProjectScopeTrustStateFromRuntime } from "../config/generator.js";
 import type { UnifiedMcpRegistryServer } from "../config/mcp-registry.js";
@@ -198,7 +202,7 @@ function resolveDistScript(pkgRoot: string, scriptName: string): string {
 }
 
 export const HELP = `
-oh-my-codex (omx) - Multi-agent orchestration for Codex CLI
+${OMX_DISPLAY_NAME} (omx) - Multi-agent orchestration for Codex CLI
 
 Usage:
   omx           Launch Codex CLI (detached tmux by default on supported interactive terminals)
@@ -211,9 +215,9 @@ Usage:
                 (user scope prompts for legacy vs plugin skill delivery when needed)
   omx update    Install the stable channel now, then refresh setup
   omx update --stable
-                Install/rollback to npm stable (oh-my-codex@latest), then refresh setup
+                Install/rollback to npm stable (${OMX_PACKAGE_NAME}@latest), then refresh setup
   omx update --dev
-                Install the upstream dev branch, then refresh setup
+                Install the fork dev branch, then refresh setup
   omx uninstall Remove OMX configuration and clean up installed artifacts
   omx doctor    Check installation health
   omx list      List packaged OMX skills and native agent prompts (--json)

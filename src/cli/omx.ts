@@ -1,12 +1,13 @@
 #!/usr/bin/env node
 
-// oh-my-codex CLI entry point
+// oh-my-codex-pennix CLI entry point
 // Requires compiled JavaScript output in dist/
 
 import { fileURLToPath, pathToFileURL } from 'url';
 import { dirname, join } from 'path';
 import { existsSync } from 'fs';
 import { rememberOmxLaunchContext } from '../utils/paths.js';
+import { OMX_DISPLAY_NAME } from '../utils/package.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -24,6 +25,6 @@ if (existsSync(distEntry)) {
     process.exit(process.exitCode ?? 0);
   }
 } else {
-  console.error('oh-my-codex: run "npm run build" first');
+  console.error(`${OMX_DISPLAY_NAME}: run "npm run build" first`);
   process.exit(1);
 }

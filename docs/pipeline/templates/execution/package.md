@@ -4,7 +4,7 @@
 
 ```yaml
 source: github
-repo: Yeachan-Heo/oh-my-codex
+repo: PennixRv/oh-my-codex
 issue: 0000
 package_id: issue-0000-short-slug
 branch: kind/issue-0000-short-slug

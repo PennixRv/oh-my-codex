@@ -11,6 +11,7 @@ import { pathToFileURL } from 'node:url';
 import {
   ensureReusableNodeModules,
 } from '../utils/repo-deps.js';
+import { OMX_PACKAGE_NAME } from '../utils/package.js';
 
 export {
   hasUsableNodeModules,
@@ -191,7 +192,7 @@ export function buildNativeHookSmokePayload(
 
 function smokeInstalledNativeHookDist(prefixDir: string): void {
   const globalNodeModules = resolveGlobalNodeModules(prefixDir);
-  const packageRoot = join(globalNodeModules, 'oh-my-codex');
+  const packageRoot = join(globalNodeModules, OMX_PACKAGE_NAME);
   const hookScript = join(packageRoot, 'dist', 'scripts', 'codex-native-hook.js');
   const smokeCwd = mkdtempSync(join(tmpdir(), 'omx-packed-hook-smoke-'));
   try {

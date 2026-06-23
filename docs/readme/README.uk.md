@@ -1,17 +1,17 @@
-# oh-my-codex (OMX)
+# Pennix OMX
 
 <p align="center">
-  <img src="https://yeachan-heo.github.io/oh-my-codex-website/omx-character-nobg.png" alt="oh-my-codex character" width="280">
+  <img src="../shared/omx-character-spark-initiative.jpg" alt="oh-my-codex character" width="280">
   <br>
   <em>Починайте з Codex впевненіше — нехай OMX додасть кращі промпти, робочі процеси та підтримку під час виконання, коли обсяг роботи зростає.</em>
 </p>
 
-[![npm version](https://img.shields.io/npm/v/oh-my-codex)](https://www.npmjs.com/package/oh-my-codex)
+[![npm version](https://img.shields.io/npm/v/oh-my-codex-pennix)](https://www.npmjs.com/package/oh-my-codex-pennix)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Node.js](https://img.shields.io/badge/node-%3E%3D20-brightgreen)](https://nodejs.org)
 [![Discord](https://img.shields.io/discord/1452487457085063218?color=5865F2&logo=discord&logoColor=white&label=Discord)](https://discord.gg/sj4exxQ9v)
 
-**Вебсайт:** https://yeachan-heo.github.io/oh-my-codex-website/
+**Вебсайт:** https://github.com/PennixRv/oh-my-codex
 **Документація:** [Початок роботи](../getting-started.html) · [Агенти](../agents.html) · [Навички](../skills.html) · [Інтеграції](../integrations.html) · [Demo](../../DEMO.md) · [Посібник OpenClaw](../openclaw-integration.uk.md)
 **Спільнота:** [Discord](https://discord.gg/sj4exxQ9v) — спільний сервер OMX/спільноти для oh-my-codex та суміжних інструментів.
 
@@ -54,7 +54,7 @@ OMX — це шар робочих процесів для [OpenAI Codex CLI](ht
 
 ```bash
 codex --version
-npm install -g oh-my-codex
+npm install -g oh-my-codex-pennix
 omx setup
 omx --madmax --high
 ```
@@ -63,7 +63,7 @@ omx --madmax --high
 
 ```bash
 npm install -g @openai/codex
-npm install -g oh-my-codex
+npm install -g oh-my-codex-pennix
 omx setup
 ```
 
@@ -264,7 +264,7 @@ omx sparkshell --tmux-pane %12 --tail-lines 400
 
 ## Історія зірок
 
-[![Star History Chart](https://api.star-history.com/svg?repos=Yeachan-Heo/oh-my-codex&type=date&legend=top-left)](https://www.star-history.com/#Yeachan-Heo/oh-my-codex&type=date&legend=top-left)
+[![Star History Chart](https://api.star-history.com/svg?repos=PennixRv/oh-my-codex&type=date&legend=top-left)](https://www.star-history.com/#PennixRv/oh-my-codex&type=date&legend=top-left)
 
 ## Ліцензія
 

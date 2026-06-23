@@ -7,7 +7,7 @@ import {
   type UserInstallStamp,
   writeUserInstallStamp,
 } from "../cli/update.js";
-import { getPackageRoot } from "../utils/package.js";
+import { getPackageRoot, OMX_DISPLAY_NAME } from "../utils/package.js";
 
 type PostinstallStatus =
   | "noop-local"
@@ -89,7 +89,7 @@ export async function runPostinstall(
   });
 
   resolved.log(
-    `[omx] Installed oh-my-codex v${currentStampVersion}. OMX setup is explicit opt-in; run \`omx setup\` or \`omx update\` when you're ready.`,
+    `[omx] Installed ${OMX_DISPLAY_NAME} v${currentStampVersion}. OMX setup is explicit opt-in; run \`omx setup\` or \`omx update\` when you're ready.`,
   );
   return { status: "hinted", version: currentStampVersion };
 }

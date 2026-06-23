@@ -490,7 +490,7 @@ describe.skip('notify-hook/orchestration-intent – taxonomy helpers', () => {
   it('maps leader reminder reasons to stable orchestration intents', async () => {
     const { resolveLeaderNudgeIntent } = await loadModule('notify-hook/orchestration-intent.js');
     assert.equal(resolveLeaderNudgeIntent({ nudgeReason: 'new_mailbox_message' }), 'pending-mailbox-review');
-    assert.equal(resolveLeaderNudgeIntent({ nudgeReason: 'ack_without_start_evidence' }), 'followup-relaunch');
+    assert.equal(resolveLeaderNudgeIntent({ nudgeReason: 'ack_without_start_evidence' }), 'stalled-unblock');
     assert.equal(resolveLeaderNudgeIntent({ nudgeReason: 'stuck_waiting_on_leader' }), 'stalled-unblock');
     assert.equal(resolveLeaderNudgeIntent({ nudgeReason: 'all_workers_idle', leaderActionState: 'done_waiting_on_leader' }), 'done-review-or-shutdown');
     assert.equal(resolveLeaderNudgeIntent({ nudgeReason: 'all_workers_idle', leaderActionState: 'still_actionable' }), 'followup-reuse');

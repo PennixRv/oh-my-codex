@@ -5,6 +5,7 @@ import {
   hasOmxAgentsContract,
   hasOmxManagedAgentsSections,
   isOmxGeneratedAgentsMd,
+  OMX_AGENTS_CONTRACT_HEADING,
   OMX_GENERATED_AGENTS_MARKER,
   OMX_MANAGED_AGENTS_END_MARKER,
   OMX_MANAGED_AGENTS_START_MARKER,
@@ -47,7 +48,7 @@ describe('agents-md helpers', () => {
       'directive body',
       '<!-- END AUTONOMY DIRECTIVE -->',
       OMX_GENERATED_AGENTS_MARKER,
-      '# oh-my-codex - Intelligent Multi-Agent Orchestration',
+      OMX_AGENTS_CONTRACT_HEADING,
       'AGENTS.md is the top-level operating contract for the workspace.',
     ].join('\n');
 
@@ -89,7 +90,7 @@ describe('agents-md helpers', () => {
       '<!-- AUTONOMY DIRECTIVE — DO NOT REMOVE -->',
       '<!-- END AUTONOMY DIRECTIVE -->',
       OMX_GENERATED_AGENTS_MARKER,
-      '# oh-my-codex - Intelligent Multi-Agent Orchestration',
+      OMX_AGENTS_CONTRACT_HEADING,
       'AGENTS.md is the top-level operating contract for the workspace.',
       OMX_MANAGED_AGENTS_END_MARKER,
     ].join('\n');
@@ -102,7 +103,7 @@ describe('agents-md helpers', () => {
   it('does not accept a generated marker plus heading without the semantic contract text', () => {
     const content = [
       OMX_GENERATED_AGENTS_MARKER,
-      '# oh-my-codex - Intelligent Multi-Agent Orchestration',
+      OMX_AGENTS_CONTRACT_HEADING,
       'User-authored text that happens to reuse the title.',
     ].join('\n');
 
@@ -114,11 +115,24 @@ describe('agents-md helpers', () => {
       '# Shared ownership AGENTS',
       '',
       OMX_MANAGED_AGENTS_START_MARKER,
-      '# oh-my-codex - Intelligent Multi-Agent Orchestration',
+      OMX_AGENTS_CONTRACT_HEADING,
       'AGENTS.md is the top-level operating contract for the workspace.',
       OMX_MANAGED_AGENTS_END_MARKER,
     ].join('\n');
 
     assert.equal(hasOmxAgentsContract(content), false);
+  });
+
+  it('accepts the new Pennix heading in generated AGENTS contracts', () => {
+    const content = [
+      '<!-- AUTONOMY DIRECTIVE — DO NOT REMOVE -->',
+      'directive body',
+      '<!-- END AUTONOMY DIRECTIVE -->',
+      OMX_GENERATED_AGENTS_MARKER,
+      '# Pennix OMX - Intelligent Multi-Agent Orchestration',
+      'AGENTS.md is the top-level operating contract for the workspace.',
+    ].join('\n');
+
+    assert.equal(hasOmxAgentsContract(content), true);
   });
 });

@@ -1,5 +1,5 @@
 /**
- * omx doctor - Validate oh-my-codex installation
+ * omx doctor - Validate oh-my-codex-pennix installation
  */
 
 import { existsSync, readFileSync } from "fs";
@@ -81,6 +81,12 @@ import {
 import { AGENT_DEFINITIONS } from "../agents/definitions.js";
 import { getInstallableNativeAgentNames } from "../agents/policy.js";
 import { readCatalogManifest } from "../catalog/reader.js";
+import {
+	OMX_DISPLAY_NAME,
+	OMX_LEGACY_PACKAGE_NAME,
+	OMX_PACKAGE_NAME,
+	isOmxPackageName,
+} from "../utils/package.js";
 
 interface DoctorOptions {
 	verbose?: boolean;
@@ -119,6 +125,8 @@ interface DoctorPaths {
 	agentsDir: string;
 	stateDir: string;
 }
+
+const OMX_PLUGIN_CACHE_PATH_HINT = `${OMX_LOCAL_MARKETPLACE_NAME}/oh-my-codex`;
 
 async function resolveDoctorScope(cwd: string): Promise<DoctorScopeResolution> {
 	const persisted = await readPersistedSetupPreferences(cwd);
@@ -176,7 +184,7 @@ async function isTrustedOmxPluginMarketplaceSource(source: unknown): Promise<boo
 		const packageJson = JSON.parse(
 			await readFile(join(source, "package.json"), "utf-8"),
 		) as { name?: unknown };
-		return packageJson.name === "oh-my-codex";
+		return isOmxPackageName(packageJson.name);
 	} catch {
 		return false;
 	}
@@ -232,7 +240,7 @@ export async function doctor(options: DoctorOptions = {}): Promise<void> {
 				? " (inferred from Codex plugin config)"
 			: "";
 
-	console.log("oh-my-codex doctor");
+	console.log(`${OMX_DISPLAY_NAME} doctor`);
 	console.log("==================\n");
 	console.log(
 		`Resolved setup scope: ${scopeResolution.scope}${scopeSourceMessage}`,
@@ -373,7 +381,7 @@ export async function doctor(options: DoctorOptions = {}): Promise<void> {
 			'\nReview warnings above. Use "omx setup --force" only when a warning recommends full replacement; for AGENTS.md preservation prefer "omx setup --merge-agents".',
 		);
 	} else {
-		console.log("\nAll checks passed! oh-my-codex is ready.");
+		console.log(`\nAll checks passed! ${OMX_DISPLAY_NAME} is ready.`);
 	}
 }
 
@@ -390,7 +398,7 @@ interface TeamDoctorIssue {
 }
 
 async function doctorTeam(): Promise<void> {
-	console.log("oh-my-codex doctor --team");
+	console.log(`${OMX_DISPLAY_NAME} doctor --team`);
 	console.log("=========================\n");
 
 	const issues = await collectTeamDoctorIssues(process.cwd());
@@ -907,7 +915,10 @@ async function checkConfig(configPath: string): Promise<Check> {
 			};
 		}
 
-		const hasOmx = content.includes("omx_") || content.includes("oh-my-codex");
+		const hasOmx =
+			content.includes("omx_") ||
+			content.includes(OMX_LEGACY_PACKAGE_NAME) ||
+			content.includes(OMX_PACKAGE_NAME);
 		if (hasOmx) {
 			return {
 				name: "Config",
@@ -1165,7 +1176,11 @@ function isEnabledTomlValue(value: unknown): boolean {
 }
 
 function configHasOmxEntries(configContent: string): boolean {
-	return configContent.includes("omx_") || configContent.includes("oh-my-codex");
+	return (
+		configContent.includes("omx_") ||
+		configContent.includes(OMX_LEGACY_PACKAGE_NAME) ||
+		configContent.includes(OMX_PACKAGE_NAME)
+	);
 }
 
 function configEnablesPluginScopedHooks(configContent: string): boolean {
@@ -1233,19 +1248,19 @@ async function checkPluginScopedNativeHooks(
 
 	if (!state) {
 		return {
-			name: "Native hooks",
-			status: "warn",
-			message:
-				`plugin-scoped hooks are enabled, but the expected Codex plugin cache manifest is missing at ${join(expectedCacheDir, ".codex-plugin", "plugin.json")}; ${setupHooksPathDescription}; run "omx setup --plugin --force" to refresh the plugin cache`,
+				name: "Native hooks",
+				status: "warn",
+				message:
+					`plugin-scoped hooks are enabled, but the expected Codex plugin cache manifest is missing at ${join(expectedCacheDir, ".codex-plugin", "plugin.json")} (internal compatibility plugin cache path: ${OMX_PLUGIN_CACHE_PATH_HINT}); ${setupHooksPathDescription}; run "omx setup --plugin --force" to refresh the plugin cache`,
 		};
 	}
 
 	if (state.hooksPointer !== "./hooks/hooks.json") {
 		return {
-			name: "Native hooks",
-			status: "warn",
-			message:
-				`plugin-scoped hooks are enabled, but the Codex plugin cache manifest points hooks to ${String(state.hooksPointer)} instead of ./hooks/hooks.json at ${expectedHooksPath}; run "omx setup --plugin --force" to refresh the plugin cache`,
+				name: "Native hooks",
+				status: "warn",
+				message:
+					`plugin-scoped hooks are enabled, but the Codex plugin cache manifest points hooks to ${String(state.hooksPointer)} instead of ./hooks/hooks.json at ${expectedHooksPath} (internal compatibility plugin cache path: ${OMX_PLUGIN_CACHE_PATH_HINT}); run "omx setup --plugin --force" to refresh the plugin cache`,
 		};
 	}
 
@@ -1457,7 +1472,7 @@ export async function checkNativeHookDistSmoke(
 		return {
 			name: "Native hook dist smoke",
 			status: "fail",
-			message: `installed native hook script is missing at ${scriptPath}; reinstall oh-my-codex and run "omx setup --force"`,
+			message: `installed native hook script is missing at ${scriptPath}; reinstall ${OMX_DISPLAY_NAME} and run "omx setup --force"`,
 		};
 	}
 
@@ -1489,7 +1504,7 @@ export async function checkNativeHookDistSmoke(
 			return {
 				name: "Native hook dist smoke",
 				status: "fail",
-				message: `installed native hook dist smoke failed to run (${result.error.message}); reinstall oh-my-codex and run "omx setup --force"`,
+				message: `installed native hook dist smoke failed to run (${result.error.message}); reinstall ${OMX_DISPLAY_NAME} and run "omx setup --force"`,
 			};
 		}
 		if (result.status !== 0) {
@@ -1499,7 +1514,7 @@ export async function checkNativeHookDistSmoke(
 			return {
 				name: "Native hook dist smoke",
 				status: "fail",
-				message: `installed native hook dist failed a minimal UserPromptSubmit smoke (${detail}); reinstall with "npm install -g oh-my-codex@${packageVersion} --force --min-release-age=0 --before=" and then run "omx setup --force"`,
+				message: `installed native hook dist failed a minimal UserPromptSubmit smoke (${detail}); reinstall with "npm install -g ${OMX_PACKAGE_NAME}@${packageVersion} --force --min-release-age=0 --before=" and then run "omx setup --force"`,
 			};
 		}
 
@@ -1746,7 +1761,7 @@ async function checkPluginMarketplaceRegistration(
 		return {
 			name: "Skills",
 			status: "warn",
-			message: `plugin mode selected, but packaged ${OMX_LOCAL_MARKETPLACE_NAME} metadata was not found; reinstall oh-my-codex or run from a package that includes plugins/`,
+			message: `plugin mode selected, but packaged ${OMX_LOCAL_MARKETPLACE_NAME} metadata was not found; reinstall ${OMX_DISPLAY_NAME} or run from a package that includes plugins/`,
 		};
 	}
 
@@ -1801,14 +1816,14 @@ async function checkPluginMarketplaceRegistration(
 			return {
 				name: "Skills",
 				status: "warn",
-				message: `packaged ${OMX_LOCAL_MARKETPLACE_NAME} plugin has no manifest version; reinstall oh-my-codex`,
+				message: `packaged ${OMX_LOCAL_MARKETPLACE_NAME} plugin has no manifest version; reinstall ${OMX_DISPLAY_NAME}`,
 			};
 		}
 		if (!expectedSkillNames || expectedSkillNames.length === 0) {
 			return {
 				name: "Skills",
 				status: "warn",
-				message: `packaged ${OMX_LOCAL_MARKETPLACE_NAME} plugin has no skills mirror; reinstall oh-my-codex`,
+				message: `packaged ${OMX_LOCAL_MARKETPLACE_NAME} plugin has no skills mirror; reinstall ${OMX_DISPLAY_NAME}`,
 			};
 		}
 		const cacheStates = (

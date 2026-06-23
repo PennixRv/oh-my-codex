@@ -1,6 +1,6 @@
 ---
 name: Feature request
-about: Suggest an enhancement for oh-my-codex
+about: Suggest an enhancement for the Pennix OMX fork
 title: "[Feature] "
 labels: enhancement
 assignees: ''

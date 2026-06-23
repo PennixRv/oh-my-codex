@@ -1,43 +1,30 @@
-# oh-my-codex 0.18.12
+# oh-my-codex-pennix v0.0.0
 
+> Release notes template for the Pennix fork. The tag workflow regenerates this file into the final GitHub release body.
 
-> Draft status: release-prep PR body source before tagging. Keep publication proof updates in `docs/qa/release-readiness-0.18.12.md` after PR CI, tag workflow, GitHub release creation, and npm publication.
+## Summary
 
-`0.18.12` is a patch release after `0.18.11` focused on release-workflow reconciliation, safer runtime automation gates, plugin guidance preservation, Windows hook/state robustness, and HUD/session cleanup. It preserves the existing CLI/package contract while tightening release and operator edge cases discovered after `0.18.11`.
+This release continues the Pennix fork of OMX with current runtime, workflow, and packaging updates while preserving compatibility-sensitive plugin and setup paths where needed.
 
 ## Highlights
 
-- **Release workflow history is reconciled for 0.18.12** — the release prep branch carries the main manual npm publishing workflow and npm auth configuration history forward while keeping the local prep boundary intact: no tag, no main merge, and no local npm publish.
-- **Automation and planning gates are stricter** — Autopilot final gates, best-practice-research read-only enforcement, ralplan consensus guards, deep-interview artifact writes, and Windows-safe `omx state` input handling reduce unsafe or confusing execution paths.
-- **Plugin guidance handling is safer** — persistent AGENTS guidance, setup plugin agent merge repair, developer-instruction prompt policy, setup mode inference, JSON fallback, and cleanup preservation are all hardened.
-- **HUD/session behavior is more reliable** — stale HUD cleanup, dev version labels, owner matching, terminal skill-active visibility, cancel run-dir visibility, and detached history pruning are tightened.
-- **Windows hook paths are safer** — hook shims preserve `Path`, emit `omx.cmd`, use absolute PowerShell hook paths, and include UTF-8 BOM handling for non-ASCII install paths.
+- Team runtime startup, lifecycle, and prompt injection are hardened to avoid duplicate startup dispatch and stale-worker confusion.
+- Fork-facing user-visible copy is normalized to the Pennix repository and the `oh-my-codex-pennix` npm package across CLI output, setup surfaces, docs, and release flow.
+- The GitHub tag release path now generates release notes from this template instead of publishing stale checked-in body text.
 
 ## Fixes / compatibility
 
-- Existing CLI, plugin, native-agent, HUD, state, hook, and package layout contracts remain compatible with `0.18.11`.
-- The release keeps npm/package layout compatibility and updates root/plugin/Cargo metadata to `0.18.12`.
-- Open GitHub PR and issue inventory was empty at release prep time.
-
-## Merged PR inventory
-
-#2760, #2762, #2765, #2766, #2768, #2771, #2773, #2774, #2776, #2798, #2800, #2801, #2802, #2805, #2806, #2810, #2812.
+- Existing legacy OMX-managed config markers, AGENTS contracts, and setup artifacts remain recognized so upgrades can cleanly migrate older installs.
+- Compatibility-sensitive plugin identifiers and cache paths such as `plugins/oh-my-codex` and `oh-my-codex-local` remain intact by design.
+- Upstream `Yeachan-Heo/oh-my-codex` references remain only where historical provenance or compare links need them.
 
 ## Validation
 
-Release readiness evidence is recorded in `docs/qa/release-readiness-0.18.12.md`.
-
-Local release-prep gates include build, version sync for `v0.18.12`, lint, no-unused, native-agent verification, plugin mirror/bundle checks, catalog docs check, focused hook/state tests, `npm pack --dry-run`, and `git diff --check`. Branch CI, tag-triggered release workflow, GitHub release proof, and npm publication proof remain post-PR/tag publication gates.
-
-The GitHub release workflow remains the authoritative cross-platform native asset gate after tag push, including the uploaded `native-release-manifest.json`.
+- Local release validation includes build, targeted regression tests for team runtime/prompt injection, fork-facing wording contracts, package/plugin verification, and packed-install smoke checks.
+- Tag-triggered GitHub Actions remain the authoritative publish-and-release gate for npm publication and GitHub release creation.
 
 ## Contributors
 
-Thanks to the contributors who landed the `v0.18.11...v0.18.12` delta:
+Outdated contributor text.
 
-- [@Yeachan-Heo](https://github.com/Yeachan-Heo)
-- [@app/dependabot](https://github.com/apps/dependabot)
-- [@iqdoctor](https://github.com/iqdoctor)
-- [@lifrary](https://github.com/lifrary)
-
-**Full Changelog**: [`v0.18.11...v0.18.12`](https://github.com/Yeachan-Heo/oh-my-codex/compare/v0.18.11...v0.18.12)
+**Full Changelog**: [`v0.0.0...v0.0.1`](https://github.com/PennixRv/oh-my-codex/compare/v0.0.0...v0.0.1)

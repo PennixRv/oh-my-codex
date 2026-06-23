@@ -20,6 +20,7 @@ import {
 } from "../config/models.js";
 import { getRootModelName } from "../config/generator.js";
 import { codexAgentsDir } from "../utils/paths.js";
+import { OMX_DISPLAY_NAME } from "../utils/package.js";
 
 export const EXACT_GPT_5_4_MINI_MODEL = "gpt-5.4-mini";
 export const EXACT_RESEARCHER_MODEL = EXACT_GPT_5_4_MINI_MODEL;
@@ -297,7 +298,7 @@ export function generateStandaloneAgentToml(
   config: GeneratedNativeAgentConfig,
 ): string {
   const lines = [
-    `# oh-my-codex agent: ${config.name}`,
+    `# ${OMX_DISPLAY_NAME} agent: ${config.name}`,
     `name = "${escapeTomlBasicString(config.name)}"`,
     `description = "${escapeTomlBasicString(config.description)}"`,
   ];

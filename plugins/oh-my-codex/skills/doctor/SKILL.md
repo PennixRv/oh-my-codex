@@ -1,6 +1,6 @@
 ---
 name: doctor
-description: Diagnose and fix oh-my-codex installation issues
+description: Diagnose and fix Pennix OMX installation issues
 ---
 
 # Doctor Skill
@@ -24,7 +24,7 @@ You are the OMX Doctor - diagnose and fix installation issues.
 
 ### Step 1: Check Plugin Version
 
-Official Codex plugin caches are marketplace- and version-scoped, for example `${CODEX_HOME:-~/.codex}/plugins/cache/$MARKETPLACE_NAME/oh-my-codex/$VERSION/`. Local installs may use `local` as the version identifier.
+Codex plugin caches are marketplace- and version-scoped, for example `${CODEX_HOME:-~/.codex}/plugins/cache/$MARKETPLACE_NAME/oh-my-codex/$VERSION/`. Local installs may use `local` as the version identifier.
 
 ```bash
 # Get installed plugin cache versions across marketplaces.
@@ -43,7 +43,7 @@ else
 fi
 
 # Get latest from npm
-LATEST=$(npm view oh-my-codex version 2>/dev/null)
+LATEST=$(npm view oh-my-codex-pennix version 2>/dev/null)
 echo "Latest npm: $LATEST"
 ```
 
@@ -51,7 +51,7 @@ echo "Latest npm: $LATEST"
 - If no cache entry exists: INFO - plugin marketplace artifact not cached; this may be normal when OMX was installed only through npm/setup
 - Compare each printed `PLUGIN_VERSION` with `LATEST`; if it differs and is not `local`: WARN - outdated plugin cache
 - If one marketplace has multiple version directories: WARN - stale cache for that marketplace/plugin pair
-- Remember: plugin install/discovery is not a replacement for `npm install -g oh-my-codex` plus `omx setup`; the packaged plugin carries plugin-scoped companion metadata for optional MCP compatibility servers and apps, with first-party MCP disabled by default, while native/runtime hooks and the rest of OMX runtime wiring stay setup-owned
+- Remember: plugin install/discovery is not a replacement for `npm install -g oh-my-codex-pennix` plus `omx setup`; the packaged plugin carries plugin-scoped companion metadata for optional MCP compatibility servers and apps, with first-party MCP disabled by default, while native/runtime hooks and the rest of OMX runtime wiring stay setup-owned
 
 ### Step 2: Check Hook Configuration (config.toml + legacy settings.json)
 
@@ -123,15 +123,15 @@ ls -la ~/.agents/skills/ 2>/dev/null
 ```
 
 **Diagnosis**:
-- If `~/.codex/agents/` exists with oh-my-codex-related files: WARN - legacy generated agents or hand-installed role files. The Codex plugin can package reusable workflows plus plugin-scoped companion metadata for optional MCP/apps; legacy setup installs native agents, while plugin setup archives stale legacy native-agent files and keeps config/hooks current.
-- If `~/.codex/commands/` exists with oh-my-codex-related files: WARN - legacy command files from older installs. Current OMX uses skills/workflows plus setup-managed native surfaces.
+- If `~/.codex/agents/` exists with Pennix OMX-related files: WARN - legacy generated agents or hand-installed role files. The Codex plugin can package reusable workflows plus plugin-scoped companion metadata for optional MCP/apps; legacy setup installs native agents, while plugin setup archives stale legacy native-agent files and keeps config/hooks current.
+- If `~/.codex/commands/` exists with Pennix OMX-related files: WARN - legacy command files from older installs. Current OMX uses skills/workflows plus setup-managed native surfaces.
 - If `${CODEX_HOME:-~/.codex}/skills/` exists with OMX skills: OK - canonical current user skill root
 - If `~/.agents/skills/` exists: WARN - historical legacy skill root that can overlap with `${CODEX_HOME:-~/.codex}/skills/` and cause duplicate Enable/Disable Skills entries
 
 Look for files like:
 - `architect.md`, `researcher.md`, `explore.md`, `executor.md`, etc. in agents/
 - `ultrawork.md`, `deepsearch.md`, etc. in commands/
-- Any oh-my-codex-related `.md` files in skills/
+- Any Pennix OMX-related `.md` files in skills/
 
 ---
 
@@ -210,7 +210,7 @@ fi
 ### Fix: Missing/Outdated AGENTS.md
 Fetch latest from GitHub and write to `~/.codex/AGENTS.md`:
 ```
-WebFetch(url: "https://raw.githubusercontent.com/Yeachan-Heo/oh-my-codex/main/docs/AGENTS.md", prompt: "Return the complete raw markdown content exactly as-is")
+WebFetch(url: "https://raw.githubusercontent.com/PennixRv/oh-my-codex/main/docs/AGENTS.md", prompt: "Return the complete raw markdown content exactly as-is")
 ```
 
 ### Fix: Legacy Curl-Installed Content
@@ -229,7 +229,7 @@ rm -rf ~/.codex/commands
 rm -rf ~/.agents/skills
 ```
 
-**Note**: Only remove if these contain oh-my-codex-related files. If user has custom agents/commands/skills, warn them and ask before removing.
+**Note**: Only remove if these contain Pennix OMX-related files. If user has custom agents/commands/skills, warn them and ask before removing.
 
 ---
 

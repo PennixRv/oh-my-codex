@@ -31,6 +31,10 @@ function buildRunOmxEnv(envOverrides: Record<string, string>): NodeJS.ProcessEnv
   };
 }
 
+function buildIsolatedPath(entries: string[]): string {
+  return entries.join(process.platform === 'win32' ? ';' : ':');
+}
+
 function runOmx(
   cwd: string,
   argv: string[],
@@ -139,7 +143,7 @@ exit 42
 
       const result = runOmx(wd, ['--direct', '--version'], {
         HOME: home,
-        PATH: `${fakeBin}:/usr/bin:/bin`,
+        PATH: buildIsolatedPath([fakeBin]),
         OMX_AUTO_UPDATE: '0',
         OMX_NOTIFY_FALLBACK: '0',
         OMX_HOOK_DERIVED_SIGNALS: '0',
@@ -169,7 +173,7 @@ exit 42
 
       const result = runOmx(wd, ['--direct', '--version'], {
         HOME: home,
-        PATH: `${fakeBin}:/usr/bin:/bin`,
+        PATH: buildIsolatedPath([fakeBin]),
         OMX_AUTO_UPDATE: '0',
         OMX_NOTIFY_FALLBACK: '0',
         OMX_HOOK_DERIVED_SIGNALS: '0',

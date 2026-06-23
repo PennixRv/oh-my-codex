@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join, resolve as resolvePath } from 'node:path';
 import { omxStateDir } from '../utils/paths.js';
-import { sendWorkerMessage, shutdownTeam } from './runtime.js';
+import { orphanCleanupTeam, sendWorkerMessage, shutdownTeam } from './runtime.js';
 import {
   TEAM_NAME_SAFE_PATTERN,
   WORKER_NAME_SAFE_PATTERN,
@@ -35,7 +35,6 @@ import {
   teamClaimTask,
   teamTransitionTaskStatus,
   teamReleaseTaskClaim,
-  teamCleanup,
   teamReadConfig,
   teamReadManifest,
   teamReadWorkerStatus,
@@ -1132,7 +1131,7 @@ export async function executeTeamApiOperation(
       case 'orphan-cleanup': {
         const teamName = String(opArgs.team_name || '').trim();
         if (!teamName) return { ok: false, operation, error: { code: 'invalid_input', message: 'team_name is required' } };
-        await teamCleanup(teamName, cwd);
+        await orphanCleanupTeam(teamName, cwd);
         return { ok: true, operation, data: { team_name: teamName, cleanup_mode: 'orphan_cleanup' } };
       }
       case 'write-shutdown-request': {

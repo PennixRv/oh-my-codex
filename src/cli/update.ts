@@ -1,5 +1,5 @@
 /**
- * Update orchestration for oh-my-codex.
+ * Update orchestration for oh-my-codex-pennix.
  *
  * The launch-time checker is intentionally passive, non-fatal, and throttled.
  * The explicit `omx update` command uses the same executor but bypasses the
@@ -12,7 +12,13 @@ import { dirname, join } from 'path';
 import { tmpdir } from 'os';
 import { spawn, spawnSync } from 'child_process';
 import { createInterface } from 'readline/promises';
-import { getPackageRoot } from '../utils/package.js';
+import {
+  OMX_DISPLAY_NAME,
+  OMX_FORK_REPO_SLUG,
+  OMX_FORK_REPO_URL,
+  OMX_PACKAGE_NAME,
+  getPackageRoot,
+} from '../utils/package.js';
 import { omxUserInstallStampPath } from '../utils/paths.js';
 import { readPersistedSetupPreferencesSync } from './setup-preferences.js';
 
@@ -61,11 +67,11 @@ type SpawnSyncOptions = NonNullable<Parameters<SpawnSyncLike>[2]>;
 type SpawnLike = typeof spawn;
 export type AutoUpdateMode = 'disabled' | 'prompt' | 'defer';
 
-const PACKAGE_NAME = 'oh-my-codex';
+const PACKAGE_NAME = OMX_PACKAGE_NAME;
 const CHECK_INTERVAL_MS = 12 * 60 * 60 * 1000; // 12h
 const STABLE_INSTALL_SOURCE = `${PACKAGE_NAME}@latest`;
-const DEV_INSTALL_SOURCE = 'github:Yeachan-Heo/oh-my-codex#dev';
-const DEV_REPOSITORY_URL = 'https://github.com/Yeachan-Heo/oh-my-codex.git';
+const DEV_INSTALL_SOURCE = `github:${OMX_FORK_REPO_SLUG}#dev`;
+const DEV_REPOSITORY_URL = OMX_FORK_REPO_URL;
 const DEV_REPOSITORY_BRANCH = 'dev';
 const DEV_UPDATE_TIMEOUT_MS = 300000;
 
@@ -459,7 +465,7 @@ export function runDeferredGlobalUpdate(
             '$log = $env:OMX_DEFERRED_UPDATE_LOG',
             '$parentPid = [int]$env:OMX_DEFERRED_UPDATE_PARENT_PID',
             'while (Get-Process -Id $parentPid -ErrorAction SilentlyContinue) { Start-Sleep -Seconds 1 }',
-            'npm install -g oh-my-codex@latest *>> $log',
+            `npm install -g ${PACKAGE_NAME}@latest *>> $log`,
             `if ($LASTEXITCODE -eq 0) { ${setupCommand} *>> $log }`,
           ].join('; '),
         ]
@@ -467,7 +473,7 @@ export function runDeferredGlobalUpdate(
           '-c',
           [
             'while kill -0 "$OMX_DEFERRED_UPDATE_PARENT_PID" 2>/dev/null; do sleep 1; done',
-            'npm install -g oh-my-codex@latest >> "$OMX_DEFERRED_UPDATE_LOG" 2>&1',
+            `npm install -g ${PACKAGE_NAME}@latest >> "$OMX_DEFERRED_UPDATE_LOG" 2>&1`,
             `if [ "$?" -eq 0 ]; then ${setupCommand} >> "$OMX_DEFERRED_UPDATE_LOG" 2>&1; fi`,
           ].join('; '),
         ];
@@ -506,7 +512,7 @@ function formatDeferredUpdateFailure(stderr: string, logPath?: string): string {
     '[omx] Failed to schedule the deferred update.',
     stderr.trim() ? `[omx] scheduler error: ${stderr.trim()}` : undefined,
     logPath ? `[omx] Intended log: ${logPath}` : undefined,
-    '[omx] You can retry manually with: npm install -g oh-my-codex@latest && omx setup',
+    `[omx] You can retry manually with: npm install -g ${PACKAGE_NAME}@latest && omx setup`,
   ].filter((line): line is string => typeof line === 'string').join('\n');
 }
 
@@ -844,7 +850,7 @@ async function executeUpdate(
 
   if (!forceInstall && (!updateCheckBaseline || !latest)) {
     if (immediate) {
-      console.log('[omx] Unable to determine the latest oh-my-codex version. Try again later.');
+      console.log(`[omx] Unable to determine the latest ${OMX_DISPLAY_NAME} version. Try again later.`);
     }
     return { status: 'unavailable', currentVersion: current, latestVersion: latest };
   }
@@ -853,7 +859,7 @@ async function executeUpdate(
     if (immediate) {
       if (current && !doesSetupStampMatchVersion(current, installStamp)) {
         console.log(
-          `[omx] oh-my-codex is already up to date (v${updateCheckBaseline}). Running setup refresh...`,
+          `[omx] ${OMX_DISPLAY_NAME} is already up to date (v${updateCheckBaseline}). Running setup refresh...`,
         );
         const setupRefreshResult = await dependencies.runSetupRefresh(cwd);
         if (!setupRefreshResult.ok) {
@@ -869,7 +875,7 @@ async function executeUpdate(
     }
 
     if (immediate) {
-      console.log(`[omx] oh-my-codex is already up to date (v${updateCheckBaseline}).`);
+      console.log(`[omx] ${OMX_DISPLAY_NAME} is already up to date (v${updateCheckBaseline}).`);
     }
     return { status: 'up-to-date', currentVersion: current, latestVersion: latest };
   }

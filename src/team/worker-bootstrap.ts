@@ -1033,6 +1033,14 @@ export function generateTriggerMessage(
   return buildTriggerDirective(workerName, teamName, teamStateRoot).text;
 }
 
+export function generateStartupTriggerMessage(
+  workerName: string,
+  teamName: string,
+  teamStateRoot: string = ".omx/state",
+): string {
+  return buildStartupTriggerDirective(workerName, teamName, teamStateRoot).text;
+}
+
 export function buildTriggerDirective(
   workerName: string,
   teamName: string,
@@ -1054,6 +1062,31 @@ export function buildTriggerDirective(
   }
   return {
     intent: "followup-relaunch",
+    text: `Read ${inboxPath}, start work now, report concrete progress, then continue assigned work or next feasible task.`,
+  };
+}
+
+export function buildStartupTriggerDirective(
+  workerName: string,
+  teamName: string,
+  teamStateRoot: string = ".omx/state",
+): TeamReminderDirective {
+  const inboxPath = buildInstructionPath(
+    teamStateRoot,
+    "team",
+    teamName,
+    "workers",
+    workerName,
+    "inbox.md",
+  );
+  if (teamStateRoot !== ".omx/state") {
+    return {
+      intent: "startup-trigger",
+      text: `Read ${inboxPath}, work now, report progress, continue assigned work or next feasible task.`,
+    };
+  }
+  return {
+    intent: "startup-trigger",
     text: `Read ${inboxPath}, start work now, report concrete progress, then continue assigned work or next feasible task.`,
   };
 }

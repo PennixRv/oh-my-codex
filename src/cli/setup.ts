@@ -35,10 +35,8 @@ import {
 import {
 	buildMergedConfig,
 	getRootModelName,
-	getRootTomlArray,
 	hasLegacyOmxTeamRunTable,
-	isOmxManagedNotifyCommand,
-	sanitizePreviousNotifyCommand,
+	LEGACY_OMX_PLUGIN_DEVELOPER_INSTRUCTIONS,
 	stripExistingOmxBlocks,
 	stripExistingSharedMcpRegistryBlock,
 	mergeSharedMcpRegistryBlock,
@@ -117,6 +115,10 @@ import {
 	pluginHookCacheMatchesPackaged,
 } from "./plugin-marketplace.js";
 import { resolveCodexHookFeatureSupportForCli } from "./codex-feature-probe.js";
+import {
+	OMX_DISPLAY_NAME,
+	OMX_FORK_REPO_SLUG,
+} from "../utils/package.js";
 
 async function resolveStatusLinePresetForSetup(
 	projectRoot: string,
@@ -880,9 +882,6 @@ async function promptForPluginAgentsMdDefault(
 	}
 }
 
-const LEGACY_PLUGIN_DEVELOPER_INSTRUCTIONS =
-	"You have oh-my-codex installed through Codex plugin mode. AGENTS.md is the orchestration brain and main control surface. Follow AGENTS.md for skill/keyword routing and $name workflow invocation. When spawning native subagents, set `agent_type` to an installed role and never omit it for OMX work. Registered Codex plugin marketplace surfaces supply OMX workflows and plugin-scoped companion resources when the plugin is installed; native agent roles are installed as setup-owned Codex agent TOML files in plugin mode so agent_type routing works. User-installed skills may still live under ~/.codex/skills. Use outcome-first, concise progress updates: state the target result, constraints, validation evidence, and stop condition before adding process detail.";
-
 function normalizeDeveloperInstructionsText(value: string): string {
 	return value.replace(/\r\n/g, "\n").trim();
 }
@@ -900,7 +899,7 @@ function classifyPluginDeveloperInstructions(
 	}
 	if (
 		normalized ===
-		normalizeDeveloperInstructionsText(LEGACY_PLUGIN_DEVELOPER_INSTRUCTIONS)
+		normalizeDeveloperInstructionsText(LEGACY_OMX_PLUGIN_DEVELOPER_INSTRUCTIONS)
 	) {
 		return "current";
 	}
@@ -1153,7 +1152,7 @@ async function discoverOmxPluginCacheDirs(
 		const manifestPath = join(current.path, ".codex-plugin", "plugin.json");
 		if (existsSync(manifestPath)) {
 			const name = await readPluginManifestName(manifestPath);
-			if (name === "oh-my-codex") {
+			if (name === OMX_PLUGIN_NAME) {
 				matches.push(current.path);
 				continue;
 			}
@@ -1216,7 +1215,7 @@ async function refreshOmxPluginDiscoveryCache(
 		const manifest = await readPluginManifestSummary(
 			join(cacheDir, ".codex-plugin", "plugin.json"),
 		);
-		if (manifest?.name !== "oh-my-codex") continue;
+		if (manifest?.name !== OMX_PLUGIN_NAME) continue;
 
 		const cachedSkillNames = await listChildDirectoryNames(join(cacheDir, "skills"));
 		const versionChanged =
@@ -1333,7 +1332,7 @@ async function resolveSetupInstallMode(
 	) {
 		if (discoveredPluginCacheDir) {
 			console.log(
-				`Detected installed oh-my-codex Codex plugin cache at ${discoveredPluginCacheDir}.`,
+				`Detected installed Codex plugin cache for ${OMX_DISPLAY_NAME} at ${discoveredPluginCacheDir}.`,
 			);
 		}
 		const installMode = installModePrompt
@@ -1533,8 +1532,9 @@ function stripPluginModeLegacyRootDefaults(
 		const line = lines[index];
 		if (
 			index < boundary &&
-			line.trim() ===
-				"# oh-my-codex top-level settings (must be before any [table])"
+			/^# oh-my-codex(?:-pennix)? top-level settings \(must be before any \[table\]\)$/.test(
+				line.trim(),
+			)
 		) {
 			continue;
 		}
@@ -2104,7 +2104,7 @@ export async function setup(options: SetupOptions = {}): Promise<void> {
 					: await promptForPluginAgentsMdDefault(pluginAgentsMdDst)
 		: false;
 
-	console.log("oh-my-codex setup");
+	console.log(`${OMX_DISPLAY_NAME} setup`);
 	console.log("=================\n");
 	console.log(
 		`Using setup scope: ${resolvedScope.scope}${scopeSourceMessage}\n`,
@@ -3003,7 +3003,7 @@ export async function setup(options: SetupOptions = {}): Promise<void> {
 		'  6. "omx explore" and "omx sparkshell" can hydrate native release binaries on first use; source installs still allow repo-local fallbacks and OMX_EXPLORE_BIN / OMX_SPARKSHELL_BIN overrides',
 	);
 	if (isGitHubCliConfigured()) {
-		console.log("\nSupport the project: gh repo star Yeachan-Heo/oh-my-codex");
+		console.log(`\nSupport the project: gh repo star ${OMX_FORK_REPO_SLUG}`);
 	}
 }
 
@@ -3323,7 +3323,10 @@ function isGeneratedOmxNativeAgentToml(
 	agentName: string,
 ): boolean {
 	const firstLine = content.split(/\r?\n/, 1)[0]?.trim();
-	return firstLine === `# oh-my-codex agent: ${agentName}`;
+	return (
+		firstLine === `# ${OMX_DISPLAY_NAME} agent: ${agentName}` ||
+		firstLine === `# oh-my-codex agent: ${agentName}`
+	);
 }
 
 async function cleanupGeneratedNonInstallableNativeAgents(
@@ -3793,14 +3796,10 @@ interface NotifyMergePlan {
 	metadata?: Record<string, unknown>;
 }
 
-function getNotifyMetadataPath(codexHomeDir: string): string {
-	return join(codexHomeDir, ".omx", "notify-dispatch.json");
-}
-
 async function buildNotifyMergePlan(
-	existingConfig: string,
-	pkgRoot: string,
-	codexHomeDir: string,
+	_existingConfig: string,
+	_pkgRoot: string,
+	_codexHomeDir: string,
 	scope: SetupScope,
 ): Promise<NotifyMergePlan> {
 	if (scope === "project") {

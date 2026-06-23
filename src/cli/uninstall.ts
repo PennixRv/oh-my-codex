@@ -1,5 +1,5 @@
 /**
- * omx uninstall - Remove oh-my-codex configuration and installed artifacts
+ * omx uninstall - Remove oh-my-codex-pennix configuration and installed artifacts
  */
 
 import { readFile, writeFile, readdir, rm } from "fs/promises";
@@ -22,7 +22,10 @@ import {
   parseCodexHooksConfig,
   removeManagedCodexHooks,
 } from "../config/codex-hooks.js";
-import { getPackageRoot } from "../utils/package.js";
+import {
+  OMX_DISPLAY_NAME,
+  getPackageRoot,
+} from "../utils/package.js";
 import { AGENT_DEFINITIONS } from "../agents/definitions.js";
 import { detectLegacySkillRootOverlap } from "../utils/paths.js";
 import { resolveScopeDirectories, type SetupScope } from "./setup.js";
@@ -80,12 +83,12 @@ function detectOmxConfigArtifacts(config: string): {
 
   const hasTuiSection =
     /^\[tui\]/m.test(config) &&
-    config.includes("oh-my-codex (OMX) Configuration");
+    /oh-my-codex(?:-pennix)? \(OMX\) Configuration/.test(config);
 
   const hasTopLevelKeys =
     /^\s*notify\s*=.*node/m.test(config) ||
     /^\s*model_reasoning_effort\s*=/m.test(config) ||
-    /^\s*developer_instructions\s*=.*oh-my-codex/m.test(config);
+    /^\s*developer_instructions\s*=.*oh-my-codex(?:-pennix)?/m.test(config);
 
   const hasFeatureFlags =
     /^\s*multi_agent\s*=\s*true/m.test(config) ||
@@ -547,7 +550,7 @@ function printSummary(summary: UninstallSummary, dryRun: boolean): void {
 
   if (totalActions === 0) {
     console.log(
-      "  Nothing to remove. oh-my-codex does not appear to be installed.",
+      `  Nothing to remove. ${OMX_DISPLAY_NAME} does not appear to be installed.`,
     );
   }
 }
@@ -567,7 +570,7 @@ export async function uninstall(options: UninstallOptions = {}): Promise<void> {
   const scope = options.scope ?? readPersistedSetupScope(projectRoot) ?? "user";
   const scopeDirs = resolveScopeDirectories(scope, projectRoot);
 
-  console.log("oh-my-codex uninstall");
+  console.log(`${OMX_DISPLAY_NAME} uninstall`);
   console.log("=====================\n");
   if (dryRun) {
     console.log("[dry-run mode] No files will be modified.\n");
@@ -692,7 +695,7 @@ export async function uninstall(options: UninstallOptions = {}): Promise<void> {
 
   if (!dryRun) {
     console.log(
-      '\noh-my-codex has been uninstalled. Run "omx setup" to reinstall.',
+      `\n${OMX_DISPLAY_NAME} has been uninstalled. Run "omx setup" to reinstall.`,
     );
   } else {
     console.log("\nRun without --dry-run to apply changes.");

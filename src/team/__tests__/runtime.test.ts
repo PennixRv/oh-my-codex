@@ -17,6 +17,7 @@ import {
   saveTeamConfig,
   listMailboxMessages,
   listDispatchRequests,
+  readDispatchRequest,
   transitionDispatchRequest,
   updateWorkerHeartbeat,
   writeAtomic,
@@ -26,6 +27,7 @@ import {
   transitionTaskStatus,
   readWorkerStatus,
   writeWorkerStatus,
+  readTeamLeaderAttention,
 } from '../state.js';
 import {
   monitorTeam,
@@ -222,13 +224,14 @@ async function markPendingInboxDispatchesDelivered(
     afterDeliver?: () => Promise<void>;
   } = {},
 ): Promise<void> {
-  const requests = await listDispatchRequests(await resolveRuntimeTeamName(cwd, teamName), cwd, { kind: 'inbox' }).catch(() => []);
+  const runtimeTeamName = await resolveRuntimeTeamName(cwd, teamName);
+  const requests = await listDispatchRequests(runtimeTeamName, cwd, { kind: 'inbox' }).catch(() => []);
   for (const request of requests) {
     if (request.status !== 'pending') continue;
     if (opts.toWorker && request.to_worker !== opts.toWorker) continue;
     await opts.beforeDeliver?.();
     const notified = await transitionDispatchRequest(
-      teamName,
+      runtimeTeamName,
       request.request_id,
       'pending',
       'notified',
@@ -237,7 +240,7 @@ async function markPendingInboxDispatchesDelivered(
     ).catch(() => null);
     if (!notified) continue;
     await transitionDispatchRequest(
-      teamName,
+      runtimeTeamName,
       request.request_id,
       'notified',
       'delivered',
@@ -256,12 +259,13 @@ async function markPendingInboxDispatchesNotified(
     lastReason?: string;
   } = {},
 ): Promise<void> {
-  const requests = await listDispatchRequests(await resolveRuntimeTeamName(cwd, teamName), cwd, { kind: 'inbox' }).catch(() => []);
+  const runtimeTeamName = await resolveRuntimeTeamName(cwd, teamName);
+  const requests = await listDispatchRequests(runtimeTeamName, cwd, { kind: 'inbox' }).catch(() => []);
   for (const request of requests) {
     if (request.status !== 'pending') continue;
     if (opts.toWorker && request.to_worker !== opts.toWorker) continue;
     await transitionDispatchRequest(
-      teamName,
+      runtimeTeamName,
       request.request_id,
       'pending',
       'notified',
@@ -992,6 +996,10 @@ case "$1" in
         printf "%%1\\tzsh\\tzsh\\n"
         exit 0
         ;;
+      *"#{pane_dead}"*)
+        echo "0"
+        exit 0
+        ;;
       *"#{pane_pid}"*)
         echo "2000004321"
         exit 0
@@ -1017,7 +1025,7 @@ case "$1" in
     exit 0
     ;;
   capture-pane)
-    printf 'OpenAI Codex\\n> '
+    printf 'worker process is still starting; no agent prompt yet\\n'
     exit 0
     ;;
   send-keys|resize-pane|select-layout|set-window-option|select-pane|set-hook|run-shell|kill-pane|kill-session)
@@ -1040,7 +1048,7 @@ esac
           process.env.TMUX_PANE = '%1';
           process.env.OMX_TEAM_WORKER_LAUNCH_MODE = 'interactive';
           process.env.OMX_TEAM_WORKER_CLI = 'codex';
-          process.env.OMX_TEAM_SKIP_READY_WAIT = '1';
+          process.env.OMX_TEAM_SKIP_READY_WAIT = '0';
           delete process.env.OMX_TEAM_STARTUP_EVIDENCE_TIMEOUT_MS;
           process.env.OMX_TEAM_STARTUP_DISPATCH_RETRIES = '1';
           process.env.OMX_TEAM_STARTUP_DISPATCH_RETRY_DELAY_MS = '50';
@@ -1113,7 +1121,7 @@ esac
   });
 
   it(
-    'startTeam rejects tmux fallback when worker startup evidence stays missing',
+    'startTeam treats missing startup evidence as recoverable while failing the startup request',
     { skip: skipSlowLifecycleUnderCoverage },
     async () => {
     const cwd = await mkdtemp(join(tmpdir(), 'omx-runtime-startup-no-evidence-'));
@@ -1156,12 +1164,16 @@ case "$1" in
         printf "%%1\\tzsh\\tzsh\\n"
         exit 0
         ;;
-      *"#{pane_pid}"*)
-        echo "2000004321"
+      *"#{pane_dead} #{pane_pid}"*)
+        if printf '%s' "$*" | grep -q -- '-a'; then
+          printf "%%2 0 2000004321\\n"
+        else
+          echo "0 2000004321"
+        fi
         exit 0
         ;;
-      *"#{pane_dead} #{pane_pid}"*)
-        echo "0 2000004321"
+      *"#{pane_pid}"*)
+        echo "2000004321"
         exit 0
         ;;
       *)
@@ -1181,7 +1193,7 @@ case "$1" in
     exit 0
     ;;
   capture-pane)
-    printf 'OpenAI Codex\\n> '
+    printf 'startup still bootstrapping without prompt\\n'
     exit 0
     ;;
   send-keys|resize-pane|select-layout|set-window-option|select-pane|set-hook|run-shell|kill-pane|kill-session)
@@ -1231,18 +1243,15 @@ esac
             })();
           }, 20);
 
-          await assert.rejects(
-            withoutTeamWorkerEnv(() =>
-              startTeam(
-                'team-startup-no-evidence',
-                'interactive startup rejects missing worker evidence without false task evidence',
-                'executor',
-                1,
-                [{ subject: 's', description: 'd', owner: 'worker-1' }],
-                cwd,
-              )),
-            /worker_notify_failed:worker-1:codex_startup_no_evidence_after_fallback/,
-          );
+          const runtime = await withoutTeamWorkerEnv(() =>
+            startTeam(
+              'team-startup-no-evidence',
+              'interactive startup should recover when startup evidence never arrives',
+              'executor',
+              1,
+              [{ subject: 's', description: 'd', owner: 'worker-1' }],
+              cwd,
+            ));
 
           if (receiptFailer) {
             clearInterval(receiptFailer);
@@ -1250,7 +1259,20 @@ esac
           }
 
           const tmuxLog = await readFile(tmuxLogPath, 'utf-8');
-          assert.match(tmuxLog, /send-keys -t %2 -l --/);
+          assert.doesNotMatch(tmuxLog, /send-keys -t %2 -l --/);
+          const requests = await listDispatchRequests(runtime.teamName, cwd, { kind: 'inbox' });
+          assert.equal(requests.length, 1);
+          assert.equal(requests[0]?.intent, 'startup-trigger');
+          const request = await readDispatchRequest(runtime.teamName, requests[0]!.request_id, cwd);
+          assert.equal(request?.status, 'failed');
+          assert.match(
+            request?.last_reason ?? '',
+            /startup_direct_no_evidence|startup_no_evidence|hook_receipt_failed_without_fallback|hook_timeout_without_fallback|test_failed_receipt/,
+          );
+
+          const attention = await readTeamLeaderAttention(runtime.teamName, cwd);
+          assert.equal(attention?.leader_attention_reason, 'ack_without_start_evidence');
+
           await shutdownTeam(expectedTeamName, cwd, { force: true }).catch(() => {});
         },
       );
@@ -1495,10 +1517,13 @@ process.on('SIGTERM', () => process.exit(0));`,
 
   it('startTeam rejects duplicate active same-name team state without mutating existing files', async () => {
     const cwd = await mkdtemp(join(tmpdir(), 'omx-runtime-duplicate-team-'));
+    const prevPath = process.env.PATH;
     const prevSessionId = process.env.OMX_SESSION_ID;
     const prevLaunchMode = process.env.OMX_TEAM_WORKER_LAUNCH_MODE;
+    const prevWorkerCli = process.env.OMX_TEAM_WORKER_CLI;
     try {
       process.env.OMX_SESSION_ID = 'sess-existing-team';
+      process.env.OMX_TEAM_WORKER_LAUNCH_MODE = 'prompt';
       await initTeamState(
         'dup-team',
         'existing task',
@@ -1506,19 +1531,43 @@ process.on('SIGTERM', () => process.exit(0));`,
         1,
         cwd,
         undefined,
-        { ...process.env, OMX_SESSION_ID: 'sess-existing-team' },
+        {
+          ...process.env,
+          OMX_SESSION_ID: 'sess-existing-team',
+          OMX_TEAM_WORKER_LAUNCH_MODE: 'prompt',
+        },
       );
       await createTask('dup-team', {
         subject: 'existing subject',
         description: 'existing description',
         status: 'pending',
       }, cwd);
+      await writeWorkerIdentity('dup-team', 'worker-1', {
+        name: 'worker-1',
+        index: 1,
+        role: 'executor',
+        assigned_tasks: ['1'],
+        pid: process.pid,
+      }, cwd);
+      const existingConfig = await readTeamConfig('dup-team', cwd);
+      assert.ok(existingConfig);
+      existingConfig.worker_launch_mode = 'prompt';
+      if (existingConfig.workers[0]) {
+        existingConfig.workers[0].pid = process.pid;
+      }
+      await saveTeamConfig(existingConfig, cwd);
 
       const beforeConfig = await readTeamConfig('dup-team', cwd);
       assert.ok(beforeConfig);
 
       process.env.OMX_TEAM_WORKER_LAUNCH_MODE = 'prompt';
-      process.env.OMX_SESSION_ID = 'sess-second-team';
+      const binDir = join(cwd, 'bin');
+      const fakeGeminiPath = join(binDir, 'gemini');
+      await mkdir(binDir, { recursive: true });
+      await writeFakePromptWorkerBinary(fakeGeminiPath, 'setTimeout(() => {}, 5000);\nprocess.on(\'SIGTERM\', () => process.exit(0));\n');
+      process.env.PATH = `${binDir}:${process.env.PATH ?? ''}`;
+      process.env.OMX_TEAM_WORKER_CLI = 'gemini';
+      process.env.OMX_SESSION_ID = 'sess-existing-team';
 
       await assert.rejects(
         () => withoutTeamWorkerEnv(() =>
@@ -1530,7 +1579,7 @@ process.on('SIGTERM', () => process.exit(0));`,
             [{ subject: 'new subject', description: 'new description', owner: 'worker-1' }],
             cwd,
           )),
-        /team_name_conflict: active team state already exists/,
+        /leader_session_conflict: active team exists \(dup-team\)|team_name_conflict: active team state already exists/,
       );
 
       const afterConfig = await readTeamConfig('dup-team', cwd);
@@ -1540,10 +1589,107 @@ process.on('SIGTERM', () => process.exit(0));`,
       assert.equal(existingTask?.subject, 'existing subject');
       assert.equal(existingTask?.description, 'existing description');
     } finally {
+      if (typeof prevPath === 'string') process.env.PATH = prevPath;
+      else delete process.env.PATH;
       if (typeof prevSessionId === 'string') process.env.OMX_SESSION_ID = prevSessionId;
       else delete process.env.OMX_SESSION_ID;
       if (typeof prevLaunchMode === 'string') process.env.OMX_TEAM_WORKER_LAUNCH_MODE = prevLaunchMode;
       else delete process.env.OMX_TEAM_WORKER_LAUNCH_MODE;
+      if (typeof prevWorkerCli === 'string') process.env.OMX_TEAM_WORKER_CLI = prevWorkerCli;
+      else delete process.env.OMX_TEAM_WORKER_CLI;
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+
+  it('startTeam archives a prior terminal same-name run before creating a clean replacement run', async () => {
+    const cwd = await initRepo();
+    const binDir = join(cwd, 'bin');
+    const fakeGeminiPath = join(binDir, 'gemini');
+    const prevSessionId = process.env.OMX_SESSION_ID;
+    const prevPath = process.env.PATH;
+    const prevLaunchMode = process.env.OMX_TEAM_WORKER_LAUNCH_MODE;
+    const prevWorkerCli = process.env.OMX_TEAM_WORKER_CLI;
+    let runtime: TeamRuntime | null = null;
+    try {
+      await mkdir(binDir, { recursive: true });
+      await writeFakePromptWorkerBinary(
+        fakeGeminiPath,
+        'setTimeout(() => {}, 5000);\nprocess.on(\'SIGTERM\', () => process.exit(0));\n',
+      );
+      process.env.PATH = `${binDir}:${process.env.PATH ?? ''}`;
+      process.env.OMX_SESSION_ID = 'sess-archive-terminal';
+      process.env.OMX_TEAM_WORKER_LAUNCH_MODE = 'prompt';
+      process.env.OMX_TEAM_WORKER_CLI = 'gemini';
+
+      await initTeamState(
+        'archive-team',
+        'existing archived task',
+        'executor',
+        1,
+        cwd,
+        undefined,
+        { ...process.env, OMX_SESSION_ID: 'sess-archive-terminal' },
+      );
+      await createTask('archive-team', {
+        subject: 'preserve me',
+        description: 'terminal run should be archived before replacement',
+        status: 'completed',
+      }, cwd);
+      await writeFile(
+        join(cwd, '.omx', 'state', 'team', 'archive-team', 'phase.json'),
+        JSON.stringify({ current_phase: 'complete', updated_at: new Date().toISOString() }, null, 2),
+        'utf-8',
+      );
+      await mkdir(join(cwd, '.omx', 'team', 'archive-team'), { recursive: true });
+      await writeFile(join(cwd, '.omx', 'team', 'archive-team', 'runtime.txt'), 'runtime artifact', 'utf-8');
+
+      runtime = await withoutTeamWorkerEnv(() =>
+        startTeam(
+          'archive-team',
+          'replacement task',
+          'executor',
+          1,
+          [{ subject: 'new subject', description: 'new description', owner: 'worker-1' }],
+          cwd,
+          { worktreeMode: { enabled: false } },
+        ));
+
+      const stateArchiveRoot = join(cwd, '.omx', 'state', 'team-archive');
+      const runtimeArchiveRoot = join(cwd, '.omx', 'team-archive');
+      const archivedStateEntries = await readdir(stateArchiveRoot, { withFileTypes: true });
+      const archivedRuntimeEntries = await readdir(runtimeArchiveRoot, { withFileTypes: true });
+      const stateArchiveDir = archivedStateEntries.find((entry) => entry.isDirectory() && entry.name.startsWith('archive-team-') && entry.name.includes('-previous-terminal-run'));
+      const runtimeArchiveDir = archivedRuntimeEntries.find((entry) => entry.isDirectory() && entry.name.startsWith('archive-team-') && entry.name.includes('-previous-terminal-run'));
+      assert.ok(stateArchiveDir, 'expected prior state to be archived');
+      assert.ok(runtimeArchiveDir, 'expected prior runtime artifacts to be archived');
+
+      const archivedMeta = JSON.parse(
+        await readFile(join(stateArchiveRoot, stateArchiveDir!.name, 'archived-meta.json'), 'utf-8'),
+      ) as { reason?: string; archived_from?: string };
+      assert.equal(archivedMeta.archived_from, 'archive-team');
+      assert.equal(archivedMeta.reason, 'previous-terminal-run');
+
+      const archivedTask = JSON.parse(
+        await readFile(join(stateArchiveRoot, stateArchiveDir!.name, 'tasks', 'task-1.json'), 'utf-8'),
+      ) as { subject?: string };
+      assert.equal(archivedTask?.subject, 'preserve me');
+      assert.equal(existsSync(join(runtimeArchiveRoot, runtimeArchiveDir!.name, 'runtime.txt')), true);
+
+      const liveTask = await readTask(runtime.teamName, '1', cwd);
+      assert.equal(liveTask?.subject, 'new subject');
+      assert.equal(existsSync(join(cwd, '.omx', 'team', 'archive-team', 'runtime.txt')), false);
+    } finally {
+      if (runtime) {
+        await shutdownTeam(runtime.teamName, cwd, { force: true }).catch(() => {});
+      }
+      if (typeof prevSessionId === 'string') process.env.OMX_SESSION_ID = prevSessionId;
+      else delete process.env.OMX_SESSION_ID;
+      if (typeof prevPath === 'string') process.env.PATH = prevPath;
+      else delete process.env.PATH;
+      if (typeof prevLaunchMode === 'string') process.env.OMX_TEAM_WORKER_LAUNCH_MODE = prevLaunchMode;
+      else delete process.env.OMX_TEAM_WORKER_LAUNCH_MODE;
+      if (typeof prevWorkerCli === 'string') process.env.OMX_TEAM_WORKER_CLI = prevWorkerCli;
+      else delete process.env.OMX_TEAM_WORKER_CLI;
       await rm(cwd, { recursive: true, force: true });
     }
   });
@@ -1728,6 +1874,7 @@ esac
     const prevWorkerCli = process.env.OMX_TEAM_WORKER_CLI;
     const prevSkipReadyWait = process.env.OMX_TEAM_SKIP_READY_WAIT;
     let runtime: TeamRuntime | null = null;
+    let receiptNotifier: NodeJS.Timeout | null = null;
 
     try {
       await withMockTmuxFixture(
@@ -1793,6 +1940,10 @@ esac
           process.env.OMX_TEAM_WORKER_CLI = 'codex';
           process.env.OMX_TEAM_SKIP_READY_WAIT = '1';
 
+          receiptNotifier = setInterval(() => {
+            void markPendingInboxDispatchesNotified('team-interactive-cleanup', cwd, { toWorker: 'worker-1' }).catch(() => {});
+          }, 20);
+
           const events: string[] = [];
           runtime = await withoutTeamWorkerEnv(() =>
             startTeam(
@@ -1817,6 +1968,7 @@ esac
         },
       );
     } finally {
+      if (receiptNotifier) clearInterval(receiptNotifier);
       const runtimeToShutdown = runtime as TeamRuntime | null;
       if (runtimeToShutdown) {
         await shutdownTeam(runtimeToShutdown.teamName, cwd, { force: true }).catch(() => {});
@@ -1843,6 +1995,7 @@ esac
     const prevWorkerCli = process.env.OMX_TEAM_WORKER_CLI;
     const prevSkipReadyWait = process.env.OMX_TEAM_SKIP_READY_WAIT;
     let runtime: TeamRuntime | null = null;
+    let receiptNotifier: NodeJS.Timeout | null = null;
 
     try {
       await withMockTmuxFixture(
@@ -1927,6 +2080,10 @@ esac
           process.env.OMX_TEAM_WORKER_CLI = 'codex';
           process.env.OMX_TEAM_SKIP_READY_WAIT = '1';
 
+          receiptNotifier = setInterval(() => {
+            void markPendingInboxDispatchesNotified('team-pane-pid', cwd, { toWorker: 'worker-1' }).catch(() => {});
+          }, 20);
+
           runtime = await withoutTeamWorkerEnv(() =>
             startTeam(
               'team-pane-pid',
@@ -1947,6 +2104,7 @@ esac
         },
       );
     } finally {
+      if (receiptNotifier) clearInterval(receiptNotifier);
       const runtimeToShutdown = runtime as TeamRuntime | null;
       if (runtimeToShutdown) {
         await shutdownTeam(runtimeToShutdown.teamName, cwd, { force: true }).catch(() => {});
@@ -1985,7 +2143,7 @@ esac
   });
 
 
-  it('startTeam rejects startup direct trigger success when Codex startup evidence is missing', async () => {
+  it('startTeam avoids duplicate startup replay and terminalizes startup requests when evidence never arrives', async () => {
     const cwd = await mkdtemp(join(tmpdir(), 'omx-runtime-startup-direct-fast-'));
     const previousTmux = process.env.TMUX;
     const previousTmuxPane = process.env.TMUX_PANE;
@@ -2068,25 +2226,34 @@ esac
           process.env.OMX_TEAM_STARTUP_DISPATCH_RETRIES = '1';
           process.env.OMX_TEAM_STARTUP_DISPATCH_RETRY_DELAY_MS = '50';
 
-          await assert.rejects(
-            withoutTeamWorkerEnv(() =>
-              startTeam(
-                teamName,
-                'startup direct trigger falls back to evidence-gated dispatch',
-                'executor',
-                1,
-                [{ subject: 'w1', description: 'worker one', owner: 'worker-1' }],
-                cwd,
-              )),
-            /worker_notify_failed:worker-1:codex_startup_no_evidence_after_fallback/,
-          );
+          const runtime = await withoutTeamWorkerEnv(() =>
+            startTeam(
+              teamName,
+              'startup direct trigger should recover without duplicate startup replay',
+              'executor',
+              1,
+              [{ subject: 'w1', description: 'worker one', owner: 'worker-1' }],
+              cwd,
+            ));
 
           const order = (await readFile(join(cwd, 'startup-order.log'), 'utf-8')).trim().split('\n');
-          assert.ok(order.includes('send-keys'), `expected direct send-keys, got ${order.join(',')}`);
+          assert.ok(order.includes('send-keys'), `expected a startup trigger dispatch, got ${order.join(',')}`);
           assert.ok(
-            order.filter((entry) => entry === 'send-keys').length >= 2,
-            `expected evidence-gated dispatch after startup-direct no-evidence, got ${order.join(',')}`,
+            order.filter((entry) => entry === 'send-keys').length === 1,
+            `expected a single startup dispatch without replay, got ${order.join(',')}`,
           );
+
+          const requests = await listDispatchRequests(runtime.teamName, cwd, { kind: 'inbox' });
+          assert.equal(requests.length, 1);
+          assert.equal(requests[0]?.intent, 'startup-trigger');
+          const request = await readDispatchRequest(runtime.teamName, requests[0]!.request_id, cwd);
+          assert.equal(request?.status, 'failed');
+          assert.match(request?.last_reason ?? '', /startup_direct_no_evidence|startup_no_evidence|hook_timeout_without_fallback|hook_receipt_failed_without_fallback/);
+
+          const attention = await readTeamLeaderAttention(runtime.teamName, cwd);
+          assert.equal(attention?.leader_attention_reason, 'ack_without_start_evidence');
+
+          await shutdownTeam(runtime.teamName, cwd, { force: true }).catch(() => {});
         },
       );
     } finally {
@@ -2251,7 +2418,7 @@ esac
     }
   });
 
-  it('startTeam rejects ready-prompt timeout when dispatch never produces startup evidence', async () => {
+  it('startTeam marks ready-prompt timeout without startup evidence as recoverable and terminalizes the request', async () => {
     const cwd = await mkdtemp(join(tmpdir(), 'omx-runtime-ready-timeout-no-evidence-'));
     const previousTmux = process.env.TMUX;
     const previousTmuxPane = process.env.TMUX_PANE;
@@ -2326,22 +2493,31 @@ esac
             void markPendingInboxDispatchesNotified(teamName, cwd);
           }, 20);
 
-          await assert.rejects(
-            withoutTeamWorkerEnv(() =>
-              startTeam(
-                teamName,
-                'ready prompt timeout should not count a draft-only worker as started',
-                'executor',
-                1,
-                [{ subject: 'w1', description: 'worker one', owner: 'worker-1' }],
-                cwd,
-              )),
-            /worker_notify_failed:worker-1:codex_startup_no_evidence_after_fallback/,
-          );
+          const runtime = await withoutTeamWorkerEnv(() =>
+            startTeam(
+              teamName,
+              'ready prompt timeout should not count a draft-only worker as started',
+              'executor',
+              1,
+              [{ subject: 'w1', description: 'worker one', owner: 'worker-1' }],
+              cwd,
+            ));
 
           const tmuxLog = await readFile(tmuxLogPath, 'utf-8');
-          assert.match(tmuxLog, /send-keys -t %2 -l --/);
-          runtimeTeamName = await resolveRuntimeTeamName(cwd, teamName).catch(() => null);
+          assert.doesNotMatch(tmuxLog, /send-keys -t %2 -l --/);
+          runtimeTeamName = runtime.teamName;
+
+          const requests = await listDispatchRequests(runtime.teamName, cwd, { kind: 'inbox' });
+          assert.equal(requests.length, 1);
+          const request = await readDispatchRequest(runtime.teamName, requests[0]!.request_id, cwd);
+          assert.equal(request?.status, 'failed');
+          assert.match(
+            request?.last_reason ?? '',
+            /codex_startup_no_evidence|hook_timeout_without_fallback|hook_receipt_failed_without_fallback/,
+          );
+
+          const attention = await readTeamLeaderAttention(runtime.teamName, cwd);
+          assert.equal(attention?.leader_attention_reason, 'ack_without_start_evidence');
         },
       );
     } finally {
@@ -2624,7 +2800,7 @@ process.on('SIGTERM', () => process.exit(0));
               const runtimeTeamName = await resolveRuntimeTeamName(cwd, teamName);
               const requests = await listDispatchRequests(runtimeTeamName, cwd, { kind: 'inbox' }).catch(() => []);
               for (const request of requests) {
-                observedNoEvidenceRequest ||= /startup_no_evidence|fallback_attempted_but_unconfirmed/.test(request.last_reason ?? '');
+                observedNoEvidenceRequest ||= /startup_no_evidence|startup_direct_no_evidence|hook_timeout_without_fallback|hook_receipt_failed_without_fallback|fallback_attempted_but_unconfirmed/.test(request.last_reason ?? '');
                 if (request.status !== 'pending') continue;
                 await transitionDispatchRequest(
                   teamName,
@@ -2638,23 +2814,31 @@ process.on('SIGTERM', () => process.exit(0));
             })();
           }, 20);
 
-          await assert.rejects(
-            withoutTeamWorkerEnv(() =>
-              startTeam(
-                teamName,
-                'interactive startup should reject no-evidence startup even while panes stay alive',
-                'executor',
-                2,
-                [
-                  { subject: 'worker-1 task', description: 'd', owner: 'worker-1' },
-                  { subject: 'worker-2 task', description: 'd', owner: 'worker-2' },
-                ],
-                cwd,
-              )),
-            /worker_notify_failed:worker-\d+:(codex_startup_no_evidence_after_fallback|fallback_attempted_but_unconfirmed)/,
-          );
+          runtime = await withoutTeamWorkerEnv(() =>
+            startTeam(
+              teamName,
+              'interactive startup should recover from no-evidence startup even while panes stay alive',
+              'executor',
+              2,
+              [
+                { subject: 'worker-1 task', description: 'd', owner: 'worker-1' },
+                { subject: 'worker-2 task', description: 'd', owner: 'worker-2' },
+              ],
+              cwd,
+            ));
 
           assert.equal(observedNoEvidenceRequest, true);
+
+          const requests = await listDispatchRequests(runtime.teamName, cwd, { kind: 'inbox' });
+          assert.ok(requests.length >= 1);
+          for (const request of requests) {
+            assert.equal(request.intent, 'startup-trigger');
+            const persisted = await readDispatchRequest(runtime.teamName, request.request_id, cwd);
+            assert.notEqual(persisted?.status, 'pending');
+          }
+
+          const attention = await readTeamLeaderAttention(runtime.teamName, cwd);
+          assert.equal(attention?.leader_attention_reason, 'ack_without_start_evidence');
 
         },
       );
@@ -3032,7 +3216,11 @@ case "$1" in
   list-panes)
     case "$*" in
       *"#{pane_dead} #{pane_pid}"*)
-        echo "0 2000004242"
+        if printf '%s' "$*" | grep -q -- '-a'; then
+          printf "%%2 0 2000004242\\n%%3 0 2000004343\\n"
+        else
+          echo "0 2000004242"
+        fi
         ;;
       *"pane_current_command"*)
         printf "%%1\\tnode\\t'codex'\\n"
@@ -3093,7 +3281,7 @@ process.on('SIGTERM', () => process.exit(0));
           ],
         },
         async () => {
-          let runtimeTeamName = sanitizeTeamName('team-materialize-before-evidence');
+          let runtimeTeamName = 'team-materialize-before-evidence';
           delete process.env.TMUX;
           process.env.TMUX_PANE = '%1';
           process.env.OMX_TEAM_WORKER_LAUNCH_MODE = 'interactive';
@@ -3105,7 +3293,9 @@ process.on('SIGTERM', () => process.exit(0));
 
           receiptFailer = setInterval(() => {
             void (async () => {
-              const activeTeamName = await resolveRuntimeTeamName(cwd, 'team-materialize-before-evidence');
+              const teamEntries = await readdir(join(cwd, '.omx', 'state', 'team'), { withFileTypes: true }).catch(() => []);
+              const activeTeamName = teamEntries.find((entry) => entry.isDirectory())?.name
+                ?? await resolveRuntimeTeamName(cwd, 'team-materialize-before-evidence');
               runtimeTeamName = activeTeamName;
               const requests = await listDispatchRequests(activeTeamName, cwd, { kind: 'inbox' }).catch(() => []);
               for (const request of requests) {
@@ -3140,8 +3330,12 @@ process.on('SIGTERM', () => process.exit(0));
           );
 
           let materializedAllWorkers = false;
-          for (let attempt = 0; attempt < 200; attempt += 1) {
-            runtimeTeamName = await resolveRuntimeTeamName(cwd, 'team-materialize-before-evidence');
+          let lastObservedTeamName = runtimeTeamName;
+          for (let attempt = 0; attempt < 400; attempt += 1) {
+            const teamEntries = await readdir(join(cwd, '.omx', 'state', 'team'), { withFileTypes: true }).catch(() => []);
+            runtimeTeamName = teamEntries.find((entry) => entry.isDirectory())?.name
+              ?? await resolveRuntimeTeamName(cwd, 'team-materialize-before-evidence');
+            lastObservedTeamName = runtimeTeamName;
             const workerOneIdentity = join(cwd, '.omx', 'state', 'team', runtimeTeamName, 'workers', 'worker-1', 'identity.json');
             const workerTwoIdentity = join(cwd, '.omx', 'state', 'team', runtimeTeamName, 'workers', 'worker-2', 'identity.json');
             const workerTwoInbox = join(cwd, '.omx', 'state', 'team', runtimeTeamName, 'workers', 'worker-2', 'inbox.md');
@@ -3159,17 +3353,24 @@ process.on('SIGTERM', () => process.exit(0));
           assert.equal(
             materializedAllWorkers,
             true,
-            'worker-2 durable state should exist before worker-1 startup evidence failure rejects launch',
+            `worker-2 durable state should exist before worker-1 startup evidence handling settles (last observed team=${lastObservedTeamName})`,
           );
 
           const outcome = await observedTeamPromise;
-          assert.equal(outcome.ok, false);
-          assert.match(String((outcome as { ok: false; error: Error }).error), /worker_notify_failed:worker-1/);
+          assert.equal(outcome.ok, true);
+          const runtime = (outcome as { ok: true; runtime: TeamRuntime }).runtime;
 
           assert.equal(
             existsSync(join(cwd, '.omx', 'state', 'team', runtimeTeamName)),
-            false,
+            true,
           );
+
+          const requests = await listDispatchRequests(runtime.teamName, cwd, { kind: 'inbox' });
+          assert.ok(requests.length >= 1);
+          const attention = await readTeamLeaderAttention(runtime.teamName, cwd);
+          assert.equal(attention?.leader_attention_reason, 'ack_without_start_evidence');
+
+          await shutdownTeam(runtime.teamName, cwd, { force: true }).catch(() => {});
         },
       );
     } finally {
@@ -7303,6 +7504,10 @@ esac
       const manifest = JSON.parse(await readFile(manifestPath, 'utf-8'));
       manifest.policy = { ...(manifest.policy || {}), dispatch_ack_timeout_ms: 250 };
       await writeFile(manifestPath, JSON.stringify(manifest, null, 2));
+      const configPath = teamStateTestPath(cwd, 'team', 'team-approved-followup', 'config.json');
+      const config = JSON.parse(await readFile(configPath, 'utf-8'));
+      config.worker_launch_mode = 'prompt';
+      await writeFile(configPath, JSON.stringify(config, null, 2));
       const plansDir = join(cwd, '.omx', 'plans');
       await mkdir(plansDir, { recursive: true });
       const prdPath = join(plansDir, 'prd-issue-1320.md');
@@ -7328,6 +7533,13 @@ esac
         task: approvedTask,
         command: `omx team 1:executor "${approvedTask}"`,
       });
+      await writeWorkerIdentity('team-approved-followup', 'worker-1', {
+        name: 'worker-1',
+        index: 1,
+        role: 'executor',
+        assigned_tasks: ['1'],
+        pid: process.pid,
+      }, cwd);
       const task = await createTask(
         'team-approved-followup',
         { subject: 'Implement approved follow-up', description: 'Implement approved follow-up', status: 'pending' },

@@ -349,14 +349,14 @@ describe('HUD resize hook command builders', () => {
 
 
 describe('evaluateStartupDirectTriggerSafetyCapture', () => {
-  it('allows startup direct triggers on a ready prompt or Codex viewport', () => {
+  it('allows startup direct triggers on a ready prompt and blocks bare Codex viewports until readiness is explicit', () => {
     assert.deepEqual(evaluateStartupDirectTriggerSafetyCapture(READY_HELPER_CAPTURE, 'codex'), {
       safe: true,
       reason: 'ready_prompt',
     });
     assert.deepEqual(evaluateStartupDirectTriggerSafetyCapture(VIEWPORT_WITHOUT_VISIBLE_PROMPT_CAPTURE, 'codex'), {
-      safe: true,
-      reason: 'codex_viewport',
+      safe: false,
+      reason: 'bootstrapping',
     });
   });
 

@@ -10,6 +10,7 @@ import {
 import { basename, dirname, join, relative, resolve } from "node:path";
 import { getPackageRoot } from "../utils/package.js";
 import { readSessionState, isSessionStale } from "../hooks/session.js";
+import { OMX_DISPLAY_NAME } from "../utils/package.js";
 
 export const AGENTS_INIT_USAGE = [
   "Usage: omx agents-init [path] [--dry-run] [--force] [--verbose]",
@@ -315,7 +316,7 @@ export async function agentsInit(
     activeSession && !isSessionStale(activeSession),
   );
 
-  console.log("oh-my-codex AGENTS bootstrap");
+  console.log(`${OMX_DISPLAY_NAME} AGENTS bootstrap`);
   console.log("===========================\n");
   console.log(`Target: ${requestedTarget}`);
   console.log(

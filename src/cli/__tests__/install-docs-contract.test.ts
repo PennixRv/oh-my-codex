@@ -61,7 +61,7 @@ describe('install docs contract', () => {
       const content = read(surface);
       assert.match(content, /Homebrew/i, `${surface} must mention Homebrew installs`);
       assert.match(content, /codex --version/, `${surface} must tell users to verify the existing Codex CLI`);
-      assert.match(content, /npm install -g oh-my-codex/, `${surface} must keep the OMX-only npm install command`);
+      assert.match(content, /npm install -g oh-my-codex-pennix/, `${surface} must keep the OMX-only npm install command`);
     }
   });
 

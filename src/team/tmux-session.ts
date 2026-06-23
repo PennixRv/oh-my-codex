@@ -1704,7 +1704,12 @@ export function evaluateStartupDirectTriggerSafetyCapture(captured: string, work
   if (paneHasClaudeBypassPermissionsPrompt(captured)) return { safe: false, reason: 'claude_bypass_prompt' };
   if (paneLooksReady(captured)) return { safe: true, reason: 'ready_prompt' };
   if (paneIsBootstrapping(captured)) return { safe: false, reason: 'bootstrapping' };
-  if (workerCli === 'codex' && sharedPaneShowsCodexViewport(captured)) return { safe: true, reason: 'codex_viewport' };
+  // Codex startup is evidence-gated and its viewport can appear before the
+  // worker is actually ready to receive a safe direct startup trigger. Only a
+  // concrete ready prompt should bypass the normal startup dispatch path.
+  if (workerCli === 'codex' && sharedPaneShowsCodexViewport(captured)) {
+    return { safe: false, reason: 'bootstrapping' };
+  }
   return { safe: false, reason: 'not_agent_viewport' };
 }
 

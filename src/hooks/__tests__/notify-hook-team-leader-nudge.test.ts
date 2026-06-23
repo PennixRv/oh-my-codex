@@ -1128,7 +1128,7 @@ exit 0
       const nudgeEvent = events.find((e: { type?: string; reason?: string; orchestration_intent?: string }) =>
         e.type === 'team_leader_nudge' && e.reason === 'ack_without_start_evidence');
       assert.ok(nudgeEvent, 'should emit an ack_without_start_evidence leader nudge');
-      assert.equal(nudgeEvent.orchestration_intent, 'followup-relaunch');
+      assert.equal(nudgeEvent.orchestration_intent, 'stalled-unblock');
     });
   });
 

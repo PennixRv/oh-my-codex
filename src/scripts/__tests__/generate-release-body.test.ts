@@ -22,7 +22,7 @@ function git(cwd: string, args: string[], env: NodeJS.ProcessEnv = {}): string {
   return String(result.stdout || '').trim();
 }
 
-const TEMPLATE = `# oh-my-codex v0.0.0
+const TEMPLATE = `# oh-my-codex-pennix v0.0.0
 
 ## Summary
 
@@ -77,7 +77,7 @@ describe('generate-release-body', () => {
       });
 
       const generated = await readFile(join(root, 'RELEASE_BODY.generated.md'), 'utf-8');
-      assert.match(generated, /^# oh-my-codex v0.13.0/m);
+      assert.match(generated, /^# oh-my-codex-pennix v0.13.0/m);
       assert.match(generated, /Custom summary that must stay intact\./);
       assert.match(generated, /Keep this handwritten section\./);
       assert.match(generated, /## Contributors\n\nThanks to Alice Example and Bob Example for contributing to this release\./);
@@ -238,7 +238,7 @@ describe('generate-release-body', () => {
       git(root, ['commit', '-m', 'release']);
       git(root, ['tag', 'v0.13.1']);
 
-      await writeFile(join(root, 'RELEASE_BODY.md'), `# oh-my-codex v0.0.0
+      await writeFile(join(root, 'RELEASE_BODY.md'), `# oh-my-codex-pennix v0.0.0
 
 ## Summary
 

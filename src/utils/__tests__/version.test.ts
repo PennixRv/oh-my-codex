@@ -32,7 +32,7 @@ describe('resolveOmxDisplayVersionSync', () => {
         installed_version: '0.18.8',
         setup_completed_version: '0.18.8',
         install_channel: 'dev',
-        install_source: 'github:Yeachan-Heo/oh-my-codex#dev',
+        install_source: 'github:PennixRv/oh-my-codex#dev',
         install_revision: 'abcdef1234567890',
         updated_at: '2026-06-02T00:00:00.000Z',
       }, null, 2));
@@ -50,7 +50,7 @@ describe('resolveOmxDisplayVersionSync', () => {
         setup_completed_version: '0.18.8',
         dev_base_version: '0.18.9',
         install_channel: 'dev',
-        install_source: 'github:Yeachan-Heo/oh-my-codex#dev',
+        install_source: 'github:PennixRv/oh-my-codex#dev',
         install_revision: 'feedfacecafebeef',
         updated_at: '2026-06-09T00:00:00.000Z',
       }, null, 2));

@@ -36,6 +36,12 @@ import {
   type ManagedCodexHookOptions,
 } from "./codex-hooks.js";
 import type { HudPreset } from "../hud/types.js";
+import {
+  OMX_DISPLAY_NAME,
+  OMX_LEGACY_DISPLAY_NAME,
+  OMX_LEGACY_PACKAGE_NAME,
+  OMX_PACKAGE_NAME,
+} from "../utils/package.js";
 
 interface MergeOptions {
   includeTui?: boolean;
@@ -61,6 +67,45 @@ function escapeTomlString(value: string): string {
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
+
+function matchesAnyMarker(
+  value: string,
+  markers: readonly string[],
+): boolean {
+  return markers.includes(value);
+}
+
+function includesAnyMarker(
+  content: string,
+  markers: readonly string[],
+): boolean {
+  return markers.some((marker) => content.includes(marker));
+}
+
+function findNextMarker(
+  content: string,
+  markers: readonly string[],
+  fromIndex = 0,
+): { index: number; marker: string } | null {
+  let bestIndex = -1;
+  let bestMarker = "";
+
+  for (const marker of markers) {
+    const index = content.indexOf(marker, fromIndex);
+    if (index === -1) continue;
+    if (bestIndex === -1 || index < bestIndex) {
+      bestIndex = index;
+      bestMarker = marker;
+    }
+  }
+
+  if (bestIndex === -1) return null;
+  return { index: bestIndex, marker: bestMarker };
+}
+
+const OMX_MANAGED_PACKAGE_PATH_PATTERN = new RegExp(
+  `(?:^|[\\\\/])(?:${OMX_PACKAGE_NAME}|${OMX_LEGACY_PACKAGE_NAME})(?:[\\\\/]|$)`,
+);
 
 // ---------------------------------------------------------------------------
 // Top-level OMX keys (must live before any [table] header)
@@ -94,18 +139,56 @@ export function getModelContextRecommendation(
     modelAutoCompactTokenLimit: DEFAULT_SETUP_MODEL_AUTO_COMPACT_TOKEN_LIMIT,
   };
 }
+const OMX_TOP_LEVEL_SETTINGS_MARKER =
+  `# ${OMX_DISPLAY_NAME} top-level settings (must be before any [table])`;
+const LEGACY_OMX_TOP_LEVEL_SETTINGS_MARKER =
+  "# oh-my-codex top-level settings (must be before any [table])";
+const OMX_TOP_LEVEL_SETTINGS_MARKERS = [
+  OMX_TOP_LEVEL_SETTINGS_MARKER,
+  LEGACY_OMX_TOP_LEVEL_SETTINGS_MARKER,
+] as const;
+
 const OMX_SEEDED_BEHAVIORAL_DEFAULTS_START_MARKER =
+  `# ${OMX_DISPLAY_NAME} seeded behavioral defaults (uninstall removes unchanged defaults)`;
+const LEGACY_OMX_SEEDED_BEHAVIORAL_DEFAULTS_START_MARKER =
   "# oh-my-codex seeded behavioral defaults (uninstall removes unchanged defaults)";
+const OMX_SEEDED_BEHAVIORAL_DEFAULTS_START_MARKERS = [
+  OMX_SEEDED_BEHAVIORAL_DEFAULTS_START_MARKER,
+  LEGACY_OMX_SEEDED_BEHAVIORAL_DEFAULTS_START_MARKER,
+] as const;
 const OMX_SEEDED_BEHAVIORAL_DEFAULTS_END_MARKER =
+  `# End ${OMX_DISPLAY_NAME} seeded behavioral defaults`;
+const LEGACY_OMX_SEEDED_BEHAVIORAL_DEFAULTS_END_MARKER =
   "# End oh-my-codex seeded behavioral defaults";
+const OMX_SEEDED_BEHAVIORAL_DEFAULTS_END_MARKERS = [
+  OMX_SEEDED_BEHAVIORAL_DEFAULTS_END_MARKER,
+  LEGACY_OMX_SEEDED_BEHAVIORAL_DEFAULTS_END_MARKER,
+] as const;
 
 export const OMX_DEVELOPER_INSTRUCTIONS =
-  "You have oh-my-codex installed. AGENTS.md is the orchestration brain and main control surface. Follow AGENTS.md for skill/keyword routing, $name workflow invocation, and role-specialized subagents; when spawning native subagents, set `agent_type` to an installed role and never omit it for OMX work. Use outcome-first, concise progress updates: state the target result, constraints, validation evidence, and stop condition before adding process detail. Native subagents live in .codex/agents and may handle independent parallel subtasks within one Codex session or team pane. Skills load from .codex/skills, not native-agent TOMLs. Treat installed prompts as narrower execution surfaces under AGENTS.md authority.";
+  `You have ${OMX_DISPLAY_NAME} installed. AGENTS.md is the orchestration brain and main control surface. Follow AGENTS.md for skill/keyword routing, $name workflow invocation, and role-specialized subagents; when spawning native subagents, set \`agent_type\` to an installed role and never omit it for OMX work. Use outcome-first, concise progress updates: state the target result, constraints, validation evidence, and stop condition before adding process detail. Native subagents live in .codex/agents and may handle independent parallel subtasks within one Codex session or team pane. Skills load from .codex/skills, not native-agent TOMLs. Treat installed prompts as narrower execution surfaces under AGENTS.md authority.`;
+export const LEGACY_OMX_DEVELOPER_INSTRUCTIONS =
+  `You have ${OMX_LEGACY_DISPLAY_NAME} installed. AGENTS.md is the orchestration brain and main control surface. Follow AGENTS.md for skill/keyword routing, $name workflow invocation, and role-specialized subagents; when spawning native subagents, set \`agent_type\` to an installed role and never omit it for OMX work. Use outcome-first, concise progress updates: state the target result, constraints, validation evidence, and stop condition before adding process detail. Native subagents live in .codex/agents and may handle independent parallel subtasks within one Codex session or team pane. Skills load from .codex/skills, not native-agent TOMLs. Treat installed prompts as narrower execution surfaces under AGENTS.md authority.`;
 export const OMX_PLUGIN_DEVELOPER_INSTRUCTIONS =
-  '<omx version="1">You have oh-my-codex installed through Codex plugin mode. AGENTS.md is the orchestration brain and main control surface. Follow AGENTS.md for skill/keyword routing and $name workflow invocation. When spawning native subagents, set `agent_type` to an installed role and never omit it for OMX work. Registered Codex plugin marketplace surfaces supply OMX workflows and plugin-scoped companion resources when the plugin is installed; native agent roles are installed as setup-owned Codex agent TOML files in plugin mode so agent_type routing works. User-installed skills may still live under ~/.codex/skills. Use outcome-first, concise progress updates: state the target result, constraints, validation evidence, and stop condition before adding process detail.</omx>';
-const SHARED_MCP_REGISTRY_MARKER = "oh-my-codex (OMX) Shared MCP Registry Sync";
+  `<omx version="1">You have ${OMX_DISPLAY_NAME} installed through Codex plugin mode. AGENTS.md is the orchestration brain and main control surface. Follow AGENTS.md for skill/keyword routing and $name workflow invocation. When spawning native subagents, set \`agent_type\` to an installed role and never omit it for OMX work. Registered Codex plugin marketplace surfaces supply OMX workflows and plugin-scoped companion resources when the plugin is installed; native agent roles are installed as setup-owned Codex agent TOML files in plugin mode so agent_type routing works. User-installed skills may still live under ~/.codex/skills. Use outcome-first, concise progress updates: state the target result, constraints, validation evidence, and stop condition before adding process detail.</omx>`;
+export const LEGACY_OMX_PLUGIN_DEVELOPER_INSTRUCTIONS =
+  `<omx version="1">You have ${OMX_LEGACY_DISPLAY_NAME} installed through Codex plugin mode. AGENTS.md is the orchestration brain and main control surface. Follow AGENTS.md for skill/keyword routing and $name workflow invocation. When spawning native subagents, set \`agent_type\` to an installed role and never omit it for OMX work. Registered Codex plugin marketplace surfaces supply OMX workflows and plugin-scoped companion resources when the plugin is installed; native agent roles are installed as setup-owned Codex agent TOML files in plugin mode so agent_type routing works. User-installed skills may still live under ~/.codex/skills. Use outcome-first, concise progress updates: state the target result, constraints, validation evidence, and stop condition before adding process detail.</omx>`;
+const SHARED_MCP_REGISTRY_MARKER =
+  `${OMX_DISPLAY_NAME} (OMX) Shared MCP Registry Sync`;
+const LEGACY_SHARED_MCP_REGISTRY_MARKER =
+  "oh-my-codex (OMX) Shared MCP Registry Sync";
+const SHARED_MCP_REGISTRY_MARKERS = [
+  SHARED_MCP_REGISTRY_MARKER,
+  LEGACY_SHARED_MCP_REGISTRY_MARKER,
+] as const;
 const SHARED_MCP_REGISTRY_END_MARKER =
+  `# End ${OMX_DISPLAY_NAME} shared MCP registry sync`;
+const LEGACY_SHARED_MCP_REGISTRY_END_MARKER =
   "# End oh-my-codex shared MCP registry sync";
+const SHARED_MCP_REGISTRY_END_MARKERS = [
+  SHARED_MCP_REGISTRY_END_MARKER,
+  LEGACY_SHARED_MCP_REGISTRY_END_MARKER,
+] as const;
 const OMX_AGENTS_MAX_THREADS = 6;
 const OMX_AGENTS_MAX_DEPTH = 2;
 const OMX_EXPLORE_ROUTING_DEFAULT = "0";
@@ -167,8 +250,18 @@ const OMX_PRESET_STATUS_LINE_VALUES: ReadonlySet<string> = new Set(
 );
 const LEGACY_OMX_TEAM_RUN_TABLE_PATTERN =
   /^\s*\[mcp_servers\.(?:"omx_team_run"|omx_team_run)\]\s*$/m;
-const OMX_CONFIG_MARKER = "oh-my-codex (OMX) Configuration";
-const OMX_CONFIG_END_MARKER = "# End oh-my-codex";
+const OMX_CONFIG_MARKER = `${OMX_DISPLAY_NAME} (OMX) Configuration`;
+const LEGACY_OMX_CONFIG_MARKER = "oh-my-codex (OMX) Configuration";
+const OMX_CONFIG_MARKERS = [
+  OMX_CONFIG_MARKER,
+  LEGACY_OMX_CONFIG_MARKER,
+] as const;
+const OMX_CONFIG_END_MARKER = `# End ${OMX_DISPLAY_NAME}`;
+const LEGACY_OMX_CONFIG_END_MARKER = "# End oh-my-codex";
+const OMX_CONFIG_END_MARKERS = [
+  OMX_CONFIG_END_MARKER,
+  LEGACY_OMX_CONFIG_END_MARKER,
+] as const;
 
 const CODEX_MODEL_AVAILABILITY_NUX_TABLE_PATTERN = /^\s*\[tui\.model_availability_nux\]\s*(?:#.*)?$/;
 const TOML_TABLE_HEADER_PATTERN = /^\s*\[\[?[^\]]+\]?\]\s*(?:#.*)?$/;
@@ -350,7 +443,7 @@ function isOmxManagedPayloadText(value: string): boolean {
   const containsManagedPackageNotify =
     /(?:^|[\\/])notify-(?:hook|dispatcher)\.js(?:\s|$|["'])/.test(
       value,
-    ) && /(?:^|[\\/])oh-my-codex(?:[\\/]|$)/.test(value);
+    ) && OMX_MANAGED_PACKAGE_PATH_PATTERN.test(value);
   const containsDispatcherMetadataNotify =
     /(?:^|[\\/])notify-dispatcher\.js(?:\s|$|["'])/.test(value) &&
     /--metadata(?:\s|=)/.test(value) &&
@@ -440,7 +533,7 @@ export function isOmxManagedNotifyCommand(
       ])
     : new Set<string>();
   if (pkgRoot && managedScripts.has(resolve(entrypoint))) return true;
-  return /(?:^|[\\/])oh-my-codex(?:[\\/]|$)/.test(entrypoint);
+  return OMX_MANAGED_PACKAGE_PATH_PATTERN.test(entrypoint);
 }
 
 export function sanitizePreviousNotifyCommand(
@@ -462,7 +555,7 @@ function getOmxTopLevelLines(
   const rootValues = parseRootKeyValues(existingConfig);
 
   const lines = [
-    "# oh-my-codex top-level settings (must be before any [table])",
+    OMX_TOP_LEVEL_SETTINGS_MARKER,
     ...(notifyCommand === false
       ? []
       : [`notify = ${formatTomlStringArray(notifyCommand)}`]),
@@ -515,13 +608,16 @@ export function stripOmxSeededBehavioralDefaults(config: string): string {
 
     if (
       index < boundary &&
-      trimmed === OMX_SEEDED_BEHAVIORAL_DEFAULTS_START_MARKER
+      matchesAnyMarker(trimmed, OMX_SEEDED_BEHAVIORAL_DEFAULTS_START_MARKERS)
     ) {
       const endIndex = lines.findIndex(
         (line, candidateIndex) =>
           candidateIndex > index &&
           candidateIndex < boundary &&
-          line.trim() === OMX_SEEDED_BEHAVIORAL_DEFAULTS_END_MARKER,
+          matchesAnyMarker(
+            line.trim(),
+            OMX_SEEDED_BEHAVIORAL_DEFAULTS_END_MARKERS,
+          ),
       );
 
       if (endIndex < 0) {
@@ -538,7 +634,7 @@ export function stripOmxSeededBehavioralDefaults(config: string): string {
 
     if (
       index < boundary &&
-      trimmed === OMX_SEEDED_BEHAVIORAL_DEFAULTS_END_MARKER
+      matchesAnyMarker(trimmed, OMX_SEEDED_BEHAVIORAL_DEFAULTS_END_MARKERS)
     ) {
       continue;
     }
@@ -558,8 +654,7 @@ function stripRootLevelKeys(config: string, keys: readonly string[]): string {
         OMX_TOP_LEVEL_KEYS.includes(key as (typeof OMX_TOP_LEVEL_KEYS)[number]),
       ) &&
       entry.lines.length === 1 &&
-      entry.lines[0].trim() ===
-        "# oh-my-codex top-level settings (must be before any [table])"
+      matchesAnyMarker(entry.lines[0].trim(), OMX_TOP_LEVEL_SETTINGS_MARKERS)
     ) {
       return false;
     }
@@ -1678,7 +1773,10 @@ function stripOrphanedOmxSections(config: string): string {
         // Remove preceding OMX comment lines and blank lines
         while (result.length > 0) {
           const last = result[result.length - 1];
-          if (last.trim() === "" || /^#\s*(OMX|oh-my-codex)/i.test(last)) {
+          if (
+            last.trim() === "" ||
+            /^#\s*(OMX|oh-my-codex(?:-pennix)?)/i.test(last)
+          ) {
             result.pop();
           } else {
             break;
@@ -1765,11 +1863,13 @@ function extractCustomizedTuiSectionsFromOmxBlocks(config: string): string[] {
   let searchStart = 0;
 
   while (true) {
-    const markerIdx = config.indexOf(OMX_CONFIG_MARKER, searchStart);
-    if (markerIdx < 0) break;
+    const markerMatch = findNextMarker(config, OMX_CONFIG_MARKERS, searchStart);
+    if (!markerMatch) break;
+    const markerIdx = markerMatch.index;
 
-    const endIdx = config.indexOf(OMX_CONFIG_END_MARKER, markerIdx);
-    if (endIdx < 0) break;
+    const endMatch = findNextMarker(config, OMX_CONFIG_END_MARKERS, markerIdx);
+    if (!endMatch) break;
+    const endIdx = endMatch.index;
 
     const blockLines = config.slice(markerIdx, endIdx).split(/\r?\n/);
 
@@ -1815,7 +1915,7 @@ function extractCustomizedTuiSectionsFromOmxBlocks(config: string): string[] {
       }
     }
 
-    searchStart = endIdx + OMX_CONFIG_END_MARKER.length;
+    searchStart = endIdx + endMatch.marker.length;
   }
 
   return sections;
@@ -1958,8 +2058,9 @@ export function stripExistingOmxBlocks(config: string): {
   let removed = 0;
 
   while (true) {
-    const markerIdx = cleaned.indexOf(OMX_CONFIG_MARKER);
-    if (markerIdx < 0) break;
+    const markerMatch = findNextMarker(cleaned, OMX_CONFIG_MARKERS);
+    if (!markerMatch) break;
+    const markerIdx = markerMatch.index;
 
     let blockStart = cleaned.lastIndexOf("\n", markerIdx);
     blockStart = blockStart >= 0 ? blockStart + 1 : 0;
@@ -1977,9 +2078,9 @@ export function stripExistingOmxBlocks(config: string): {
     }
 
     let blockEnd = cleaned.length;
-    const endIdx = cleaned.indexOf(OMX_CONFIG_END_MARKER, markerIdx);
-    if (endIdx >= 0) {
-      const endLineBreak = cleaned.indexOf("\n", endIdx);
+    const endMatch = findNextMarker(cleaned, OMX_CONFIG_END_MARKERS, markerIdx);
+    if (endMatch) {
+      const endLineBreak = cleaned.indexOf("\n", endMatch.index);
       blockEnd = endLineBreak >= 0 ? endLineBreak + 1 : cleaned.length;
     }
 
@@ -2000,8 +2101,12 @@ export function stripExistingSharedMcpRegistryBlock(config: string): {
   let removed = 0;
 
   while (true) {
-    const markerIdx = cleaned.indexOf(SHARED_MCP_REGISTRY_MARKER);
-    if (markerIdx < 0) break;
+    const markerMatch = findNextMarker(
+      cleaned,
+      SHARED_MCP_REGISTRY_MARKERS,
+    );
+    if (!markerMatch) break;
+    const markerIdx = markerMatch.index;
 
     let blockStart = cleaned.lastIndexOf("\n", markerIdx);
     blockStart = blockStart >= 0 ? blockStart + 1 : 0;
@@ -2019,9 +2124,13 @@ export function stripExistingSharedMcpRegistryBlock(config: string): {
     }
 
     let blockEnd = cleaned.length;
-    const endIdx = cleaned.indexOf(SHARED_MCP_REGISTRY_END_MARKER, markerIdx);
-    if (endIdx >= 0) {
-      const endLineBreak = cleaned.indexOf("\n", endIdx);
+    const endMatch = findNextMarker(
+      cleaned,
+      SHARED_MCP_REGISTRY_END_MARKERS,
+      markerIdx,
+    );
+    if (endMatch) {
+      const endLineBreak = cleaned.indexOf("\n", endMatch.index);
       blockEnd = endLineBreak >= 0 ? endLineBreak + 1 : cleaned.length;
     }
 
@@ -2039,8 +2148,13 @@ function getExistingSharedMcpRegistryBlocks(config: string): string[] {
   let cursor = 0;
 
   while (cursor < config.length) {
-    const markerIdx = config.indexOf(SHARED_MCP_REGISTRY_MARKER, cursor);
-    if (markerIdx < 0) break;
+    const markerMatch = findNextMarker(
+      config,
+      SHARED_MCP_REGISTRY_MARKERS,
+      cursor,
+    );
+    if (!markerMatch) break;
+    const markerIdx = markerMatch.index;
 
     let blockStart = config.lastIndexOf("\n", markerIdx);
     blockStart = blockStart >= 0 ? blockStart + 1 : 0;
@@ -2055,9 +2169,13 @@ function getExistingSharedMcpRegistryBlocks(config: string): string[] {
     }
 
     let blockEnd = config.length;
-    const endIdx = config.indexOf(SHARED_MCP_REGISTRY_END_MARKER, markerIdx);
-    if (endIdx >= 0) {
-      const endLineBreak = config.indexOf("\n", endIdx);
+    const endMatch = findNextMarker(
+      config,
+      SHARED_MCP_REGISTRY_END_MARKERS,
+      markerIdx,
+    );
+    if (endMatch) {
+      const endLineBreak = config.indexOf("\n", endMatch.index);
       blockEnd = endLineBreak >= 0 ? endLineBreak + 1 : config.length;
     }
 
@@ -2327,7 +2445,7 @@ function getOmxTablesBlock(
   const lines = [
     "",
     "# ============================================================",
-    "# oh-my-codex (OMX) Configuration",
+    `# ${OMX_CONFIG_MARKER}`,
     "# Managed by omx setup - manual edits preserved on next setup",
     "# ============================================================",
   ];
@@ -2379,7 +2497,7 @@ function getOmxTablesBlock(
       : [""]),
   );
   lines.push("# ============================================================");
-  lines.push("# End oh-my-codex");
+  lines.push(OMX_CONFIG_END_MARKER);
   lines.push("");
   return lines.join("\n");
 }
@@ -2415,14 +2533,14 @@ export function buildMergedConfig(
   const customizedManagedTuiSections =
     extractCustomizedTuiSectionsFromOmxBlocks(existing);
 
-  if (existing.includes(OMX_CONFIG_MARKER)) {
+  if (includesAnyMarker(existing, OMX_CONFIG_MARKERS)) {
     const stripped = stripExistingOmxBlocks(existing);
     existing = stripped.cleaned;
     if (customizedManagedTuiSections.length > 0) {
       existing = `${existing.trimEnd()}\n\n${customizedManagedTuiSections.join("\n\n")}\n`;
     }
   }
-  if (existing.includes(SHARED_MCP_REGISTRY_MARKER)) {
+  if (includesAnyMarker(existing, SHARED_MCP_REGISTRY_MARKERS)) {
     const stripped = stripExistingSharedMcpRegistryBlock(existing);
     existing = stripped.cleaned;
   }
@@ -2546,7 +2664,7 @@ export async function mergeConfig(
     existing = await readFile(configPath, "utf-8");
   }
 
-  if (existing.includes("oh-my-codex (OMX) Configuration")) {
+  if (includesAnyMarker(existing, OMX_CONFIG_MARKERS)) {
     const stripped = stripExistingOmxBlocks(existing);
     if (options.verbose && stripped.removed > 0) {
       console.log("  Updating existing OMX config block.");

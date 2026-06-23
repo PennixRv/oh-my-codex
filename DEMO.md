@@ -1,4 +1,4 @@
-# oh-my-codex Demo Guide
+# Pennix OMX Demo Guide
 
 ## Prerequisites
 
@@ -10,7 +10,7 @@
 
 ```bash
 # Clone and install
-git clone https://github.com/Yeachan-Heo/oh-my-codex.git
+git clone https://github.com/PennixRv/oh-my-codex.git
 cd oh-my-codex
 npm install
 npm run build
@@ -22,7 +22,7 @@ omx setup
 
 **Expected output:**
 ```
-oh-my-codex setup
+omx setup
 =================
 
 [1/7] Creating directories...
@@ -62,7 +62,7 @@ omx doctor
 
 **Expected output:**
 ```
-oh-my-codex doctor
+omx doctor
 ==================
 
   [OK] Codex CLI: installed
@@ -134,7 +134,7 @@ omx cancel
 
 **Expected output for `omx version`:**
 ```
-oh-my-codex vX.Y.Z
+oh-my-codex-pennix vX.Y.Z
 Node.js v20+
 Platform: linux x64
 ```

@@ -5,6 +5,7 @@ import { join, dirname } from 'node:path';
 import { tmpdir } from 'node:os';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { OMX_FORK_REPO_SLUG } from '../../utils/package.js';
 
 function runOmx(
   cwd: string,
@@ -53,7 +54,7 @@ describe('omx setup (gh star hint)', () => {
       });
       if (shouldSkipForSpawnPermissions(res.error)) return;
       assert.equal(res.status, 0, res.stderr || res.stdout);
-      assert.match(res.stdout, /gh repo star Yeachan-Heo\/oh-my-codex/);
+      assert.match(res.stdout, new RegExp(`gh repo star ${OMX_FORK_REPO_SLUG.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`));
     } finally {
       await rm(wd, { recursive: true, force: true });
     }
@@ -68,7 +69,7 @@ describe('omx setup (gh star hint)', () => {
       const res = runOmx(wd, ['setup', '--dry-run'], { PATH: '', HOME: home });
       if (shouldSkipForSpawnPermissions(res.error)) return;
       assert.equal(res.status, 0, res.stderr || res.stdout);
-      assert.doesNotMatch(res.stdout, /gh repo star Yeachan-Heo\/oh-my-codex/);
+      assert.doesNotMatch(res.stdout, new RegExp(`gh repo star ${OMX_FORK_REPO_SLUG.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`));
     } finally {
       await rm(wd, { recursive: true, force: true });
     }

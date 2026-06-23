@@ -3,6 +3,7 @@
 import { safeString } from './utils.js';
 
 export const TEAM_ORCHESTRATION_INTENTS = [
+  'startup-trigger',
   'followup-reuse',
   'followup-relaunch',
   'stalled-unblock',
@@ -61,7 +62,7 @@ export function resolveLeaderNudgeIntent({ nudgeReason = '', leaderActionState =
     case 'stale_leader_with_messages':
       return 'pending-mailbox-review';
     case 'ack_without_start_evidence':
-      return 'followup-relaunch';
+      return 'stalled-unblock';
     case 'stuck_waiting_on_leader':
     case 'stale_leader_panes_alive':
       return 'stalled-unblock';

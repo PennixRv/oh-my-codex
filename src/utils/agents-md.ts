@@ -2,15 +2,19 @@ import {
   OMX_MODELS_END_MARKER,
   OMX_MODELS_START_MARKER,
 } from './agents-model-table.js'
+import { OMX_FORK_AGENTS_HEADING } from './package.js'
 
 export const OMX_GENERATED_AGENTS_MARKER = '<!-- omx:generated:agents-md -->'
 export const OMX_MANAGED_AGENTS_START_MARKER = '<!-- OMX:AGENTS:START -->'
 export const OMX_MANAGED_AGENTS_END_MARKER = '<!-- OMX:AGENTS:END -->'
 export const OMX_AGENTS_CONTRACT_HEADING =
+  `# ${OMX_FORK_AGENTS_HEADING} - Intelligent Multi-Agent Orchestration`
+export const OMX_PACKAGE_AGENTS_CONTRACT_HEADING =
+  '# oh-my-codex-pennix - Intelligent Multi-Agent Orchestration'
+export const LEGACY_OMX_AGENTS_CONTRACT_HEADING =
   '# oh-my-codex - Intelligent Multi-Agent Orchestration'
 const OMX_AGENTS_CONTRACT_REQUIRED_TEXT = [
   OMX_GENERATED_AGENTS_MARKER,
-  OMX_AGENTS_CONTRACT_HEADING,
   'AGENTS.md is the top-level operating contract for the workspace.',
 ] as const
 const AUTONOMY_DIRECTIVE_END_MARKER = '<!-- END AUTONOMY DIRECTIVE -->'
@@ -44,8 +48,13 @@ export function hasOmxAgentsContract(content: string): boolean {
 }
 
 function candidateHasOmxAgentsContract(content: string): boolean {
-  return OMX_AGENTS_CONTRACT_REQUIRED_TEXT.every((text) =>
-    content.includes(text),
+  const hasHeading =
+    content.includes(OMX_AGENTS_CONTRACT_HEADING) ||
+    content.includes(OMX_PACKAGE_AGENTS_CONTRACT_HEADING) ||
+    content.includes(LEGACY_OMX_AGENTS_CONTRACT_HEADING)
+  return (
+    hasHeading &&
+    OMX_AGENTS_CONTRACT_REQUIRED_TEXT.every((text) => content.includes(text))
   )
 }
 

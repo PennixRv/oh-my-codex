@@ -77,10 +77,10 @@ jobs:
           VERSION=$(node -p "require('./package.json').version")
           for i in $(seq 1 20); do
             if [ "$(npm view "oh-my-codex-pennix@${VERSION}" version 2>/dev/null || true)" = "$VERSION" ]; then
-              npm view oh-my-codex version dist-tags --json
+              npm view oh-my-codex-pennix version dist-tags --json
               exit 0
             fi
             sleep 15
           done
-          echo "npm did not expose oh-my-codex@${VERSION} in time" >&2
+          echo "npm did not expose oh-my-codex-pennix@${VERSION} in time" >&2
           exit 1
