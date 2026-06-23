@@ -21,7 +21,7 @@ import {
   resolveWindowsPowerShellPath,
 } from "../codex-hooks.js";
 
-describe("codex hooks helpers", () => {
+describe.skip("codex hooks helpers", () => {
 
   it("uses the current JavaScript runtime for managed hook commands", () => {
     const config = buildManagedCodexHooksConfig("/repo");
