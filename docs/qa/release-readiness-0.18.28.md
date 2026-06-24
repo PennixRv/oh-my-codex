@@ -1,16 +1,27 @@
-# Release readiness: oh-my-codex 0.18.27
+# Release readiness: oh-my-codex 0.18.28
 
 ## Scope
 
-- Previous tag: `v0.18.26`.
-- Candidate release tag: `v0.18.27`.
-- Release focus: repair the newly observed trivial-task completion drift from the npm-installed team lifecycle smoke after `0.18.26`.
+- Previous published tag: `v0.18.26`.
+- Candidate release tag: `v0.18.28`.
+- Release focus: carry the trivial-task worker prompt-calibration fix with a correctly pointed release tag after the invalid `v0.18.27` attempt was withdrawn.
 
 ## Included fixes
 
 - Exact-content single-file tasks now synthesize as narrow/no-delegation work instead of receiving optional subagent delegation guidance.
 - Initial worker inbox verification guidance now scales down to the small-task checklist for narrow single-task assignments.
 - Broad investigation and coordinated team tasks retain their existing stronger delegation and coordination contracts.
+
+## Release-process note
+
+- The attempted `v0.18.27` release was withdrawn because the tag was mistakenly created from the previous commit while `main` had already advanced.
+- Evidence:
+  - remote `refs/tags/v0.18.27` pointed to `fa431441` while `origin/main` pointed to `0f1b877f`;
+  - the GitHub Release workflow for `v0.18.27` therefore built commit `fa431441`, read `VERSION=0.18.26`, and skipped npm publish as “already published.”
+- Corrective action:
+  - deleted the incorrect GitHub Release and remote tag;
+  - incremented to `0.18.28` instead of reusing the contaminated version number;
+  - re-ran the standard tag-triggered release path from the correct commit.
 
 ## Root cause summary
 
@@ -26,10 +37,10 @@
 - [x] `node dist/scripts/run-test-files.js dist/team/__tests__/delegation-policy.test.js dist/team/__tests__/worker-bootstrap.test.js dist/team/__tests__/api-interop.test.js`
 - [x] `node --test --test-name-pattern="startTeam persists synthesized delegation plans for broad tasks" dist/team/__tests__/runtime.test.js`
 - [x] `npm run verify:plugin-bundle`
-- [x] `node dist/scripts/check-version-sync.js --tag v0.18.27`
+- [x] `node dist/scripts/check-version-sync.js --tag v0.18.28`
 - [ ] Tag workflow / GitHub release / npm publication
 - [ ] npm-installed real team lifecycle smoke after publish
 
 ## Verdict
 
-`0.18.27` is a narrow prompt-calibration follow-up to `0.18.26`: it preserves the repaired team lifecycle command contract while removing trivial-task guidance that was still strong enough to delay clean worker completion in the real install-path smoke.
+`0.18.28` is the clean publish candidate for the trivial-task prompt-calibration fix: the runtime/task-state contract is unchanged, the prompt strength for narrow tasks is reduced to match task scope, and the withdrawn `v0.18.27` tag mistake is corrected by a fresh standard CI release from the right commit.

@@ -1,4 +1,4 @@
-# oh-my-codex-pennix v0.18.27
+# oh-my-codex-pennix v0.18.28
 
 > Release notes template for the Pennix fork. The tag workflow regenerates this file into the final GitHub release body.
 
@@ -27,4 +27,4 @@ This release is the publishable follow-up to `0.18.26`: it keeps the repaired wo
 
 PennixRv and contributors to the fork/runtime fix stream.
 
-**Full Changelog**: [`v0.18.26...v0.18.27`](https://github.com/PennixRv/oh-my-codex/compare/v0.18.26...v0.18.27)
+**Full Changelog**: [`v0.18.26...v0.18.28`](https://github.com/PennixRv/oh-my-codex/compare/v0.18.26...v0.18.28)

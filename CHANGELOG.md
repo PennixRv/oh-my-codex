@@ -4,7 +4,7 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
-## [0.18.27] - 2026-06-24
+## [0.18.28] - 2026-06-24
 
 Patch release for the post-`0.18.26` team worker prompt-calibration follow-up: trivial exact-content file tasks no longer inherit heavy delegation/verification guidance that can delay clean task completion during real team lifecycle runs.
 
@@ -15,7 +15,7 @@ Patch release for the post-`0.18.26` team worker prompt-calibration follow-up: t
 
 ### Verification
 
-- Release readiness evidence is tracked in `docs/qa/release-readiness-0.18.27.md`.
+- Release readiness evidence is tracked in `docs/qa/release-readiness-0.18.28.md`.
 
 ## [0.18.26] - 2026-06-24
 
