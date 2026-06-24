@@ -1695,6 +1695,13 @@ async function removeEmptyTeamRuntimeDirectories(teamName: string, cwd: string):
   if (!repoRoot) return;
   const teamRoot = join(repoRoot, '.omx', 'team', teamName);
   if (!existsSync(teamRoot)) return;
+  const worktreesRoot = join(teamRoot, 'worktrees');
+  if (existsSync(worktreesRoot)) {
+    const worktreeEntries = await readdir(worktreesRoot, { withFileTypes: true }).catch(() => []);
+    if (worktreeEntries.length === 0) {
+      await rm(worktreesRoot, { recursive: true, force: true }).catch(() => {});
+    }
+  }
   const entries = await readdir(teamRoot).catch(() => []);
   if (entries.length > 0) return;
   await rm(teamRoot, { recursive: true, force: true }).catch(() => {});
@@ -3160,7 +3167,11 @@ export async function startTeam(
       }
 
 
-      const startupDirectOutcome = workerLaunchMode === 'interactive' && !initialPrompt
+      const shouldAttemptStartupDirectTrigger = workerLaunchMode === 'interactive'
+        && !initialPrompt
+        && workerCliPlan[workerIndex - 1] !== 'codex'
+        && workerCliPlan[workerIndex - 1] !== 'claude';
+      const startupDirectOutcome = shouldAttemptStartupDirectTrigger
         ? await attemptStartupDirectTrigger({
           teamName: sanitized,
           config: config!,
@@ -3179,7 +3190,7 @@ export async function startTeam(
         : null;
 
       let startupReadyPromptObserved = false;
-      if (workerLaunchMode === 'interactive' && !skipWorkerReadyWait && !initialPrompt && startupDirectOutcome === null) {
+      if (workerLaunchMode === 'interactive' && !skipWorkerReadyWait && !initialPrompt && !startupDirectOutcome?.ok) {
         startupTiming.mark('ready_wait_start', { worker: workerName, pane_id: paneId });
         const ready = await waitForWorkerReadyAsync(sessionName, workerIndex, workerReadyTimeoutMs, paneId);
         startupTiming.mark('ready_wait_end', { worker: workerName, pane_id: paneId, ok: ready });
@@ -3209,7 +3220,7 @@ export async function startTeam(
       let dispatchOutcome: DispatchOutcome = initialPrompt
         ? { ok: true, transport: 'none', reason: 'startup_prompt_delivered_at_launch' }
         : (startupDirectOutcome ?? { ok: false, transport: 'none', reason: 'not_attempted' });
-      if (!initialPrompt && startupDirectOutcome === null) {
+      if (!initialPrompt && !startupDirectOutcome?.ok) {
         dispatchOutcome = await dispatchCriticalInboxInstruction({
           teamName: sanitized,
           config: config!,
@@ -3227,7 +3238,7 @@ export async function startTeam(
           startupEvidenceTimeoutMs: workerStartupEvidenceTimeoutMs,
           startupReadyPromptObserved,
           startupTiming,
-          allowFallback: false,
+          allowFallback: true,
         });
         await logStartupTiming({
           cwd: leaderCwd,
@@ -3871,6 +3882,7 @@ export async function shutdownTeam(teamName: string, cwd: string, options: Shutd
   const force = options.force === true;
   const confirmIssues = options.confirmIssues === true;
   let skipWorkerAcks = false;
+  const cleanupErrors: string[] = [];
   const sanitized = resolveTeamNameForCurrentContext(teamName, cwd);
   const config = await readTeamConfig(sanitized, cwd);
   if (!config) {
@@ -4083,10 +4095,13 @@ export async function shutdownTeam(teamName: string, cwd: string, options: Shutd
       leaderPaneId: effectiveLeaderPaneId,
       hudPaneId: effectiveHudPaneId,
     });
-    await teardownWorkerPanes(shutdownPaneIds, {
+    const teardownSummary = await teardownWorkerPanes(shutdownPaneIds, {
       leaderPaneId: effectiveLeaderPaneId,
       hudPaneId: restoredHudPaneId ?? effectiveHudPaneId,
     });
+    if (teardownSummary.kill.failed > 0) {
+      cleanupErrors.push(`teardownWorkerPanes:failed=${teardownSummary.kill.failed}`);
+    }
 
     // 4. Destroy tmux session
     if (!sessionName.includes(':')) {
@@ -4192,7 +4207,6 @@ export async function shutdownTeam(teamName: string, cwd: string, options: Shutd
   }
   restoreTeamModelInstructionsFile(sanitized);
 
-  const cleanupErrors: string[] = [];
   const provisionedWorktrees = collectProvisionedShutdownWorktrees(config);
   if (provisionedWorktrees.length > 0) {
     try {
@@ -4279,7 +4293,12 @@ export async function resumeTeam(teamName: string, cwd: string): Promise<TeamRun
     // Check if tmux session still exists
     const baseSession = config.tmux_session.split(':')[0];
     const teamSessions = getTeamTmuxSessions(sanitized);
-    if (!teamSessions.includes(baseSession)) return null;
+    const hasMatchingTeamSession = teamSessions.includes(baseSession);
+    const hasLiveWorker = config.workers.some((worker) => (
+      isWorkerAlive(config.tmux_session, worker.index, worker.pane_id)
+      || isWorkerPaneOpen(config.tmux_session, worker.index, worker.pane_id)
+    ));
+    if (!hasMatchingTeamSession && !hasLiveWorker) return null;
   }
 
   return {

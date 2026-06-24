@@ -1121,7 +1121,7 @@ esac
   });
 
   it(
-    'startTeam treats missing startup evidence as recoverable while failing the startup request',
+    'startTeam treats missing startup evidence as recoverable while preserving a single startup request',
     { skip: skipSlowLifecycleUnderCoverage },
     async () => {
     const cwd = await mkdtemp(join(tmpdir(), 'omx-runtime-startup-no-evidence-'));
@@ -1259,7 +1259,7 @@ esac
           }
 
           const tmuxLog = await readFile(tmuxLogPath, 'utf-8');
-          assert.doesNotMatch(tmuxLog, /send-keys -t %2 -l --/);
+          assert.match(tmuxLog, /send-keys -t %2 -l --/);
           const requests = await listDispatchRequests(runtime.teamName, cwd, { kind: 'inbox' });
           assert.equal(requests.length, 1);
           assert.equal(requests[0]?.intent, 'startup-trigger');
@@ -1267,7 +1267,7 @@ esac
           assert.equal(request?.status, 'failed');
           assert.match(
             request?.last_reason ?? '',
-            /startup_direct_no_evidence|startup_no_evidence|hook_receipt_failed_without_fallback|hook_timeout_without_fallback|test_failed_receipt/,
+            /codex_startup_no_evidence_after_fallback:tmux_send_keys_sent/,
           );
 
           const attention = await readTeamLeaderAttention(runtime.teamName, cwd);
@@ -2199,7 +2199,7 @@ case "$1" in
     exit 0
     ;;
   send-keys)
-    printf '%s\n' send-keys >> "$order_file"
+    printf '%s\n' "$*" >> "$order_file"
     exit 0
     ;;
   split-window)
@@ -2229,7 +2229,7 @@ esac
           const runtime = await withoutTeamWorkerEnv(() =>
             startTeam(
               teamName,
-              'startup direct trigger should recover without duplicate startup replay',
+              'codex startup should keep a single evidence-gated dispatch without replay',
               'executor',
               1,
               [{ subject: 'w1', description: 'worker one', owner: 'worker-1' }],
@@ -2237,9 +2237,12 @@ esac
             ));
 
           const order = (await readFile(join(cwd, 'startup-order.log'), 'utf-8')).trim().split('\n');
-          assert.ok(order.includes('send-keys'), `expected a startup trigger dispatch, got ${order.join(',')}`);
           assert.ok(
-            order.filter((entry) => entry === 'send-keys').length === 1,
+            order.some((entry) => entry.includes('send-keys -t %2 -l --')),
+            `expected a literal startup trigger dispatch, got ${order.join(',')}`,
+          );
+          assert.ok(
+            order.filter((entry) => entry.includes('send-keys -t %2 -l --')).length === 1,
             `expected a single startup dispatch without replay, got ${order.join(',')}`,
           );
 
@@ -2248,7 +2251,10 @@ esac
           assert.equal(requests[0]?.intent, 'startup-trigger');
           const request = await readDispatchRequest(runtime.teamName, requests[0]!.request_id, cwd);
           assert.equal(request?.status, 'failed');
-          assert.match(request?.last_reason ?? '', /startup_direct_no_evidence|startup_no_evidence|hook_timeout_without_fallback|hook_receipt_failed_without_fallback/);
+          assert.match(
+            request?.last_reason ?? '',
+            /codex_startup_no_evidence_after_fallback:tmux_send_keys_sent/,
+          );
 
           const attention = await readTeamLeaderAttention(runtime.teamName, cwd);
           assert.equal(attention?.leader_attention_reason, 'ack_without_start_evidence');
@@ -2504,7 +2510,7 @@ esac
             ));
 
           const tmuxLog = await readFile(tmuxLogPath, 'utf-8');
-          assert.doesNotMatch(tmuxLog, /send-keys -t %2 -l --/);
+          assert.match(tmuxLog, /send-keys -t %2 -l --/);
           runtimeTeamName = runtime.teamName;
 
           const requests = await listDispatchRequests(runtime.teamName, cwd, { kind: 'inbox' });
@@ -2513,7 +2519,7 @@ esac
           assert.equal(request?.status, 'failed');
           assert.match(
             request?.last_reason ?? '',
-            /codex_startup_no_evidence|hook_timeout_without_fallback|hook_receipt_failed_without_fallback/,
+            /codex_startup_no_evidence_after_fallback:tmux_send_keys_sent/,
           );
 
           const attention = await readTeamLeaderAttention(runtime.teamName, cwd);
@@ -2800,7 +2806,7 @@ process.on('SIGTERM', () => process.exit(0));
               const runtimeTeamName = await resolveRuntimeTeamName(cwd, teamName);
               const requests = await listDispatchRequests(runtimeTeamName, cwd, { kind: 'inbox' }).catch(() => []);
               for (const request of requests) {
-                observedNoEvidenceRequest ||= /startup_no_evidence|startup_direct_no_evidence|hook_timeout_without_fallback|hook_receipt_failed_without_fallback|fallback_attempted_but_unconfirmed/.test(request.last_reason ?? '');
+                observedNoEvidenceRequest ||= /startup_no_evidence|startup_direct_no_evidence|hook_timeout_without_fallback|hook_receipt_failed_without_fallback|fallback_attempted_but_unconfirmed|after_fallback/.test(request.last_reason ?? '');
                 if (request.status !== 'pending') continue;
                 await transitionDispatchRequest(
                   teamName,
@@ -4285,6 +4291,22 @@ process.on('SIGTERM', () => process.exit(0));
       else delete process.env.OMX_TEAM_WORKER_CLI;
       await rm(toolingDir, { recursive: true, force: true });
       await rm(repo, { recursive: true, force: true });
+    }
+  });
+
+  it('shutdownTeam removes the runtime team root when only an empty worktrees directory remains', async () => {
+    const cwd = await initRepo();
+    try {
+      await initTeamState('team-runtime-root-cleanup', 'runtime root cleanup test', 'executor', 1, cwd);
+      const runtimeRoot = join(cwd, '.omx', 'team', 'team-runtime-root-cleanup');
+      await mkdir(join(runtimeRoot, 'worktrees'), { recursive: true });
+
+      await shutdownTeam('team-runtime-root-cleanup', cwd, { force: true });
+
+      assert.equal(existsSync(runtimeRoot), false);
+      assert.equal(existsSync(join(cwd, '.omx', 'state', 'team', 'team-runtime-root-cleanup')), false);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
     }
   });
 
@@ -5963,6 +5985,74 @@ esac
     }
   });
 
+  it('shutdownTeam surfaces pane teardown failures instead of reporting success', async () => {
+    const cwd = await mkdtemp(join(tmpdir(), 'omx-runtime-shutdown-pane-failure-'));
+    try {
+      await withMockTmuxFixture(
+        {
+          dirPrefix: 'omx-runtime-shutdown-pane-failure-bin-',
+          tmuxScript: () => `#!/bin/sh
+set -eu
+case "$1" in
+  -V)
+    echo "tmux 3.4"
+    exit 0
+    ;;
+  list-panes)
+    case "$*" in
+      *"-t omx-team-team-shutdown-pane-failure -F #{pane_id}"*)
+        printf '%%404\\n'
+        exit 0
+        ;;
+      *"-t %404 -F #{pane_pid}"*)
+        echo "2000000404"
+        exit 0
+        ;;
+      *"-t %404 -F #{pane_dead} #{pane_pid}"*)
+        echo "0 2000000404"
+        exit 0
+        ;;
+      *)
+        exit 1
+        ;;
+    esac
+    ;;
+  kill-pane)
+    echo "kill failed" >&2
+    exit 1
+    ;;
+  kill-session)
+    exit 0
+    ;;
+  *)
+    exit 0
+    ;;
+esac
+`,
+        },
+        async () => {
+          await initTeamState('team-shutdown-pane-failure', 'shutdown pane failure test', 'executor', 1, cwd);
+          const config = await readTeamConfig('team-shutdown-pane-failure', cwd);
+          assert.ok(config);
+          if (!config) return;
+          config.tmux_session = 'omx-team-team-shutdown-pane-failure';
+          config.workers[0]!.pane_id = '%404';
+          await saveTeamConfig(config, cwd);
+
+          await assert.rejects(
+            () => shutdownTeam('team-shutdown-pane-failure', cwd, { force: true }),
+            /teardownWorkerPanes:failed=1/,
+          );
+
+          const stateRoot = join(cwd, '.omx', 'state', 'team', 'team-shutdown-pane-failure');
+          assert.equal(existsSync(stateRoot), false);
+        },
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+
   it('shutdownTeam reconciles persisted worker panes with live tmux panes before teardown', async () => {
     const cwd = await mkdtemp(join(tmpdir(), 'omx-runtime-shutdown-pane-reconcile-'));
     try {
@@ -6558,6 +6648,66 @@ esac
       await rm(leaderCwd, { recursive: true, force: true });
       await rm(resumeCwd, { recursive: true, force: true });
       await rm(sharedStateRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('resumeTeam reuses shared-session teams when the worker pane is still live', async () => {
+    const cwd = await mkdtemp(join(tmpdir(), 'omx-runtime-resume-shared-session-'));
+    try {
+      await withMockTmuxFixture(
+        {
+          dirPrefix: 'omx-runtime-resume-shared-session-bin-',
+          tmuxScript: () => `#!/bin/sh
+set -eu
+case "$1" in
+  -V)
+    echo "tmux 3.4"
+    exit 0
+    ;;
+  list-sessions)
+    printf 'leader\\n'
+    exit 0
+    ;;
+  list-panes)
+    case "$*" in
+      *"-t %13 -F #{pane_dead} #{pane_pid}"*)
+        echo "0 $$"
+        exit 0
+        ;;
+      *"-t %13 -F #{pane_dead}"*)
+        echo "0"
+        exit 0
+        ;;
+      *)
+        exit 1
+        ;;
+    esac
+    ;;
+  *)
+    exit 0
+    ;;
+esac
+`,
+        },
+        async () => {
+          await initTeamState('team-resume-shared-session', 'resume shared session test', 'executor', 1, cwd);
+          const config = await readTeamConfig('team-resume-shared-session', cwd);
+          assert.ok(config);
+          if (!config) return;
+          config.tmux_session = 'leader:0';
+          config.leader_pane_id = '%11';
+          config.hud_pane_id = '%12';
+          config.workers[0]!.pane_id = '%13';
+          await saveTeamConfig(config, cwd);
+
+          const resumed = await resumeTeam('team-resume-shared-session', cwd);
+          assert.ok(resumed, 'resumeTeam should keep shared-session teams resumable when a worker pane is alive');
+          assert.equal(resumed?.sessionName, 'leader:0');
+          assert.equal(resumed?.config.workers[0]?.pane_id, '%13');
+        },
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
     }
   });
 

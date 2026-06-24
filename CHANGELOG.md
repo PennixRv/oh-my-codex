@@ -4,6 +4,24 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+## [0.18.24] - 2026-06-24
+
+Patch release for the team lifecycle and startup integrity fixes in the Pennix fork: interactive Codex startup now stays on a single evidence-gated startup dispatch path, shared-session teams can resume from live worker panes, shutdown surfaces teardown failures instead of falsely reporting success, and empty runtime worktree residue is cleaned up more reliably.
+
+### Changed
+
+- **Codex interactive startup is stricter and less repetitive** — startup no longer depends on a separate pre-injection replay path before the canonical startup dispatch for Codex/Claude workers, which reduces duplicate startup delivery and keeps startup state easier to reason about.
+
+### Fixed
+
+- **Team startup prompt delivery is more reliable** — failed startup-direct outcomes no longer short-circuit the canonical startup dispatch path, and Codex startup remains evidence-gated while still allowing the existing single direct fallback confirmation path when needed.
+- **Shared-session resume is more accurate** — `omx team resume` can reattach to split-pane teams when persisted worker panes are still live, even if the saved tmux target is a shared session/window like `leader:0`.
+- **Forced shutdown cleanup is more truthful** — pane teardown failures now surface as shutdown errors, and empty `.omx/team/<team>/worktrees` residue no longer blocks runtime root cleanup.
+
+### Verification
+
+- Release readiness evidence is tracked in `docs/qa/release-readiness-0.18.24.md`.
+
 ## [0.18.12] - 2026-06-12
 
 Patch release for the post-`0.18.11` release-prep train: first-party MCP sibling detection is narrower, manual npm publishing is documented in CI, runtime/HUD/plugin/autopilot safeguards are tightened, Windows hook and state-input paths are safer, and release prep reconciles the main workflow history for `0.18.12`.
