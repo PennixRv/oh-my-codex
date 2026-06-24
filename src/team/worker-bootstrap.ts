@@ -90,23 +90,21 @@ This file is generated for a live OMX team worker run and is disposable.
 
 ## Protocol
 1. Read your inbox at \`${options.teamStateRoot}/team/${options.teamName}/workers/${options.workerName}/inbox.md\`.
-2. Load the worker skill from the first existing path:
-   - \`${"${CODEX_HOME:-~/.codex}"}/skills/worker/SKILL.md\`
-   - \`${options.leaderCwd}/.codex/skills/worker/SKILL.md\`
-   - \`${options.leaderCwd}/skills/worker/SKILL.md\`
+2. Treat this runtime file plus your inbox as the authoritative instructions for this live run. After startup ACK, continue directly to task selection and claim; do not stop for another bootstrap handoff.
 3. Send startup ACK before task work:
 
-   \`omx team api send-message --input "{\"team_name\":\"${options.teamName}\",\"from_worker\":\"${options.workerName}\",\"to_worker\":\"leader-fixed\",\"body\":\"ACK: ${options.workerName} initialized\"}" --json\`
+   \`omx team api send-message --input '{"team_name":"${options.teamName}","from_worker":"${options.workerName}","to_worker":"leader-fixed","body":"ACK: ${options.workerName} initialized"}' --json\`
 
 4. Resolve canonical team state root in this order: \`OMX_TEAM_STATE_ROOT\` env -> worker identity \`team_state_root\` -> config/manifest \`team_state_root\` -> local cwd fallback.
 5. Read task files from \`${options.teamStateRoot}/team/${options.teamName}/tasks/task-<id>.json\` using bare \`task_id\` values in APIs.
-6. Use claim-safe lifecycle APIs only:
-   - \`omx team api claim-task --json\`
-   - \`omx team api transition-task-status --json\`
-   - \`omx team api release-task-claim --json\` only for rollback to pending
+6. Start with the first non-blocked assigned task and use claim-safe lifecycle APIs only:
+   - \`omx team api claim-task --input '{"team_name":"${options.teamName}","task_id":"<id>","worker":"${options.workerName}"}' --json\`
+   - \`omx team api transition-task-status --input '{"team_name":"${options.teamName}","task_id":"<id>","from":"in_progress","to":"completed","claim_token":"<claim-token>","result":"<summary with verification evidence>"}' --json\`
+   - \`omx team api transition-task-status --input '{"team_name":"${options.teamName}","task_id":"<id>","from":"in_progress","to":"failed","claim_token":"<claim-token>","error":"<failure summary>"}' --json\`
+   - \`omx team api release-task-claim --input '{"team_name":"${options.teamName}","task_id":"<id>","claim_token":"<claim-token>","worker":"${options.workerName}"}' --json\` only for rollback to pending
 7. Use mailbox delivery flow:
-   - \`omx team api mailbox-list --input "{\"team_name\":\"${options.teamName}\",\"worker\":\"${options.workerName}\"}" --json\`
-   - \`omx team api mailbox-mark-delivered --input "{\"team_name\":\"${options.teamName}\",\"worker\":\"${options.workerName}\",\"message_id\":\"<MESSAGE_ID>\"}" --json\`
+   - \`omx team api mailbox-list --input '{"team_name":"${options.teamName}","worker":"${options.workerName}"}' --json\`
+   - \`omx team api mailbox-mark-delivered --input '{"team_name":"${options.teamName}","worker":"${options.workerName}","message_id":"<MESSAGE_ID>"}' --json\`
 8. Preserve leader steering via inbox/mailbox nudges; task payload stays in inbox/task JSON, not this file.
 9. Do not pass \`workingDirectory\` to legacy team_* MCP tools; use \`omx team api\` CLI interop.
 
@@ -309,11 +307,8 @@ You are a team worker in team "${teamName}". Your identity and assigned tasks ar
 
 ## Protocol
 1. Read your inbox file at the path provided in your first instruction
-2. Load the worker skill instructions from the first path that exists:
-   - \`${"${CODEX_HOME:-~/.codex}"}/skills/worker/SKILL.md\`
-   - \`<leader_cwd>/.codex/skills/worker/SKILL.md\`
-   - \`<leader_cwd>/skills/worker/SKILL.md\` (repo fallback)
-3. Send an ACK to the lead using CLI interop \`omx team api send-message --json\` (to_worker="leader-fixed") once initialized
+2. Treat your current runtime worker instructions plus inbox as authoritative for this live run. After startup ACK, continue directly to the first non-blocked assigned task; do not stop for another bootstrap document.
+3. Send an ACK to the lead using CLI interop \`omx team api send-message --input <json> --json\` (to_worker="leader-fixed") once initialized
 4. Resolve canonical team state root in this order:
    - OMX_TEAM_STATE_ROOT env
    - worker identity team_state_root
@@ -322,17 +317,19 @@ You are a team worker in team "${teamName}". Your identity and assigned tasks ar
 5. Read your task from <team_state_root>/team/${teamName}/tasks/task-<id>.json (example: task-1.json)
 6. Task id format:
    - State/MCP APIs use task_id: "<id>" (example: "1"), never "task-1"
-7. Request a claim via CLI interop (\`omx team api claim-task --json\`); do not directly set lifecycle fields in the task file
+7. Request a claim via CLI interop:
+   - \`omx team api claim-task --input '{"team_name":"${teamName}","task_id":"<id>","worker":"<your-worker-name>"}' --json\`
+   - Do not directly set lifecycle fields in the task file
 8. Do the work using your tools
 9. After completing work, commit your changes before reporting completion:
    \`git add -A && git commit -m "task: <task-subject>"\`
    This ensures your changes are available for incremental integration into the leader branch.
 10. On completion/failure, use lifecycle transition APIs:
-   - \`omx team api transition-task-status --json\` with from \`"in_progress"\` to \`"completed"\` or \`"failed"\`
-   - Include \`result\` (for completed) or \`error\` (for failed) in the transition patch
-11. Use \`omx team api release-task-claim --json\` only for rollback/requeue to \`pending\` (not for completion)
+   - \`omx team api transition-task-status --input '{"team_name":"${teamName}","task_id":"<id>","from":"in_progress","to":"completed","claim_token":"<claim-token>","result":"<summary with verification evidence>"}' --json\`
+   - \`omx team api transition-task-status --input '{"team_name":"${teamName}","task_id":"<id>","from":"in_progress","to":"failed","claim_token":"<claim-token>","error":"<failure summary>"}' --json\`
+11. Use \`omx team api release-task-claim --input '{"team_name":"${teamName}","task_id":"<id>","claim_token":"<claim-token>","worker":"<your-worker-name>"}' --json\` only for rollback/requeue to \`pending\` (not for completion)
 12. Update your status: write {"state": "idle", "updated_at": "<current ISO timestamp>"} to <team_state_root>/team/${teamName}/workers/{your-name}/status.json
-13. Wait for new instructions (the lead will send them via your terminal)
+13. After each task update or reply, re-check your inbox and mailbox state; if no task is ready, stay idle and wait for state changes rather than another bootstrap loop
 14. Check your mailbox for messages at <team_state_root>/team/${teamName}/mailbox/{your-name}.json
 15. For legacy team_* MCP tools (hard-deprecated), switch to \`omx team api\` CLI interop; do not pass workingDirectory unless the lead explicitly tells you to
 
@@ -346,13 +343,13 @@ Before doing any task work, send exactly one startup ACK to the leader.
 Keep the body short and deterministic so all worker CLIs (Codex/Claude) behave consistently.
 
 Example:
-omx team api send-message --input "{\"team_name\":\"${teamName}\",\"from_worker\":\"<your-worker-name>\",\"to_worker\":\"leader-fixed\",\"body\":\"ACK: <your-worker-name> initialized\"}" --json
+omx team api send-message --input '{"team_name":"${teamName}","from_worker":"<your-worker-name>","to_worker":"leader-fixed","body":"ACK: <your-worker-name> initialized"}' --json
 
 CRITICAL: Never omit from_worker. The MCP server cannot auto-detect your identity.
 
 When your mailbox receives a message, process delivery explicitly:
-1. Read: \`omx team api mailbox-list --input "{\"team_name\":\"${teamName}\",\"worker\":\"<your-worker-name>\"}" --json\`
-2. Mark delivered: \`omx team api mailbox-mark-delivered --input "{\"team_name\":\"${teamName}\",\"worker\":\"<your-worker-name>\",\"message_id\":\"<MESSAGE_ID>\"}" --json\`
+1. Read: \`omx team api mailbox-list --input '{"team_name":"${teamName}","worker":"<your-worker-name>"}' --json\`
+2. Mark delivered: \`omx team api mailbox-mark-delivered --input '{"team_name":"${teamName}","worker":"<your-worker-name>","message_id":"<MESSAGE_ID>"}' --json\`
 3. If you reply, include concrete progress and keep executing your assigned work or the next feasible task after replying.
 
 ## Team Coordination Gate
@@ -844,37 +841,37 @@ ${taskList}
 ${approvedContextSection}${workerGoalSection}
 ## Instructions
 
-1. Load and follow the worker skill from the first existing path:
-   - \`${"${CODEX_HOME:-~/.codex}"}/skills/worker/SKILL.md\`
-   - \`${leaderCwd}/.codex/skills/worker/SKILL.md\`
-   - \`${leaderCwd}/skills/worker/SKILL.md\` (repo fallback)
+1. Use this inbox together with your current runtime worker instructions as the authoritative guidance for this live run. After startup ACK, continue directly to task selection and claim; do not stop for another bootstrap handoff.
 2. Send startup ACK to the lead mailbox BEFORE any task work (run this exact command):
 
-   \`omx team api send-message --input "{\"team_name\":\"${teamName}\",\"from_worker\":\"${workerName}\",\"to_worker\":\"leader-fixed\",\"body\":\"ACK: ${workerName} initialized\"}" --json\`
+   \`omx team api send-message --input '{"team_name":"${teamName}","from_worker":"${workerName}","to_worker":"leader-fixed","body":"ACK: ${workerName} initialized"}' --json\`
 
 3. Start with the first non-blocked task
 4. Resolve canonical team state root in this order: \`OMX_TEAM_STATE_ROOT\` env -> worker identity \`team_state_root\` -> config/manifest \`team_state_root\` -> local cwd fallback.
 5. Read the task file for your selected task id at \`${teamStateRoot}/team/${teamName}/tasks/task-<id>.json\` (example: \`task-1.json\`)
 6. Task id format:
    - State/MCP APIs use \`task_id: "<id>"\` (example: \`"1"\`), not \`"task-1"\`.
-7. Request a claim via CLI interop (\`omx team api claim-task --json\`) to claim it
+7. Request a claim via CLI interop to claim it:
+   - \`omx team api claim-task --input '{"team_name":"${teamName}","task_id":"<id>","worker":"${workerName}"}' --json\`
 8. Complete the work described in the task
 9. After completing work, commit your changes before reporting completion:
    \`git add -A && git commit -m "task: <task-subject>"\`
    This ensures your changes are available for incremental integration into the leader branch.
-10. Complete/fail it via lifecycle transition API (\`omx team api transition-task-status --json\`) from \`"in_progress"\` to \`"completed"\` or \`"failed"\` (include \`result\`/\`error\`)
-11. Use \`omx team api release-task-claim --json\` only for rollback to \`pending\`
+10. Complete/fail it via lifecycle transition API:
+   - \`omx team api transition-task-status --input '{"team_name":"${teamName}","task_id":"<id>","from":"in_progress","to":"completed","claim_token":"<claim-token>","result":"<summary with verification evidence>"}' --json\`
+   - \`omx team api transition-task-status --input '{"team_name":"${teamName}","task_id":"<id>","from":"in_progress","to":"failed","claim_token":"<claim-token>","error":"<failure summary>"}' --json\`
+11. Use \`omx team api release-task-claim --input '{"team_name":"${teamName}","task_id":"<id>","claim_token":"<claim-token>","worker":"${workerName}"}' --json\` only for rollback to \`pending\`
 12. Write \`{"state": "idle", "updated_at": "<current ISO timestamp>"}\` to \`${teamStateRoot}/team/${teamName}/workers/${workerName}/status.json\`
-13. Wait for the next instruction from the lead
+13. After each task update or mailbox reply, re-check inbox/mailbox/task state; if no task is ready, stay idle and wait for state changes
 14. For legacy team_* MCP tools (hard-deprecated), use \`omx team api\`; do not pass \`workingDirectory\` unless the lead explicitly asks (if resolution fails, use leader cwd: \`${leaderCwd}\`)
 
 ## Mailbox Delivery Protocol (Required)
 When you are notified about mailbox messages, always follow this exact flow:
 
 1. List mailbox:
-   \`omx team api mailbox-list --input "{\"team_name\":\"${teamName}\",\"worker\":\"${workerName}\"}" --json\`
+   \`omx team api mailbox-list --input '{"team_name":"${teamName}","worker":"${workerName}"}' --json\`
 2. For each undelivered message, mark delivery:
-   \`omx team api mailbox-mark-delivered --input "{\"team_name\":\"${teamName}\",\"worker\":\"${workerName}\",\"message_id\":\"<MESSAGE_ID>\"}" --json\`
+   \`omx team api mailbox-mark-delivered --input '{"team_name":"${teamName}","worker":"${workerName}","message_id":"<MESSAGE_ID>"}' --json\`
 
 Use terse ACK bodies (single line) for consistent parsing across Codex and Claude workers.
 After any mailbox reply, continue executing your assigned work or the next feasible task; do not stop after sending the reply.
@@ -884,7 +881,7 @@ When using \`omx team api send-message\`, ALWAYS include from_worker with YOUR w
 - from_worker: "${workerName}"
 - to_worker: "leader-fixed" (for leader) or "worker-N" (for peers)
 
-Example: omx team api send-message --input "{\"team_name\":\"${teamName}\",\"from_worker\":\"${workerName}\",\"to_worker\":\"leader-fixed\",\"body\":\"ACK: initialized\"}" --json
+Example: omx team api send-message --input '{"team_name":"${teamName}","from_worker":"${workerName}","to_worker":"leader-fixed","body":"ACK: initialized"}' --json
 
 ${coordinationGateSection}
 ${coordinationSection}
@@ -976,13 +973,16 @@ ${workerGoalSection}
 1. Resolve canonical team state root and read the task file at \`<team_state_root>/team/${teamName}/tasks/task-${taskId}.json\`
 2. Task id format:
    - State/MCP APIs use \`task_id: "${taskId}"\` (not \`"task-${taskId}"\`).
-3. Request a claim via CLI interop (\`omx team api claim-task --json\`)
+3. Request a claim via CLI interop:
+   - \`omx team api claim-task --input '{"team_name":"${teamName}","task_id":"${taskId}","worker":"${workerName}"}' --json\`
 4. Complete the work
 5. After completing work, commit your changes before reporting completion:
    \`git add -A && git commit -m "task: <task-subject>"\`
    This ensures your changes are available for incremental integration into the leader branch.
-6. Complete/fail via lifecycle transition API (\`omx team api transition-task-status --json\`) from \`"in_progress"\` to \`"completed"\` or \`"failed"\` (include \`result\`/\`error\`)
-7. Use \`omx team api release-task-claim --json\` only for rollback to \`pending\`
+6. Complete/fail via lifecycle transition API:
+   - \`omx team api transition-task-status --input '{"team_name":"${teamName}","task_id":"${taskId}","from":"in_progress","to":"completed","claim_token":"<claim-token>","result":"<summary with verification evidence>"}' --json\`
+   - \`omx team api transition-task-status --input '{"team_name":"${teamName}","task_id":"${taskId}","from":"in_progress","to":"failed","claim_token":"<claim-token>","error":"<failure summary>"}' --json\`
+7. Use \`omx team api release-task-claim --input '{"team_name":"${teamName}","task_id":"${taskId}","claim_token":"<claim-token>","worker":"${workerName}"}' --json\` only for rollback to \`pending\`
 8. Write \`{"state": "idle", "updated_at": "<current ISO timestamp>"}\` to your status file
 
 ${coordinationGateSection}

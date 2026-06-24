@@ -15,14 +15,10 @@ You MUST be running with `OMX_TEAM_WORKER` set. It looks like:
 
 Example: `alpha/worker-2`
 
-## Load Worker Skill Path (Claude/Codex)
+## Runtime Authority
 
-When a worker inbox tells you to load this skill, resolve the first existing path:
-
-1. `${CODEX_HOME:-~/.codex}/skills/worker/SKILL.md`
-2. `~/.codex/skills/worker/SKILL.md`
-3. `<leader_cwd>/.codex/skills/worker/SKILL.md`
-4. `<leader_cwd>/skills/worker/SKILL.md` (repo fallback)
+For a live OMX team run, treat the runtime-generated worker instructions plus your inbox as authoritative.
+Use this skill as reference or recovery guidance when a runtime surface explicitly points here.
 
 ## Startup Protocol (ACK)
 
@@ -32,7 +28,7 @@ When a worker inbox tells you to load this skill, resolve the first existing pat
 2. Send a startup ACK to the lead mailbox **before task work**:
    - Recipient worker id: `leader-fixed`
    - Body: one short deterministic line (recommended: `ACK: <workerName> initialized`).
-3. After ACK, proceed to your inbox instructions.
+3. After ACK, continue to task selection and claim. Do not loop back into another bootstrap/load-skill step.
 
 The lead will see your message in:
 
@@ -44,7 +40,7 @@ Use CLI interop:
 Copy/paste template:
 
 ```bash
-omx team api send-message --input "{\"team_name\":\"<teamName>\",\"from_worker\":\"<workerName>\",\"to_worker\":\"leader-fixed\",\"body\":\"ACK: <workerName> initialized\"}" --json
+omx team api send-message --input '{"team_name":"<teamName>","from_worker":"<workerName>","to_worker":"leader-fixed","body":"ACK: <workerName> initialized"}' --json
 ```
 
 ## Inbox + Tasks
@@ -62,11 +58,27 @@ omx team api send-message --input "{\"team_name\":\"<teamName>\",\"from_worker\"
 5. Task id format:
    - The MCP/state API uses the numeric id (`"1"`), not `"task-1"`.
    - Never use legacy `tasks/{id}.json` wording.
-6. Claim the task (do NOT start work without a claim) using claim-safe lifecycle CLI interop (`omx team api claim-task --json`).
+6. Claim the task (do NOT start work without a claim) using claim-safe lifecycle CLI interop.
+
+```bash
+omx team api claim-task --input '{"team_name":"<teamName>","task_id":"<id>","worker":"<workerName>"}' --json
+```
+
 7. Do the work.
-8. Complete/fail the task via lifecycle transition CLI interop (`omx team api transition-task-status --json`) from `in_progress` to `completed` or `failed`.
+8. Complete/fail the task via lifecycle transition CLI interop from `in_progress` to `completed` or `failed`.
    - Do NOT directly write lifecycle fields (`status`, `owner`, `result`, `error`) in task files.
-9. Use `omx team api release-task-claim --json` only for rollback/requeue to `pending` (not for completion).
+
+```bash
+omx team api transition-task-status --input '{"team_name":"<teamName>","task_id":"<id>","from":"in_progress","to":"completed","claim_token":"<claim-token>","result":"<summary with verification evidence>"}' --json
+omx team api transition-task-status --input '{"team_name":"<teamName>","task_id":"<id>","from":"in_progress","to":"failed","claim_token":"<claim-token>","error":"<failure summary>"}' --json
+```
+
+9. Use `omx team api release-task-claim` only for rollback/requeue to `pending` (not for completion).
+
+```bash
+omx team api release-task-claim --input '{"team_name":"<teamName>","task_id":"<id>","claim_token":"<claim-token>","worker":"<workerName>"}' --json
+```
+
 10. Update your worker status:
    `<team_state_root>/team/<teamName>/workers/<workerName>/status.json` with `{"state":"idle", ...}`
 
@@ -76,21 +88,21 @@ Check your mailbox for messages:
 
 `<team_state_root>/team/<teamName>/mailbox/<workerName>.json`
 
-When notified, read messages and follow any instructions. Use short ACK replies when appropriate.
+When notified, read messages and follow any instructions. Use short ACK replies when appropriate, then continue your assigned work or the next feasible task instead of stopping after the reply.
 
 Note: leader dispatch is state-first. The durable queue lives at:
 `<team_state_root>/team/<teamName>/dispatch/requests.json`
 Check your inbox and mailbox after each turn; state is written to files before any optional prompt trigger.
 
 Use CLI interop:
-- `omx team api mailbox-list --json` to read
-- `omx team api mailbox-mark-delivered --json` to acknowledge delivery
+- `omx team api mailbox-list --input <json> --json` to read
+- `omx team api mailbox-mark-delivered --input <json> --json` to acknowledge delivery
 
 Copy/paste templates:
 
 ```bash
-omx team api mailbox-list --input "{\"team_name\":\"<teamName>\",\"worker\":\"<workerName>\"}" --json
-omx team api mailbox-mark-delivered --input "{\"team_name\":\"<teamName>\",\"worker\":\"<workerName>\",\"message_id\":\"<MESSAGE_ID>\"}" --json
+omx team api mailbox-list --input '{"team_name":"<teamName>","worker":"<workerName>"}' --json
+omx team api mailbox-mark-delivered --input '{"team_name":"<teamName>","worker":"<workerName>","message_id":"<MESSAGE_ID>"}' --json
 ```
 
 ## Dispatch Discipline (state-first)

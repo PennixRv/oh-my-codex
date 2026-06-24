@@ -1,16 +1,16 @@
-# oh-my-codex-pennix v0.18.25
+# oh-my-codex-pennix v0.18.26
 
 > Release notes template for the Pennix fork. The tag workflow regenerates this file into the final GitHub release body.
 
 ## Summary
 
-This release is the publishable follow-up to the `0.18.24` lifecycle train: it keeps the startup prompt delivery, shared-session resume, and shutdown cleanup/reporting fixes, and adds the CI-discovered shutdown teardown classification correction needed for a clean release gate.
+This release is the publishable follow-up to the `0.18.25` lifecycle train: it keeps the startup prompt delivery, shared-session resume, and shutdown cleanup/reporting fixes, and repairs the remaining worker prompt-contract drift that still produced bad lifecycle commands or occasional ACK-only stalls in real team runs.
 
 ## Highlights
 
-- Interactive Codex team startup keeps a single evidence-gated startup dispatch path instead of mixing a failed startup-direct pre-injection with a second canonical replay.
-- Shared-session teams can be resumed from live worker panes even when the saved tmux target is a shared session/window such as `leader:0`.
-- Forced shutdown now surfaces real pane teardown failures without misclassifying stale or already-missing pane ids as release-blocking errors.
+- Worker-facing runtime prompts, inboxes, and skills now provide executable `omx team api ... --input <json> --json` lifecycle commands for claim, completion/failure transition, and release flows.
+- Live workers no longer get routed through a redundant `load skill -> ACK -> return to inbox` startup loop after the runtime has already generated authoritative worker instructions.
+- Worker continuation guidance is state-first again: after ACKs or mailbox replies, workers are told to continue assigned work or the next feasible task and to wait on state changes instead of terminal nudges.
 
 ## Fixes / compatibility
 
@@ -20,11 +20,11 @@ This release is the publishable follow-up to the `0.18.24` lifecycle train: it k
 
 ## Validation
 
-- Local release validation includes build, targeted regression tests for startup/resume/shutdown lifecycle behavior, a full rerun of `dist/team/__tests__/runtime.test.js`, package/plugin verification, and packed-install smoke checks.
+- Local release validation includes build, lint, worker bootstrap/API regression tests, package/plugin verification, a full rerun of `dist/team/__tests__/runtime.test.js`, the compiled recent-bug regression suite, and a real OMX team lifecycle smoke on the rebuilt CLI before tag cut.
 - Tag-triggered GitHub Actions remain the authoritative publish-and-release gate for npm publication and GitHub release creation.
 
 ## Contributors
 
 PennixRv and contributors to the fork/runtime fix stream.
 
-**Full Changelog**: [`v0.18.24...v0.18.25`](https://github.com/PennixRv/oh-my-codex/compare/v0.18.24...v0.18.25)
+**Full Changelog**: [`v0.18.25...v0.18.26`](https://github.com/PennixRv/oh-my-codex/compare/v0.18.25...v0.18.26)

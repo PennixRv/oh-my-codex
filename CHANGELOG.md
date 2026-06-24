@@ -4,6 +4,20 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+## [0.18.26] - 2026-06-24
+
+Patch release for the post-`0.18.25` team worker contract repair in the Pennix fork: worker runtime surfaces no longer bounce through redundant skill-loading bootstrap loops, lifecycle CLI examples are executable again, and state-first worker continuation guidance is aligned across runtime prompts, skills, and interop docs.
+
+### Fixed
+
+- **Worker lifecycle CLI examples are executable again** — worker-facing runtime prompts, inboxes, follow-up assignments, and worker skills now show concrete `omx team api ... --input <json> --json` commands for claim, transition, and release flows instead of incomplete `--json` stubs that produced `invalid_input`.
+- **ACK-only worker stalls are less likely** — runtime-generated worker instruction surfaces no longer direct live workers to re-enter a redundant `load skill -> ACK -> return to inbox` bootstrap loop after startup.
+- **State-first continuation guidance is consistent** — worker runtime prompts and skills now tell workers to continue assigned work or the next feasible task after ACKs and mailbox replies, and to wait on state changes rather than terminal nudges when no task is ready.
+
+### Verification
+
+- Release readiness evidence is tracked in `docs/qa/release-readiness-0.18.26.md`.
+
 ## [0.18.25] - 2026-06-24
 
 Patch release that carries forward the `0.18.24` team lifecycle fixes and adds the CI-discovered shutdown teardown classification correction: stale or already-missing worker panes remain best-effort cleanup, while real pane kill failures still surface as shutdown errors.

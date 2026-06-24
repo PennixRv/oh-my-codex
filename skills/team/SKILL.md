@@ -338,8 +338,8 @@ Leader-to-worker:
 
 Worker-to-leader:
 
-- Send ACK to `leader-fixed` mailbox via `omx team api send-message --json`
-- Claim/transition/release task lifecycle via `omx team api <operation> --json`
+- Send ACK to `leader-fixed` mailbox via `omx team api send-message --input <json> --json`
+- Claim/transition/release task lifecycle via `omx team api <operation> --input <json> --json`
 
 Worker commit protocol (critical for incremental integration):
 
@@ -427,7 +427,7 @@ Checks:
 
 1. Worker pane capture shows inbox processing
 2. `.omx/state/team/<team>/mailbox/leader-fixed.json` exists
-3. Worker skill loaded and `omx team api send-message --json` called
+3. Worker inbox/runtime instructions processed and `omx team api send-message --input <json> --json` called
 4. Task-id mismatch not blocking worker flow
 
 ### Worker logs `omx team api ... ENOENT` (or legacy `team_send_message ENOENT` / `team_update_task ENOENT`)

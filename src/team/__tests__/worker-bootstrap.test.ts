@@ -52,13 +52,16 @@ describe("worker bootstrap", () => {
       "utf8",
     );
 
-    assert.match(workerSkill, /omx team api claim-task/);
-    assert.match(workerSkill, /omx team api transition-task-status/);
-    assert.match(workerSkill, /omx team api release-task-claim/);
-    assert.match(
-      workerSkill,
-      /\$\{CODEX_HOME:-~\/\.codex\}\/skills\/worker\/SKILL\.md/,
-    );
+    assert.match(workerSkill, /runtime-generated worker instructions plus your inbox as authoritative/i);
+    assert.match(workerSkill, /omx team api claim-task --input/);
+    assert.match(workerSkill, /omx team api transition-task-status --input/);
+    assert.match(workerSkill, /omx team api release-task-claim --input/);
+    assert.match(workerSkill, /--input '\{"team_name":"<teamName>"/);
+    assert.match(workerSkill, /continue your assigned work or the next feasible task/i);
+    assert.doesNotMatch(workerSkill, /Load Worker Skill Path/);
+    assert.doesNotMatch(workerSkill, /After ACK, proceed to your inbox instructions/i);
+    assert.doesNotMatch(workerSkill, /\$\{CODEX_HOME:-~\/\.codex\}\/skills\/worker\/SKILL\.md/);
+    assert.doesNotMatch(workerSkill, /--input "\{/);
     assert.doesNotMatch(workerSkill, /Write completion to the task file/i);
     assert.doesNotMatch(
       workerSkill,
@@ -97,18 +100,19 @@ describe("worker bootstrap", () => {
   it("generateWorkerOverlay includes the team name", () => {
     const overlay = generateWorkerOverlay("my-team");
     assert.match(overlay, /team "my-team"/);
-    assert.match(
-      overlay,
-      /\$\{CODEX_HOME:-~\/\.codex\}\/skills\/worker\/SKILL\.md/,
-    );
-    assert.match(overlay, /<leader_cwd>\/\.codex\/skills\/worker\/SKILL\.md/);
+    assert.match(overlay, /current runtime worker instructions plus inbox as authoritative/i);
     assert.match(overlay, /Resolve canonical team state root/i);
     assert.match(overlay, /<team_state_root>\/team\/my-team\/tasks/);
     assert.match(overlay, /tasks\/task-<id>\.json/);
     assert.match(overlay, /task_id: "<id>"/);
-    assert.match(overlay, /omx team api claim-task/);
-    assert.match(overlay, /omx team api transition-task-status/);
-    assert.match(overlay, /omx team api release-task-claim/);
+    assert.match(overlay, /omx team api claim-task --input/);
+    assert.match(overlay, /omx team api transition-task-status --input/);
+    assert.match(overlay, /omx team api release-task-claim --input/);
+    assert.match(overlay, /--input '\{"team_name":"my-team"/);
+    assert.match(overlay, /re-check your inbox and mailbox state/i);
+    assert.doesNotMatch(overlay, /Load the worker skill instructions from the first path that exists/);
+    assert.doesNotMatch(overlay, /Wait for new instructions/);
+    assert.doesNotMatch(overlay, /--input "\{/);
     assert.doesNotMatch(
       overlay,
       /On completion: write \{"status": "completed"/,
@@ -282,14 +286,11 @@ describe("worker bootstrap", () => {
       inbox,
       /<team_state_root>\/team\/team-inbox\/tasks\/task-<id>\.json/,
     );
-    assert.match(inbox, /omx team api claim-task/);
-    assert.match(inbox, /omx team api transition-task-status/);
-    assert.match(inbox, /omx team api release-task-claim/);
-    assert.match(
-      inbox,
-      /\$\{CODEX_HOME:-~\/\.codex\}\/skills\/worker\/SKILL\.md/,
-    );
-    assert.match(inbox, /\/\.codex\/skills\/worker\/SKILL\.md/);
+    assert.match(inbox, /authoritative guidance for this live run/i);
+    assert.match(inbox, /omx team api claim-task --input/);
+    assert.match(inbox, /omx team api transition-task-status --input/);
+    assert.match(inbox, /omx team api release-task-claim --input/);
+    assert.match(inbox, /--input '\{"team_name":"team-inbox"/);
     assert.match(inbox, /ACK: worker-1 initialized/);
     assert.match(inbox, /Mailbox Delivery Protocol \(Required\)/);
     assert.match(inbox, /mailbox-mark-delivered/);
@@ -297,6 +298,14 @@ describe("worker bootstrap", () => {
       inbox,
       /continue executing your assigned work or the next feasible task/i,
     );
+    assert.match(
+      inbox,
+      /re-check inbox\/mailbox\/task state; if no task is ready, stay idle and wait for state changes/i,
+    );
+    assert.doesNotMatch(inbox, /Load and follow the worker skill/);
+    assert.doesNotMatch(inbox, /\$\{CODEX_HOME:-~\/\.codex\}\/skills\/worker\/SKILL\.md/);
+    assert.doesNotMatch(inbox, /Wait for the next instruction from the lead/);
+    assert.doesNotMatch(inbox, /--input "\{/);
     assert.doesNotMatch(
       inbox,
       /Write `\{"status": "completed", "result": "brief summary"\}` to the task file/,
@@ -880,9 +889,11 @@ describe("worker bootstrap", () => {
     assert.match(inbox, /Implement parser update/);
     assert.match(inbox, /team_state_root/);
     assert.match(inbox, /team\/team-followup\/tasks\/task-42\.json/);
-    assert.match(inbox, /omx team api claim-task/);
-    assert.match(inbox, /omx team api transition-task-status/);
-    assert.match(inbox, /omx team api release-task-claim/);
+    assert.match(inbox, /omx team api claim-task --input/);
+    assert.match(inbox, /omx team api transition-task-status --input/);
+    assert.match(inbox, /omx team api release-task-claim --input/);
+    assert.match(inbox, /--input '\{"team_name":"team-followup","task_id":"42"/);
+    assert.doesNotMatch(inbox, /--input "\{/);
     assert.doesNotMatch(
       inbox,
       /Write `\{"status": "completed", "result": "brief summary"\}` when done/,
@@ -1230,6 +1241,13 @@ describe("worker bootstrap", () => {
     assert.match(content, /Worker: worker-3/);
     assert.match(content, /Inbox path: \/tmp\/state\/team\/root-team\/workers\/worker-3\/inbox\.md/);
     assert.match(content, /mailbox\/worker-3\.json/);
+    assert.match(content, /runtime file plus your inbox as the authoritative instructions/i);
+    assert.match(content, /omx team api claim-task --input/);
+    assert.match(content, /omx team api transition-task-status --input/);
+    assert.match(content, /omx team api release-task-claim --input/);
+    assert.match(content, /--input '\{"team_name":"root-team"/);
+    assert.doesNotMatch(content, /Load the worker skill from the first existing path/);
+    assert.doesNotMatch(content, /--input "\{/);
     assert.match(content, /<identity>You are Writer\.<\/identity>/);
     assert.doesNotMatch(content, /# Project Instructions/);
     assert.doesNotMatch(content, /# User Instructions/);
@@ -1314,6 +1332,11 @@ describe("worker bootstrap", () => {
     assert.match(content, /Mailbox path: \/tmp\/project\/.omx\/state\/team\/root-team\/mailbox\/worker-2\.json/);
     assert.match(content, /Leader mailbox path: \/tmp\/project\/.omx\/state\/team\/root-team\/mailbox\/leader-fixed\.json/);
     assert.match(content, /You are operating as the \*\*writer\*\* role/);
+    assert.match(content, /omx team api claim-task --input/);
+    assert.match(content, /omx team api transition-task-status --input/);
+    assert.match(content, /--input '\{"team_name":"root-team"/);
+    assert.doesNotMatch(content, /Load the worker skill from the first existing path/);
+    assert.doesNotMatch(content, /--input "\{/);
     assert.match(content, /<identity>You are Writer\.<\/identity>/);
     assert.doesNotMatch(content, /# Project Instructions/);
     assert.doesNotMatch(content, /# User Instructions/);
