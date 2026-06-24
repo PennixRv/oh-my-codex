@@ -4,6 +4,19 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+## [0.18.25] - 2026-06-24
+
+Patch release that carries forward the `0.18.24` team lifecycle fixes and adds the CI-discovered shutdown teardown classification correction: stale or already-missing worker panes remain best-effort cleanup, while real pane kill failures still surface as shutdown errors.
+
+### Fixed
+
+- **Forced shutdown no longer false-fails on stale pane ids** — shutdown now distinguishes ignorable tmux `missing pane` / `can't find pane` teardown results from real pane-kill failures, so shared-session and stale-pane cleanup paths keep their historical best-effort behavior.
+- **Release-gate runtime coverage is green again** — the two shutdown regressions that failed `dist/team/__tests__/runtime.test.js` in the `v0.18.24` GitHub release workflow are covered by the updated teardown classification and now pass locally.
+
+### Verification
+
+- Release readiness evidence is tracked in `docs/qa/release-readiness-0.18.25.md`.
+
 ## [0.18.24] - 2026-06-24
 
 Patch release for the team lifecycle and startup integrity fixes in the Pennix fork: interactive Codex startup now stays on a single evidence-gated startup dispatch path, shared-session teams can resume from live worker panes, shutdown surfaces teardown failures instead of falsely reporting success, and empty runtime worktree residue is cleaned up more reliably.

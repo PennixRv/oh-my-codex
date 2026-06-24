@@ -82,6 +82,7 @@ Status:
 What changed:
 - Interactive shutdown now escalates pane teardown failures instead of silently reporting success.
 - Runtime cleanup now removes `.omx/team/<team>/worktrees` when that directory is empty, allowing the team runtime root to be deleted when nothing meaningful remains.
+- Follow-up after the failed `v0.18.24` release workflow: shutdown now distinguishes stale/missing pane ids from fatal pane kill failures so best-effort cleanup behavior is preserved for already-dead panes and reconciled shared-session pane drift.
 
 Verification:
 - `node --test --test-name-pattern 'shutdownTeam removes the runtime team root|shutdownTeam surfaces pane teardown failures' dist/team/__tests__/runtime.test.js`

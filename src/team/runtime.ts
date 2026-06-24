@@ -4099,8 +4099,8 @@ export async function shutdownTeam(teamName: string, cwd: string, options: Shutd
       leaderPaneId: effectiveLeaderPaneId,
       hudPaneId: restoredHudPaneId ?? effectiveHudPaneId,
     });
-    if (teardownSummary.kill.failed > 0) {
-      cleanupErrors.push(`teardownWorkerPanes:failed=${teardownSummary.kill.failed}`);
+    if (teardownSummary.kill.fatalFailed > 0) {
+      cleanupErrors.push(`teardownWorkerPanes:failed=${teardownSummary.kill.fatalFailed}`);
     }
 
     // 4. Destroy tmux session

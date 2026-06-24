@@ -1,5 +1,9 @@
 # Release readiness: oh-my-codex 0.18.24
 
+Superseded:
+- The `v0.18.24` tag-triggered GitHub release workflow failed in `npm run test:node` on two `dist/team/__tests__/runtime.test.js` shutdown regressions.
+- The corrected publish candidate is `0.18.25`; see `docs/qa/release-readiness-0.18.25.md`.
+
 ## Scope
 
 - Previous tag: `v0.18.23`.

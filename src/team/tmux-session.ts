@@ -2352,6 +2352,8 @@ export interface PaneTeardownSummary {
     attempted: number;
     succeeded: number;
     failed: number;
+    nonFatalFailed: number;
+    fatalFailed: number;
   };
 }
 
@@ -2404,6 +2406,13 @@ function normalizePaneTargets(
   }
 
   return { killablePaneIds, excluded };
+}
+
+function isIgnorablePaneTeardownFailure(stderr: string): boolean {
+  const normalized = stderr.trim().toLowerCase();
+  return normalized.includes('missing pane')
+    || normalized.includes("can't find pane")
+    || normalized.includes('no such pane');
 }
 
 export function resolveSharedSessionShutdownTopology(
@@ -2460,13 +2469,23 @@ export async function teardownWorkerPanes(
       attempted: killablePaneIds.length,
       succeeded: 0,
       failed: 0,
+      nonFatalFailed: 0,
+      fatalFailed: 0,
     },
   };
 
   for (const paneId of killablePaneIds) {
     const result = await runTmuxAsync(['kill-pane', '-t', paneId]);
-    if (result.ok) summary.kill.succeeded += 1;
-    else summary.kill.failed += 1;
+    if (result.ok) {
+      summary.kill.succeeded += 1;
+    } else {
+      summary.kill.failed += 1;
+      if (isIgnorablePaneTeardownFailure(result.stderr)) {
+        summary.kill.nonFatalFailed += 1;
+      } else {
+        summary.kill.fatalFailed += 1;
+      }
+    }
     await sleep(perPaneGrace);
   }
 
