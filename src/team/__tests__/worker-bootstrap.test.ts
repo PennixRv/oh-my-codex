@@ -885,17 +885,36 @@ describe("worker bootstrap", () => {
       status: "pending",
       created_at: new Date(0).toISOString(),
       delegation: { mode: "none" },
+      coordination: { mode: "lightweight", activation_reasons: ["no_interdependence_signal"] },
     }];
 
-    const inbox = generateInitialInbox("worker-1", "team-narrow", "executor", tasks);
+    const inbox = generateInitialInbox("worker-1", "team-narrow", "executor", tasks, {
+      workerGoalInstruction: buildTeamWorkerGoalInstruction(
+        "team-narrow",
+        "worker-1",
+        tasks,
+      ),
+    });
 
     assert.match(inbox, /Verification Requirements/);
-    assert.match(inbox, /type checker on modified files/i);
-    assert.match(inbox, /Run tests related to the change/i);
-    assert.match(inbox, /Confirm the change works as described/i);
+    assert.match(inbox, /Verify the following task is complete: Create file NPM_SMOKE_RESULT\.txt with exact content NPM_OK and complete the task/i);
+    assert.doesNotMatch(
+      inbox,
+      /Verify the following task is complete: .*NPM_OK and complete the task\. Create file NPM_SMOKE_RESULT/i,
+    );
+    assert.match(inbox, /exact requested file\/content\/result/i);
+    assert.match(inbox, /no unintended extra edits/i);
+    assert.match(inbox, /If typecheck\/tests are not applicable/i);
+    assert.match(inbox, /If your worktree still has task changes, commit them/i);
+    assert.match(inbox, /If the worktree is already clean because OMX runtime auto-checkpoint\/integration already captured the result/i);
+    assert.doesNotMatch(inbox, /## Scrum \/ Team Goal Workflow/);
+    assert.doesNotMatch(inbox, /logical Codex goal handoff only/i);
+    assert.doesNotMatch(inbox, /type checker on modified files/i);
+    assert.doesNotMatch(inbox, /Run tests related to the change/i);
     assert.doesNotMatch(inbox, /Run full type check \(tsc --noEmit or equivalent\)/i);
     assert.doesNotMatch(inbox, /Run linter on modified files/i);
     assert.doesNotMatch(inbox, /Check for regressions in related functionality/i);
+    assert.doesNotMatch(inbox, /Fix-Verify Loop/i);
   });
 
   it("generateTaskAssignmentInbox includes task ID and description", () => {
@@ -913,6 +932,9 @@ describe("worker bootstrap", () => {
     assert.match(inbox, /omx team api claim-task --input/);
     assert.match(inbox, /omx team api transition-task-status --input/);
     assert.match(inbox, /omx team api release-task-claim --input/);
+    assert.match(inbox, /ensure your task result is preserved in git history/i);
+    assert.match(inbox, /If your worktree still has task changes, commit them/i);
+    assert.match(inbox, /If the worktree is already clean because OMX runtime auto-checkpoint\/integration already captured the result/i);
     assert.match(inbox, /--input '\{"team_name":"team-followup","task_id":"42"/);
     assert.doesNotMatch(inbox, /--input "\{/);
     assert.doesNotMatch(
@@ -948,6 +970,27 @@ describe("worker bootstrap", () => {
     assert.match(inbox, /omx team api transition-task-status/);
     assert.doesNotMatch(inbox, /<team_state_root>\/goals\/team/);
     assert.doesNotMatch(inbox, /leader-audit\.json/);
+  });
+
+  it("generateTaskAssignmentInbox keeps trivial exact-content follow-ups lightweight", () => {
+    const inbox = generateTaskAssignmentInbox(
+      "worker-2",
+      "team-followup-goal",
+      {
+        id: "10",
+        subject: "Create file NPM_SMOKE_RESULT.txt with exact content NPM_OK",
+        description: "Create file NPM_SMOKE_RESULT.txt with exact content NPM_OK and complete the task",
+        status: "pending",
+        created_at: new Date(0).toISOString(),
+        delegation: { mode: "none" },
+        coordination: { mode: "lightweight", activation_reasons: ["no_interdependence_signal"] },
+      },
+    );
+
+    assert.doesNotMatch(inbox, /## Scrum \/ Team Goal Workflow/);
+    assert.doesNotMatch(inbox, /logical Codex goal handoff only/i);
+    assert.match(inbox, /exact requested file\/content\/result/i);
+    assert.doesNotMatch(inbox, /Fix-Verify Loop/i);
   });
 
 

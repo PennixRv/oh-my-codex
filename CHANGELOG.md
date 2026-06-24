@@ -4,6 +4,19 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+## [0.18.29] - 2026-06-24
+
+Patch release for the remaining trivial-team-task completion drift found during the real `0.18.28` npm-installed lifecycle smoke: exact-content single-file tasks now get genuinely lightweight worker inboxes, and worker completion guidance no longer misreads runtime auto-checkpoint/integration as a failed commit step.
+
+### Fixed
+
+- **Trivial worker inboxes stay truly lightweight** — exact-content single-file tasks now omit the per-worker goal-handoff block and use a micro verification checklist without the heavyweight fix-loop/typecheck/test boilerplate that previously delayed completion.
+- **Detached worktree completion guidance is truthful** — worker prompts no longer require a fresh commit when OMX runtime has already auto-checkpointed/integrated the result into git history; workers are instructed to verify the requested result in HEAD and transition the task promptly.
+
+### Verification
+
+- Release readiness evidence is tracked in `docs/qa/release-readiness-0.18.29.md`.
+
 ## [0.18.28] - 2026-06-24
 
 Patch release for the post-`0.18.26` team worker prompt-calibration follow-up: trivial exact-content file tasks no longer inherit heavy delegation/verification guidance that can delay clean task completion during real team lifecycle runs.

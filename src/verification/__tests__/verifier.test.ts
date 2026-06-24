@@ -50,17 +50,26 @@ describe('determineTaskSize', () => {
 describe('getVerificationInstructions', () => {
   it('includes the task description in all sizes', () => {
     const desc = 'Add login button';
-    for (const size of ['small', 'standard', 'large'] as const) {
+    for (const size of ['micro', 'small', 'standard', 'large'] as const) {
       const result = getVerificationInstructions(size, desc);
       assert.ok(result.includes(desc), `${size} should include task description`);
     }
   });
 
   it('includes Verification Protocol header for all sizes', () => {
-    for (const size of ['small', 'standard', 'large'] as const) {
+    for (const size of ['micro', 'small', 'standard', 'large'] as const) {
       const result = getVerificationInstructions(size, 'task');
       assert.ok(result.includes('## Verification Protocol'));
     }
+  });
+
+  it('returns micro-specific instructions', () => {
+    const result = getVerificationInstructions('micro', 'create exact file');
+    assert.ok(result.includes('exact requested file/content/result'));
+    assert.ok(result.includes('no unintended extra edits'));
+    assert.ok(result.includes('If typecheck/tests are not applicable'));
+    assert.ok(!result.includes('type checker on modified files'));
+    assert.ok(!result.includes('Run tests related to the change'));
   });
 
   it('returns small-specific instructions', () => {

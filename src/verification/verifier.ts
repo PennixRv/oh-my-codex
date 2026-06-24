@@ -44,7 +44,7 @@ export function hasStructuredVerificationEvidence(summary: string | null | undef
  * Generate verification instructions for a given task size
  */
 export function getVerificationInstructions(
-  taskSize: 'small' | 'standard' | 'large',
+  taskSize: 'micro' | 'small' | 'standard' | 'large',
   taskDescription: string
 ): string {
   const baseInstructions = `
@@ -56,6 +56,15 @@ Verify the following task is complete: ${taskDescription}
 `;
 
   switch (taskSize) {
+    case 'micro':
+      return baseInstructions + `
+1. Confirm the exact requested file/content/result is present
+2. Confirm there are no unintended extra edits in your task scope
+3. If typecheck/tests are not applicable for this scoped task, say so explicitly; otherwise run the smallest directly relevant check
+
+Report: PASS/FAIL with concise evidence for each check.
+`;
+
     case 'small':
       return baseInstructions + `
 1. Run type checker on modified files (if TypeScript/typed language)

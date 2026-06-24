@@ -276,17 +276,59 @@ export async function removeWorkerWorktreeRootAgentsFile(
   await rm(backupPath, { force: true }).catch(() => {});
 }
 
-function inferVerificationTaskSize(taskDescription: string): "small" | "standard" {
+function isExactContentSingleFileTask(taskDescription: string): boolean {
+  const normalized = taskDescription.trim().toLowerCase();
+  if (normalized.length === 0) return false;
+
+  return /\b(create|write|add)\b.*\bfile\b.*\bexact (content|text)\b/.test(normalized);
+}
+
+function buildConcreteTaskDescription(task: Pick<TeamTask, "subject" | "description">): string {
+  const subject = typeof task.subject === "string" ? task.subject.trim() : "";
+  const description = typeof task.description === "string" ? task.description.trim() : "";
+  const normalizedSubject = subject.toLowerCase();
+  const normalizedDescription = description.toLowerCase();
+
+  if (subject && description) {
+    if (normalizedSubject === normalizedDescription) {
+      return description;
+    }
+    if (normalizedDescription.startsWith(normalizedSubject)) {
+      return description;
+    }
+    if (normalizedSubject.startsWith(normalizedDescription)) {
+      return subject;
+    }
+    return `${subject}. ${description}`;
+  }
+
+  return subject || description;
+}
+
+function shouldUseLightweightWorkerGoal(tasks: TeamTask[]): boolean {
+  if (tasks.length !== 1) return false;
+  const [task] = tasks;
+  const description = buildConcreteTaskDescription(task);
+
+  return task.delegation?.mode === "none"
+    && task.coordination?.mode !== "coordinated"
+    && isExactContentSingleFileTask(description);
+}
+
+function inferVerificationTaskSize(taskDescription: string): "micro" | "small" | "standard" {
   const normalized = taskDescription.trim().toLowerCase();
   if (normalized.length === 0) {
     return "standard";
+  }
+
+  if (isExactContentSingleFileTask(normalized)) {
+    return "micro";
   }
 
   if (
     /\bfix typo\b/.test(normalized)
     || /\bupdate copy\b/.test(normalized)
     || /\breadme\b.*\btypo\b/.test(normalized)
-    || /\b(create|write|add)\b.*\bfile\b.*\bexact (content|text)\b/.test(normalized)
   ) {
     return "small";
   }
@@ -300,13 +342,15 @@ function buildVerificationSection(taskDescription: string): string {
     verificationSize,
     taskDescription,
   ).trim();
-  const fixLoop = getFixLoopInstructions().trim();
+  const fixLoop = verificationSize === "micro"
+    ? ""
+    : getFixLoopInstructions().trim();
   return `
 ## Verification Requirements
 
 ${verification}
 
-${fixLoop}
+${fixLoop ? `\n${fixLoop}\n` : ""}
 
 When marking completion, include structured verification evidence in your task result:
 - \`Verification:\`
@@ -320,9 +364,7 @@ function buildInitialInboxVerificationSection(tasks: TeamTask[]): string {
   }
 
   const [task] = tasks;
-  const description = [task.subject, task.description]
-    .filter((value) => typeof value === "string" && value.trim().length > 0)
-    .join(". ");
+  const description = buildConcreteTaskDescription(task);
 
   return buildVerificationSection(description || "each assigned task");
 }
@@ -353,9 +395,9 @@ You are a team worker in team "${teamName}". Your identity and assigned tasks ar
    - \`omx team api claim-task --input '{"team_name":"${teamName}","task_id":"<id>","worker":"<your-worker-name>"}' --json\`
    - Do not directly set lifecycle fields in the task file
 8. Do the work using your tools
-9. After completing work, commit your changes before reporting completion:
-   \`git add -A && git commit -m "task: <task-subject>"\`
-   This ensures your changes are available for incremental integration into the leader branch.
+9. Before reporting completion, ensure your task result is preserved in git history:
+   - If your worktree still has task changes, commit them: \`git add -A && git commit -m "task: <task-subject>"\`
+   - If the worktree is already clean because OMX runtime auto-checkpoint/integration already captured the result, do not treat that as a failure; verify the requested result is present in HEAD and proceed.
 10. On completion/failure, use lifecycle transition APIs:
    - \`omx team api transition-task-status --input '{"team_name":"${teamName}","task_id":"<id>","from":"in_progress","to":"completed","claim_token":"<claim-token>","result":"<summary with verification evidence>"}' --json\`
    - \`omx team api transition-task-status --input '{"team_name":"${teamName}","task_id":"<id>","from":"in_progress","to":"failed","claim_token":"<claim-token>","error":"<failure summary>"}' --json\`
@@ -837,7 +879,9 @@ export function generateInitialInbox(
   const delegationSection = renderDelegationContracts(tasks);
   const coordinationGateSection = renderTeamCoordinationGate();
   const coordinationSection = renderCoordinationProtocols(tasks);
-  const workerGoalSection = renderTeamWorkerGoalInstruction(options.workerGoalInstruction);
+  const workerGoalSection = shouldUseLightweightWorkerGoal(tasks)
+    ? ""
+    : renderTeamWorkerGoalInstruction(options.workerGoalInstruction);
 
   const approvedContextSection = options.approvedContextSection
     ? `
@@ -886,9 +930,9 @@ ${approvedContextSection}${workerGoalSection}
 7. Request a claim via CLI interop to claim it:
    - \`omx team api claim-task --input '{"team_name":"${teamName}","task_id":"<id>","worker":"${workerName}"}' --json\`
 8. Complete the work described in the task
-9. After completing work, commit your changes before reporting completion:
-   \`git add -A && git commit -m "task: <task-subject>"\`
-   This ensures your changes are available for incremental integration into the leader branch.
+9. Before reporting completion, ensure your task result is preserved in git history:
+   - If your worktree still has task changes, commit them: \`git add -A && git commit -m "task: <task-subject>"\`
+   - If the worktree is already clean because OMX runtime auto-checkpoint/integration already captured the result, do not treat that as a failure; verify the requested result is present in HEAD and proceed.
 10. Complete/fail it via lifecycle transition API:
    - \`omx team api transition-task-status --input '{"team_name":"${teamName}","task_id":"<id>","from":"in_progress","to":"completed","claim_token":"<claim-token>","result":"<summary with verification evidence>"}' --json\`
    - \`omx team api transition-task-status --input '{"team_name":"${teamName}","task_id":"<id>","from":"in_progress","to":"failed","claim_token":"<claim-token>","error":"<failure summary>"}' --json\`
@@ -968,7 +1012,7 @@ export function generateTaskAssignmentInbox(
     : taskOrId;
   const taskId = task.id;
   const taskDescription = task.description;
-  const workerGoalSection = typeof taskOrId === "string"
+  const workerGoalSection = typeof taskOrId === "string" || shouldUseLightweightWorkerGoal([task as TeamTask])
     ? ""
     : renderTeamWorkerGoalInstruction({
         teamName,
@@ -1008,9 +1052,9 @@ ${workerGoalSection}
 3. Request a claim via CLI interop:
    - \`omx team api claim-task --input '{"team_name":"${teamName}","task_id":"${taskId}","worker":"${workerName}"}' --json\`
 4. Complete the work
-5. After completing work, commit your changes before reporting completion:
-   \`git add -A && git commit -m "task: <task-subject>"\`
-   This ensures your changes are available for incremental integration into the leader branch.
+5. Before reporting completion, ensure your task result is preserved in git history:
+   - If your worktree still has task changes, commit them: \`git add -A && git commit -m "task: <task-subject>"\`
+   - If the worktree is already clean because OMX runtime auto-checkpoint/integration already captured the result, do not treat that as a failure; verify the requested result is present in HEAD and proceed.
 6. Complete/fail via lifecycle transition API:
    - \`omx team api transition-task-status --input '{"team_name":"${teamName}","task_id":"${taskId}","from":"in_progress","to":"completed","claim_token":"<claim-token>","result":"<summary with verification evidence>"}' --json\`
    - \`omx team api transition-task-status --input '{"team_name":"${teamName}","task_id":"${taskId}","from":"in_progress","to":"failed","claim_token":"<claim-token>","error":"<failure summary>"}' --json\`
