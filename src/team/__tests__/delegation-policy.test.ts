@@ -60,6 +60,15 @@ describe('synthesizeDelegationPlan', () => {
     assert.deepEqual(plan, { mode: 'none' });
   });
 
+  it('keeps exact-content single-file tasks quiet', () => {
+    const plan = synthesizeDelegationPlan(task({
+      subject: 'Create file NPM_SMOKE_RESULT.txt with exact content NPM_OK',
+      description: 'Create file NPM_SMOKE_RESULT.txt with exact content NPM_OK and complete the task.',
+    }));
+
+    assert.deepEqual(plan, { mode: 'none' });
+  });
+
   it('falls back to optional delegation for ordinary implementation work and honors child override', () => {
     process.env.OMX_TEAM_CHILD_MODEL = 'standard-child-override';
     const plan = synthesizeDelegationPlan(task({

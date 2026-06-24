@@ -276,9 +276,28 @@ export async function removeWorkerWorktreeRootAgentsFile(
   await rm(backupPath, { force: true }).catch(() => {});
 }
 
+function inferVerificationTaskSize(taskDescription: string): "small" | "standard" {
+  const normalized = taskDescription.trim().toLowerCase();
+  if (normalized.length === 0) {
+    return "standard";
+  }
+
+  if (
+    /\bfix typo\b/.test(normalized)
+    || /\bupdate copy\b/.test(normalized)
+    || /\breadme\b.*\btypo\b/.test(normalized)
+    || /\b(create|write|add)\b.*\bfile\b.*\bexact (content|text)\b/.test(normalized)
+  ) {
+    return "small";
+  }
+
+  return "standard";
+}
+
 function buildVerificationSection(taskDescription: string): string {
+  const verificationSize = inferVerificationTaskSize(taskDescription);
   const verification = getVerificationInstructions(
-    "standard",
+    verificationSize,
     taskDescription,
   ).trim();
   const fixLoop = getFixLoopInstructions().trim();
@@ -293,6 +312,19 @@ When marking completion, include structured verification evidence in your task r
 - \`Verification:\`
 - One or more PASS/FAIL checks with command/output references
 `;
+}
+
+function buildInitialInboxVerificationSection(tasks: TeamTask[]): string {
+  if (tasks.length !== 1) {
+    return buildVerificationSection("each assigned task");
+  }
+
+  const [task] = tasks;
+  const description = [task.subject, task.description]
+    .filter((value) => typeof value === "string" && value.trim().length > 0)
+    .join(". ");
+
+  return buildVerificationSection(description || "each assigned task");
 }
 
 /**
@@ -886,7 +918,7 @@ Example: omx team api send-message --input '{"team_name":"${teamName}","from_wor
 ${coordinationGateSection}
 ${coordinationSection}
 ${delegationSection}
-${buildVerificationSection("each assigned task")}
+${buildInitialInboxVerificationSection(tasks)}
 
 ## Scope Rules
 - Only edit files described in your task descriptions

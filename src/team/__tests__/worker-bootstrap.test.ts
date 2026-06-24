@@ -877,6 +877,27 @@ describe("worker bootstrap", () => {
     assert.doesNotMatch(inbox, /gpt-5\.4-mini/);
   });
 
+  it("generateInitialInbox uses small verification guidance for exact-content single-file tasks", () => {
+    const tasks: TeamTask[] = [{
+      id: "12",
+      subject: "Create file NPM_SMOKE_RESULT.txt with exact content NPM_OK",
+      description: "Create file NPM_SMOKE_RESULT.txt with exact content NPM_OK and complete the task",
+      status: "pending",
+      created_at: new Date(0).toISOString(),
+      delegation: { mode: "none" },
+    }];
+
+    const inbox = generateInitialInbox("worker-1", "team-narrow", "executor", tasks);
+
+    assert.match(inbox, /Verification Requirements/);
+    assert.match(inbox, /type checker on modified files/i);
+    assert.match(inbox, /Run tests related to the change/i);
+    assert.match(inbox, /Confirm the change works as described/i);
+    assert.doesNotMatch(inbox, /Run full type check \(tsc --noEmit or equivalent\)/i);
+    assert.doesNotMatch(inbox, /Run linter on modified files/i);
+    assert.doesNotMatch(inbox, /Check for regressions in related functionality/i);
+  });
+
   it("generateTaskAssignmentInbox includes task ID and description", () => {
     const inbox = generateTaskAssignmentInbox(
       "worker-3",

@@ -4,6 +4,19 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+## [0.18.27] - 2026-06-24
+
+Patch release for the post-`0.18.26` team worker prompt-calibration follow-up: trivial exact-content file tasks no longer inherit heavy delegation/verification guidance that can delay clean task completion during real team lifecycle runs.
+
+### Fixed
+
+- **Trivial team tasks stay lightweight** — exact-content single-file tasks now synthesize `delegation: none` instead of optional subagent fanout guidance, so workers are not nudged into unnecessary subagent planning after the task is already effectively done.
+- **Initial worker inbox verification is task-sized** — single narrow tasks now receive small verification guidance instead of the standard full-project checklist, which reduces completion drift in lifecycle smoke runs while preserving stronger verification prompts for broader work.
+
+### Verification
+
+- Release readiness evidence is tracked in `docs/qa/release-readiness-0.18.27.md`.
+
 ## [0.18.26] - 2026-06-24
 
 Patch release for the post-`0.18.25` team worker contract repair in the Pennix fork: worker runtime surfaces no longer bounce through redundant skill-loading bootstrap loops, lifecycle CLI examples are executable again, and state-first worker continuation guidance is aligned across runtime prompts, skills, and interop docs.

@@ -17,6 +17,7 @@ const NARROW_TASK_PATTERNS = [
   /\bcopy\b/i,
   /\bsingle[-\s]?file\b/i,
   /\bone[-\s]?(line|word|sentence|file)\b/i,
+  /\b(create|write|add)\b.*\bfile\b.*\bexact (content|text)\b/i,
   /\breadme\b.*\btypo\b/i,
 ];
 
@@ -24,6 +25,7 @@ const SIMPLE_SCOPE_PATTERNS = [
   /\bfix\b.*\btypo\b/i,
   /\bupdate\b.*\bcopy\b/i,
   /\brename\b.*\bsingle\b/i,
+  /\b(create|write|add)\b.*\bfile\b.*\bexact (content|text)\b/i,
 ];
 
 function taskText(task: Pick<TeamTask, 'subject' | 'description' | 'role'>): string {
