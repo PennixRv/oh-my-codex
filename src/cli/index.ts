@@ -1070,8 +1070,12 @@ export function buildDetachedHudHookEnv(
 }
 
 function isAutomaticHudEnabled(cwd: string): boolean {
+  const configPath = join(cwd, ".omx", "hud-config.json");
+  if (!existsSync(configPath)) {
+    return true;
+  }
   try {
-    const raw = JSON.parse(readFileSync(join(cwd, ".omx", "hud-config.json"), "utf-8")) as Record<string, unknown>;
+    const raw = JSON.parse(readFileSync(configPath, "utf-8")) as Record<string, unknown>;
     return normalizeHudConfig(raw).enabled !== false;
   } catch {
     return false;
