@@ -22,8 +22,6 @@ import {
 import { checkPaneReadyForTeamSendKeys } from './notify-hook/team-tmux-guard.js';
 import {
   checkWorkerPanesAlive,
-  isLeaderStale,
-  maybeNudgeTeamLeader,
   resolveLeaderStalenessThresholdMs,
 } from './notify-hook/team-leader-nudge.js';
 import { resolveManagedPaneFromAnchor, resolveManagedSessionPane } from './notify-hook/managed-tmux.js';
@@ -414,7 +412,9 @@ async function eventLog(event: Record<string, unknown>): Promise<void> {
 }
 
 function shouldLogLeaderNudgeTick(reason: string): boolean {
-  return reason === 'leader_nudge_checked' || reason === 'leader_nudge_failed';
+  return reason === 'leader_nudge_checked'
+    || reason === 'leader_nudge_failed'
+    || reason === 'leader_nudge_disabled_for_team_runtime';
 }
 
 function nextIdlePollMs(currentMs: number): number {
@@ -1327,7 +1327,6 @@ async function writeState(extra: Record<string, unknown> = {}): Promise<void> {
     },
     leader_nudge: {
       ...lastLeaderNudge,
-      enabled: true,
       run_count: leaderNudgeRuns,
     },
     ralph_continue_steer: {
@@ -1788,7 +1787,7 @@ async function runLeaderNudgeTick(): Promise<boolean> {
   if (!leaderOnly) {
     leaderNudgeRuns += 1;
     lastLeaderNudge = {
-      enabled: true,
+      enabled: false,
       leader_only: false,
       stale_threshold_ms: staleThresholdMs,
       precomputed_leader_stale: null,
@@ -1798,57 +1797,29 @@ async function runLeaderNudgeTick(): Promise<boolean> {
     return false;
   }
 
-  try {
-    const preComputedLeaderStale = await isLeaderStale(stateDir, staleThresholdMs, Date.now());
-    await maybeNudgeTeamLeader({
-      cwd,
-      stateDir,
-      logsDir,
-      preComputedLeaderStale,
-      allowFreshMailboxNudges: false,
-      source: 'notify_fallback_watcher',
-    });
-    leaderNudgeRuns += 1;
-    lastLeaderNudge = {
-      enabled: true,
-      leader_only: true,
-      stale_threshold_ms: staleThresholdMs,
-      precomputed_leader_stale: preComputedLeaderStale,
-      last_tick_at: startedIso,
-      last_error: null,
-    };
-    const reason = preComputedLeaderStale ? 'leader_nudge_checked' : 'leader_nudge_skipped_not_stale';
-    if (shouldLogLeaderNudgeTick(reason)) {
-      await eventLog({
-        type: 'leader_nudge_tick',
-        leader_only: true,
-        run_count: leaderNudgeRuns,
-        stale_threshold_ms: staleThresholdMs,
-        precomputed_leader_stale: preComputedLeaderStale,
-        reason,
-      });
-    }
-    return preComputedLeaderStale;
-  } catch (err) {
-    leaderNudgeRuns += 1;
-    lastLeaderNudge = {
-      enabled: true,
-      leader_only: true,
-      stale_threshold_ms: staleThresholdMs,
-      precomputed_leader_stale: null,
-      last_tick_at: startedIso,
-      last_error: err instanceof Error ? err.message : safeString(err),
-    };
+  // Team leader nudges now belong to the notify-hook turn path plus durable
+  // mailbox/attention state. The fallback watcher should not periodically
+  // recreate those reminders, because that reintroduces repeated leader-side
+  // visible/inferred injects long after the original attention state exists.
+  leaderNudgeRuns += 1;
+  lastLeaderNudge = {
+    enabled: false,
+    leader_only: true,
+    stale_threshold_ms: staleThresholdMs,
+    precomputed_leader_stale: null,
+    last_tick_at: startedIso,
+    last_error: 'team_leader_nudge_disabled_in_fallback_watcher',
+  };
+  if (shouldLogLeaderNudgeTick('leader_nudge_disabled_for_team_runtime')) {
     await eventLog({
       type: 'leader_nudge_tick',
       leader_only: true,
       run_count: leaderNudgeRuns,
       stale_threshold_ms: staleThresholdMs,
-      reason: 'leader_nudge_failed',
-      error: lastLeaderNudge.last_error,
+      reason: 'leader_nudge_disabled_for_team_runtime',
     });
-    return true;
   }
+  return false;
 }
 
 async function runDispatchDrainTick(): Promise<boolean> {

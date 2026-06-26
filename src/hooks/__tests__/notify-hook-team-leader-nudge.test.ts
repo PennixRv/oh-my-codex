@@ -250,7 +250,7 @@ describe.skip('notify-hook leader-side authority handoff', () => {
       assert.equal(result.status, 0, `notify-hook failed: ${result.stderr || result.stdout}`);
 
       const tmuxLog = await readFile(tmuxLogPath, 'utf-8').catch(() => '');
-      assert.match(tmuxLog, /send-keys/, 'current implementation nudges the leader directly in this stale-leader path');
+      assert.doesNotMatch(tmuxLog, /send-keys/, 'leader stale path should not visibly inject into the leader pane');
     });
   });
 
@@ -455,14 +455,7 @@ describe.skip('notify-hook team leader nudge', () => {
       assert.equal(result.status, 0, `notify-hook failed: ${result.stderr || result.stdout}`);
 
       const tmuxLog = await readFile(tmuxLogPath, 'utf-8');
-      assert.match(tmuxLog, /send-keys/);
-      assert.match(tmuxLog, /-t %99/, 'should target leader pane when present');
-      assert.match(tmuxLog, /\[OMX\] All 2 workers idle/, 'should emit all-workers-idle nudge');
-      assert.doesNotMatch(tmuxLog, /\[OMX_INTENT:/, 'should keep orchestration intent out of injected display text');
-      assert.match(tmuxLog, /\[OMX_TMUX_INJECT\]/, 'should include injection marker');
-      const submitMatches = tmuxLog.match(/send-keys -t %99 C-m/g) || [];
-      assert.equal(submitMatches.length, 2, 'leader nudge should submit with isolated double C-m');
-      assert.ok(!/send-keys[^\n]*-l[^\n]*C-m/.test(tmuxLog), 'must not mix literal payload with submit keypresses');
+      assert.doesNotMatch(tmuxLog, /send-keys/, 'all-workers-idle leader nudge should not visibly inject');
 
       const eventsPath = join(teamDir, 'events', 'events.ndjson');
       assert.ok(existsSync(eventsPath), 'events.ndjson should exist');
@@ -940,11 +933,7 @@ describe.skip('notify-hook team leader nudge', () => {
       assert.equal(result.status, 0, `notify-hook failed: ${result.stderr || result.stdout}`);
 
       const tmuxLog = await readFile(tmuxLogPath, 'utf-8');
-      assert.match(tmuxLog, /send-keys/);
-      assert.match(tmuxLog, /-t %91/);
-      assert.doesNotMatch(tmuxLog, /-t devsess:0/);
-      assert.match(tmuxLog, /Team alpha:/);
-      assert.match(tmuxLog, /\[OMX_TMUX_INJECT\]/, 'should include injection marker');
+      assert.doesNotMatch(tmuxLog, /send-keys/, 'mailbox leader nudge should not visibly inject');
 
       const deliveryLog = await readTeamDeliveryLog(cwd);
       assert.ok(deliveryLog.some((entry) =>
@@ -952,12 +941,12 @@ describe.skip('notify-hook team leader nudge', () => {
         && entry.source === 'notify_hook'
         && entry.team === teamName
         && entry.to_worker === 'leader-fixed'
-        && entry.transport === 'send-keys'
-        && entry.result === 'sent'));
+        && entry.transport === 'mailbox'
+        && entry.result === 'suppressed'));
     });
   });
 
-  it('injects leader nudge into a busy live Codex pane so the message can queue', async () => {
+  it('suppresses leader nudge injection into a busy live Codex pane', async () => {
     await withTempWorkingDir(async (cwd) => {
       const omxDir = join(cwd, '.omx');
       const stateDir = join(omxDir, 'state');
@@ -1047,14 +1036,8 @@ exit 0
       const tmuxLog = await readFile(tmuxLogPath, 'utf-8');
       assert.match(tmuxLog, /display-message -p -t %93 #\{pane_in_mode\}/);
       assert.match(tmuxLog, /capture-pane -t %93 -p -S -80/);
-      assert.match(tmuxLog, /send-keys -t %93 -l .*Team busy-live-pane:/);
-      assert.match(tmuxLog, /send-keys -t %93 Tab/);
-      assert.match(tmuxLog, /send-keys -t %93 C-m/);
-      assert.ok(
-        tmuxLog.indexOf('send-keys -t %93 Tab') < tmuxLog.indexOf('send-keys -t %93 C-m'),
-        'busy leader queue path should press Tab before C-m',
-      );
-      assert.match(tmuxLog, /\[OMX_TMUX_INJECT\]/, 'should keep the injection marker on busy-pane sends');
+      assert.doesNotMatch(tmuxLog, /send-keys -t %93/, 'busy leader pane should not receive visible injects');
+      assert.doesNotMatch(tmuxLog, /\[OMX_TMUX_INJECT\]/, 'suppressed leader nudge should not show injection marker');
 
       const eventsPath = join(teamDir, 'events', 'events.ndjson');
       assert.ok(existsSync(eventsPath), 'events.ndjson should exist');
@@ -1362,7 +1345,7 @@ exit 0
     });
   });
 
-  it('injects leader nudge even while the leader pane has an active task', async () => {
+  it('suppresses leader nudge even while the leader pane has an active task', async () => {
     await withTempWorkingDir(async (cwd) => {
       const omxDir = join(cwd, '.omx');
       const stateDir = join(omxDir, 'state');
@@ -1447,14 +1430,7 @@ exit 0
 
       const tmuxLog = await readFile(tmuxLogPath, 'utf-8');
       assert.match(tmuxLog, /capture-pane/);
-      assert.match(tmuxLog, /send-keys -t %73/, 'should inject into a busy leader pane so Codex can queue the message');
-      assert.match(tmuxLog, /send-keys -t %73 Tab/);
-      assert.match(tmuxLog, /send-keys -t %73 C-m/);
-      assert.ok(
-        tmuxLog.indexOf('send-keys -t %73 Tab') < tmuxLog.indexOf('send-keys -t %73 C-m'),
-        'busy leader queue path should press Tab before C-m',
-      );
-
+      assert.doesNotMatch(tmuxLog, /send-keys -t %73/, 'busy leader pane should not receive visible injects');
       const eventsPath = join(teamDir, 'events', 'events.ndjson');
       if (existsSync(eventsPath)) {
         const events = (await readFile(eventsPath, 'utf-8')).trim().split('\n').filter(Boolean).map((line) => JSON.parse(line));
@@ -1465,7 +1441,7 @@ exit 0
     });
   });
 
-  it('injects leader nudge when capture-pane fails but the leader pane is a live codex pane', async () => {
+  it('suppresses leader nudge when capture-pane fails but the leader pane is a live codex pane', async () => {
     await withTempWorkingDir(async (cwd) => {
       const omxDir = join(cwd, '.omx');
       const stateDir = join(omxDir, 'state');
@@ -1550,7 +1526,7 @@ exit 0
 
       const tmuxLog = await readFile(tmuxLogPath, 'utf-8');
       assert.match(tmuxLog, /capture-pane -t %74 -p -S -80/);
-      assert.match(tmuxLog, /send-keys -t %74/, 'capture failures should not suppress leader injection into a live codex pane');
+      assert.doesNotMatch(tmuxLog, /send-keys -t %74/, 'capture failures should not re-enable visible leader injection');
 
       const eventsPath = join(teamDir, 'events', 'events.ndjson');
       if (existsSync(eventsPath)) {
@@ -1996,12 +1972,11 @@ exit 0
       assert.equal(result.status, 0, `notify-hook failed: ${result.stderr || result.stdout}`);
 
       const tmuxLog = await readFile(tmuxLogPath, 'utf-8');
-      assert.match(tmuxLog, /send-keys/);
+      assert.doesNotMatch(tmuxLog, /send-keys/, 'stale-leader follow-up should not visibly inject');
       assert.match(tmuxLog, /Team beta:/);
       assert.match(tmuxLog, /leader stale, \d+ worker pane\(s\) still active\./);
       assert.match(tmuxLog, /Next: check messages; keep orchestrating; if done, gracefully shut down: omx team shutdown beta\./);
       assert.doesNotMatch(tmuxLog, /keep polling/);
-      assert.match(tmuxLog, /\[OMX_TMUX_INJECT\]/, 'should include injection marker');
     });
   });
 
@@ -3152,7 +3127,7 @@ exit 0
       assert.match(tmuxLog, /Team delta: leader stale, \d+ pane\(s\) active, 1 msg\(s\) pending\./);
       assert.match(tmuxLog, /Next: read messages; keep orchestrating; if done, gracefully shut down: omx team shutdown delta\./);
       assert.doesNotMatch(tmuxLog, /keep polling/);
-      assert.match(tmuxLog, /\[OMX_TMUX_INJECT\]/, 'should include injection marker');
+      assert.doesNotMatch(tmuxLog, /\[OMX_TMUX_INJECT\]/, 'suppressed leader nudge should not show injection marker');
 
       // Verify event reason
       const eventsPath = join(eventsDir, 'events.ndjson');

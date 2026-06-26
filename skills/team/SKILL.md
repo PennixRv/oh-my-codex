@@ -318,7 +318,11 @@ Examples:
 ```bash
 omx team api send-message --input '{"team_name":"my-team","from_worker":"worker-1","to_worker":"leader-fixed","body":"ACK"}' --json
 omx team api claim-task --input '{"team_name":"my-team","task_id":"1","worker":"worker-1"}' --json
-omx team api transition-task-status --input '{"team_name":"my-team","task_id":"1","from":"in_progress","to":"completed","claim_token":"<token>"}' --json
+RESULT_FILE="$(mktemp)" && cat > "$RESULT_FILE" <<'EOF'
+Verification:
+PASS - example
+EOF
+omx team api transition-task-status --input '{"team_name":"my-team","task_id":"1","from":"in_progress","to":"completed","claim_token":"<token>"}' --result-file "$RESULT_FILE" --json
 ```
 
 `--json` responses include stable metadata for automation:

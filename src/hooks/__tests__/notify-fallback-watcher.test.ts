@@ -1229,7 +1229,7 @@ describe.skip('notify-fallback watcher', () => {
     }
   });
 
-  it('runs leader nudge checks from the fallback watcher so stale alerts do not wait for a leader turn', async () => {
+  it('does not recreate team leader nudges from the fallback watcher', async () => {
     const wd = await mkdtemp(join(tmpdir(), 'omx-fallback-leader-nudge-'));
     const fakeBinDir = join(wd, 'fake-bin');
     const tmuxLogPath = join(wd, 'tmux.log');
@@ -1270,37 +1270,38 @@ describe.skip('notify-fallback watcher', () => {
       );
       assert.equal(result.status, 0, result.stderr || result.stdout);
 
-      const tmuxLog = await readFile(tmuxLogPath, 'utf8');
-      assert.match(tmuxLog, /send-keys -t %42 -l Team dispatch-team: leader stale, \d+ worker pane\(s\) still active\./);
+      const tmuxLog = await readFile(tmuxLogPath, 'utf8').catch(() => '');
+      assert.doesNotMatch(tmuxLog, /Team dispatch-team: leader stale, \d+ worker pane\(s\) still active\./);
 
       const watcherStatePath = join(wd, '.omx', 'state', 'notify-fallback-state.json');
       const watcherState = JSON.parse(await readFile(watcherStatePath, 'utf-8'));
       assert.equal(watcherState.poll_ms, 250);
-      assert.equal(watcherState.leader_nudge?.enabled, true);
+      assert.equal(watcherState.leader_nudge?.enabled, false);
       assert.equal(watcherState.leader_nudge?.leader_only, true);
       assert.equal(watcherState.leader_nudge?.run_count, 1);
-      assert.equal(watcherState.leader_nudge?.precomputed_leader_stale, true);
+      assert.equal(watcherState.leader_nudge?.precomputed_leader_stale, null);
 
       const logPath = join(wd, '.omx', 'logs', `notify-fallback-${new Date().toISOString().split('T')[0]}.jsonl`);
       const logEntries = (await readFile(logPath, 'utf-8')).trim().split('\n').filter(Boolean).map((line) => JSON.parse(line));
       const nudgeEvent = logEntries.find((entry: { type?: string }) => entry.type === 'leader_nudge_tick');
       assert.ok(nudgeEvent, 'expected leader_nudge_tick log event');
       assert.equal(nudgeEvent.leader_only, true);
-      assert.equal(nudgeEvent.precomputed_leader_stale, true);
+      assert.equal(nudgeEvent.reason, 'leader_nudge_disabled_for_team_runtime');
 
       const deliveryLogPath = join(wd, '.omx', 'logs', `team-delivery-${new Date().toISOString().slice(0, 10)}.jsonl`);
       const deliveryEntries = await readJsonLines(deliveryLogPath);
-      assert.ok(deliveryEntries.some((entry) =>
-        entry.event === 'nudge_triggered'
-        && entry.source === 'notify_fallback_watcher'
-        && entry.transport === 'send-keys'
-        && entry.result === 'sent'));
+      assert.equal(
+        deliveryEntries.some((entry) =>
+          entry.event === 'nudge_triggered'
+          && entry.source === 'notify_fallback_watcher'),
+        false,
+      );
     } finally {
       await rm(wd, { recursive: true, force: true });
     }
   });
 
-  it('runs leader nudge checks from canonical fallback when coarse team-state is inactive', async () => {
+  it('does not recreate team leader nudges from canonical fallback when coarse team-state is inactive', async () => {
     const wd = await mkdtemp(join(tmpdir(), 'omx-fallback-leader-nudge-canonical-inactive-'));
     const fakeBinDir = join(wd, 'fake-bin');
     const tmuxLogPath = join(wd, 'tmux.log');
@@ -1330,8 +1331,8 @@ describe.skip('notify-fallback watcher', () => {
       );
       assert.equal(result.status, 0, result.stderr || result.stdout);
 
-      const tmuxLog = await readFile(tmuxLogPath, 'utf8');
-      assert.match(tmuxLog, /send-keys -t %42 -l Team dispatch-team: leader stale, \d+ worker pane\(s\) still active\./);
+      const tmuxLog = await readFile(tmuxLogPath, 'utf8').catch(() => '');
+      assert.doesNotMatch(tmuxLog, /Team dispatch-team: leader stale, \d+ worker pane\(s\) still active\./);
     } finally {
       await rm(wd, { recursive: true, force: true });
     }
@@ -1438,15 +1439,16 @@ describe.skip('notify-fallback watcher', () => {
 
       const watcherStatePath = join(wd, '.omx', 'state', 'notify-fallback-state.json');
       const watcherState = JSON.parse(await readFile(watcherStatePath, 'utf-8'));
-      assert.equal(watcherState.leader_nudge?.enabled, true);
+      assert.equal(watcherState.leader_nudge?.enabled, false);
       assert.equal(watcherState.leader_nudge?.leader_only, true);
       assert.equal(watcherState.leader_nudge?.run_count, 1);
-      assert.equal(watcherState.leader_nudge?.precomputed_leader_stale, false);
+      assert.equal(watcherState.leader_nudge?.precomputed_leader_stale, null);
 
       const logPath = join(wd, '.omx', 'logs', `notify-fallback-${new Date().toISOString().split('T')[0]}.jsonl`);
       const logEntries = await readJsonLines(logPath);
       const nudgeEvent = logEntries.find((entry: { type?: string }) => entry.type === 'leader_nudge_tick');
-      assert.equal(nudgeEvent, undefined);
+      assert.ok(nudgeEvent, 'expected leader_nudge_tick log event');
+      assert.equal(nudgeEvent.reason, 'leader_nudge_disabled_for_team_runtime');
     } finally {
       await rm(wd, { recursive: true, force: true });
     }
@@ -1626,10 +1628,10 @@ exit 0
 
       const watcherStatePath = join(wd, '.omx', 'state', 'notify-fallback-state.json');
       const watcherState = JSON.parse(await readFile(watcherStatePath, 'utf-8'));
-      assert.equal(watcherState.leader_nudge?.enabled, true);
+      assert.equal(watcherState.leader_nudge?.enabled, false);
       assert.equal(watcherState.leader_nudge?.leader_only, true);
       assert.equal(watcherState.leader_nudge?.run_count, 1);
-      assert.equal(watcherState.leader_nudge?.precomputed_leader_stale, false);
+      assert.equal(watcherState.leader_nudge?.precomputed_leader_stale, null);
     } finally {
       await rm(wd, { recursive: true, force: true });
     }

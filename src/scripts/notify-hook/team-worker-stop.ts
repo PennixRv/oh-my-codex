@@ -9,12 +9,11 @@
 import { existsSync } from 'fs';
 import { appendFile, mkdir, rename, rm, stat, writeFile } from 'fs/promises';
 import { dirname, join, relative } from 'path';
-import { DEFAULT_MARKER, paneHasActiveTask } from '../tmux-hook-engine.js';
 import { appendTeamDeliveryLog } from '../../team/delivery-log.js';
 import { safeString, asNumber, isTerminalPhase } from './utils.js';
 import { readJsonIfExists } from './state-io.js';
 import { logTmuxHookEvent } from './log.js';
-import { evaluatePaneInjectionReadiness, sendPaneInput } from './team-tmux-guard.js';
+import { evaluatePaneInjectionReadiness } from './team-tmux-guard.js';
 import { resolvePaneTarget } from './tmux-injection.js';
 import { readTeamWorkersForIdleCheck } from './team-worker.js';
 
@@ -356,20 +355,7 @@ export async function maybeNudgeLeaderForAllowedWorkerStop({
     return { ok: true, result: TEAM_SHUTDOWN_NO_INJECTION_REASON };
   }
 
-  const prompt =
-    `[OMX] ${workerName} native Stop allowed. `
-    + `Run \`omx team status ${teamName}\`, read worker messages/results, then assign next task, reconcile completion, or shut down. `
-    + DEFAULT_MARKER;
-
-    const leaderHasActiveTask = paneHasActiveTask(paneGuard.paneCapture);
-    const sendResult = await sendPaneInput({
-      paneTarget: tmuxTarget,
-      prompt,
-      submitKeyPresses: 2,
-      submitDelayMs: 100,
-    });
-    if (!sendResult.ok) throw new Error(sendResult.error || sendResult.reason || 'send_failed');
-    const deliveryMode = leaderHasActiveTask ? 'steered' : 'sent';
+    const deliveryMode = 'suppressed';
 
     const deliveryState = {
       ...nextState,
@@ -401,6 +387,8 @@ export async function maybeNudgeLeaderForAllowedWorkerStop({
       to_worker: 'leader-fixed',
       tmux_target: tmuxTarget,
       source_type: SOURCE_TYPE,
+      visible_injection_suppressed: true,
+      suppression_reason: 'leader_visible_injection_disabled',
     }).catch(() => {});
     await appendTeamDeliveryLog(logsDir, {
       event: 'nudge_triggered',
@@ -408,9 +396,11 @@ export async function maybeNudgeLeaderForAllowedWorkerStop({
       team: teamName,
       from_worker: workerName,
       to_worker: 'leader-fixed',
-      transport: 'send-keys',
+      transport: 'mailbox',
       result: deliveryMode,
       reason: 'worker_stop_allowed',
+      visible_injection_suppressed: true,
+      suppression_reason: 'leader_visible_injection_disabled',
     }).catch(() => {});
     return { ok: true, result: deliveryMode };
   } catch (err) {

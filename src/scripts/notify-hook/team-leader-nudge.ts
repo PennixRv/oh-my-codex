@@ -11,14 +11,13 @@ import { asNumber, safeString, isTerminalPhase } from './utils.js';
 import { readJsonIfExists, getScopedStateDirsForCurrentSession } from './state-io.js';
 import { runProcess } from './process-runner.js';
 import { logTmuxHookEvent } from './log.js';
-import { evaluatePaneInjectionReadiness, queuePaneInput, sendPaneInput } from './team-tmux-guard.js';
+import { evaluatePaneInjectionReadiness } from './team-tmux-guard.js';
 import { resolvePaneTarget } from './tmux-injection.js';
 import { listNotifyCanonicalActiveTeams } from './active-team.js';
 import {
   classifyLeaderActionState,
   resolveLeaderNudgeIntent,
 } from './orchestration-intent.js';
-import { DEFAULT_MARKER, paneHasActiveTask } from '../tmux-hook-engine.js';
 import { isLeaderRuntimeStale } from '../../team/leader-activity.js';
 import { appendTeamDeliveryLog } from '../../team/delivery-log.js';
 import { writeTeamLeaderAttention } from '../../team/state.js';
@@ -812,8 +811,6 @@ export async function maybeNudgeTeamLeader({
     if (!nudgeReason) continue;
     const orchestrationIntent = resolveLeaderNudgeIntent({ nudgeReason, leaderActionState });
     const capped = text.length > 180 ? `${text.slice(0, 177)}...` : text;
-    const markedText = `${capped} ${DEFAULT_MARKER}`;
-
     if (!tmuxTarget) {
       nudgeState.last_nudged_by_team[teamName] = {
         at: nowIso,
@@ -963,7 +960,7 @@ export async function maybeNudgeTeamLeader({
         source,
         team: teamName,
         to_worker: 'leader-fixed',
-        transport: 'send-keys',
+        transport: 'mailbox',
         result: 'suppressed',
         reason: nudgeReason,
         orchestration_intent: orchestrationIntent,
@@ -974,28 +971,7 @@ export async function maybeNudgeTeamLeader({
     }
 
     try {
-      const leaderHasActiveTask = paneHasActiveTask(paneGuard.paneCapture);
-      let deliveryMode = 'sent';
-      if (leaderHasActiveTask) {
-        const sendResult = await queuePaneInput({
-          paneTarget: tmuxTarget,
-          prompt: markedText,
-        });
-        if (!sendResult.ok) {
-          throw new Error(sendResult.error || sendResult.reason);
-        }
-        deliveryMode = 'queued';
-      } else {
-        const sendResult = await sendPaneInput({
-          paneTarget: tmuxTarget,
-          prompt: markedText,
-          submitKeyPresses: 2,
-          submitDelayMs: 100,
-        });
-        if (!sendResult.ok) {
-          throw new Error(sendResult.error || sendResult.reason);
-        }
-      }
+      const deliveryMode = 'suppressed';
       nudgeState.last_nudged_by_team[teamName] = {
         at: nowIso,
         last_message_id: newestId || prevMsgId || '',
@@ -1026,6 +1002,8 @@ export async function maybeNudgeTeamLeader({
           stalled_for_ms: undefined,
           missing_signal_workers: progressSnapshot.missingSignalWorkers,
           delivery: deliveryMode,
+          visible_injection_suppressed: true,
+          suppression_reason: 'leader_visible_injection_disabled',
         });
       } catch { /* ignore */ }
       await appendTeamDeliveryLog(logsDir, {
@@ -1033,10 +1011,12 @@ export async function maybeNudgeTeamLeader({
         source,
         team: teamName,
         to_worker: 'leader-fixed',
-        transport: 'send-keys',
+        transport: 'mailbox',
         result: deliveryMode,
         reason: nudgeReason,
         orchestration_intent: orchestrationIntent,
+        visible_injection_suppressed: true,
+        suppression_reason: 'leader_visible_injection_disabled',
       }).catch(() => {});
     } catch (err) {
       try {
@@ -1055,7 +1035,7 @@ export async function maybeNudgeTeamLeader({
         source,
         team: teamName,
         to_worker: 'leader-fixed',
-        transport: 'send-keys',
+        transport: 'mailbox',
         result: 'failed',
         reason: nudgeReason,
         orchestration_intent: orchestrationIntent,

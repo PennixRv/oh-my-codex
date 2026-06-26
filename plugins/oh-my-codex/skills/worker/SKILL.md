@@ -69,8 +69,17 @@ omx team api claim-task --input '{"team_name":"<teamName>","task_id":"<id>","wor
    - Do NOT directly write lifecycle fields (`status`, `owner`, `result`, `error`) in task files.
 
 ```bash
-omx team api transition-task-status --input '{"team_name":"<teamName>","task_id":"<id>","from":"in_progress","to":"completed","claim_token":"<claim-token>","result":"<summary with verification evidence>"}' --json
-omx team api transition-task-status --input '{"team_name":"<teamName>","task_id":"<id>","from":"in_progress","to":"failed","claim_token":"<claim-token>","error":"<failure summary>"}' --json
+RESULT_FILE="$(mktemp)"
+cat > "$RESULT_FILE" <<'EOF'
+<summary with verification evidence>
+EOF
+omx team api transition-task-status --input '{"team_name":"<teamName>","task_id":"<id>","from":"in_progress","to":"completed","claim_token":"<claim-token>"}' --result-file "$RESULT_FILE" --json
+
+ERROR_FILE="$(mktemp)"
+cat > "$ERROR_FILE" <<'EOF'
+<failure summary>
+EOF
+omx team api transition-task-status --input '{"team_name":"<teamName>","task_id":"<id>","from":"in_progress","to":"failed","claim_token":"<claim-token>"}' --error-file "$ERROR_FILE" --json
 ```
 
 9. Use `omx team api release-task-claim` only for rollback/requeue to `pending` (not for completion).

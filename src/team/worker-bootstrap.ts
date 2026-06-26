@@ -99,9 +99,7 @@ This file is generated for a live OMX team worker run and is disposable.
 5. Read task files from \`${options.teamStateRoot}/team/${options.teamName}/tasks/task-<id>.json\` using bare \`task_id\` values in APIs.
 6. Start with the first non-blocked assigned task and use claim-safe lifecycle APIs only:
    - \`omx team api claim-task --input '{"team_name":"${options.teamName}","task_id":"<id>","worker":"${options.workerName}"}' --json\`
-   - \`omx team api transition-task-status --input '{"team_name":"${options.teamName}","task_id":"<id>","from":"in_progress","to":"completed","claim_token":"<claim-token>","result":"<summary with verification evidence>"}' --json\`
-   - \`omx team api transition-task-status --input '{"team_name":"${options.teamName}","task_id":"<id>","from":"in_progress","to":"failed","claim_token":"<claim-token>","error":"<failure summary>"}' --json\`
-   - \`omx team api release-task-claim --input '{"team_name":"${options.teamName}","task_id":"<id>","claim_token":"<claim-token>","worker":"${options.workerName}"}' --json\` only for rollback to pending
+${buildTransitionLifecycleFileGuidance(options.teamName, "<id>")}
 7. Use mailbox delivery flow:
    - \`omx team api mailbox-list --input '{"team_name":"${options.teamName}","worker":"${options.workerName}"}' --json\`
    - \`omx team api mailbox-mark-delivered --input '{"team_name":"${options.teamName}","worker":"${options.workerName}","message_id":"<MESSAGE_ID>"}' --json\`
@@ -369,6 +367,25 @@ function buildInitialInboxVerificationSection(tasks: TeamTask[]): string {
   return buildVerificationSection(description || "each assigned task");
 }
 
+function buildTransitionLifecycleFileGuidance(
+  teamName: string,
+  taskId: string,
+): string {
+  return [
+    '   - Use a temporary file for multi-line completion/failure evidence instead of hand-escaping JSON:',
+    '     - Completed:',
+    '       RESULT_FILE=$(mktemp) && cat > "$RESULT_FILE" <<\'EOF\'',
+    '       <summary with verification evidence>',
+    '       EOF',
+    `       omx team api transition-task-status --input '{"team_name":"${teamName}","task_id":"${taskId}","from":"in_progress","to":"completed","claim_token":"<claim-token>"}' --result-file "$RESULT_FILE" --json`,
+    '     - Failed:',
+    '       ERROR_FILE=$(mktemp) && cat > "$ERROR_FILE" <<\'EOF\'',
+    '       <failure summary>',
+    '       EOF',
+    `       omx team api transition-task-status --input '{"team_name":"${teamName}","task_id":"${taskId}","from":"in_progress","to":"failed","claim_token":"<claim-token>"}' --error-file "$ERROR_FILE" --json`,
+  ].join('\n');
+}
+
 /**
  * Generate generic AGENTS.md overlay for team workers.
  * This is the SAME for all workers -- no per-worker identity.
@@ -399,8 +416,7 @@ You are a team worker in team "${teamName}". Your identity and assigned tasks ar
    - If your worktree still has task changes, commit them: \`git add -A && git commit -m "task: <task-subject>"\`
    - If the worktree is already clean because OMX runtime auto-checkpoint/integration already captured the result, do not treat that as a failure; verify the requested result is present in HEAD and proceed.
 10. On completion/failure, use lifecycle transition APIs:
-   - \`omx team api transition-task-status --input '{"team_name":"${teamName}","task_id":"<id>","from":"in_progress","to":"completed","claim_token":"<claim-token>","result":"<summary with verification evidence>"}' --json\`
-   - \`omx team api transition-task-status --input '{"team_name":"${teamName}","task_id":"<id>","from":"in_progress","to":"failed","claim_token":"<claim-token>","error":"<failure summary>"}' --json\`
+${buildTransitionLifecycleFileGuidance(teamName, "<id>")}
 11. Use \`omx team api release-task-claim --input '{"team_name":"${teamName}","task_id":"<id>","claim_token":"<claim-token>","worker":"<your-worker-name>"}' --json\` only for rollback/requeue to \`pending\` (not for completion)
 12. Update your status: write {"state": "idle", "updated_at": "<current ISO timestamp>"} to <team_state_root>/team/${teamName}/workers/{your-name}/status.json
 13. After each task update or reply, re-check your inbox and mailbox state; if no task is ready, stay idle and wait for state changes rather than another bootstrap loop
@@ -934,8 +950,7 @@ ${approvedContextSection}${workerGoalSection}
    - If your worktree still has task changes, commit them: \`git add -A && git commit -m "task: <task-subject>"\`
    - If the worktree is already clean because OMX runtime auto-checkpoint/integration already captured the result, do not treat that as a failure; verify the requested result is present in HEAD and proceed.
 10. Complete/fail it via lifecycle transition API:
-   - \`omx team api transition-task-status --input '{"team_name":"${teamName}","task_id":"<id>","from":"in_progress","to":"completed","claim_token":"<claim-token>","result":"<summary with verification evidence>"}' --json\`
-   - \`omx team api transition-task-status --input '{"team_name":"${teamName}","task_id":"<id>","from":"in_progress","to":"failed","claim_token":"<claim-token>","error":"<failure summary>"}' --json\`
+${buildTransitionLifecycleFileGuidance(teamName, "<id>")}
 11. Use \`omx team api release-task-claim --input '{"team_name":"${teamName}","task_id":"<id>","claim_token":"<claim-token>","worker":"${workerName}"}' --json\` only for rollback to \`pending\`
 12. Write \`{"state": "idle", "updated_at": "<current ISO timestamp>"}\` to \`${teamStateRoot}/team/${teamName}/workers/${workerName}/status.json\`
 13. After each task update or mailbox reply, re-check inbox/mailbox/task state; if no task is ready, stay idle and wait for state changes
@@ -1056,8 +1071,7 @@ ${workerGoalSection}
    - If your worktree still has task changes, commit them: \`git add -A && git commit -m "task: <task-subject>"\`
    - If the worktree is already clean because OMX runtime auto-checkpoint/integration already captured the result, do not treat that as a failure; verify the requested result is present in HEAD and proceed.
 6. Complete/fail via lifecycle transition API:
-   - \`omx team api transition-task-status --input '{"team_name":"${teamName}","task_id":"${taskId}","from":"in_progress","to":"completed","claim_token":"<claim-token>","result":"<summary with verification evidence>"}' --json\`
-   - \`omx team api transition-task-status --input '{"team_name":"${teamName}","task_id":"${taskId}","from":"in_progress","to":"failed","claim_token":"<claim-token>","error":"<failure summary>"}' --json\`
+${buildTransitionLifecycleFileGuidance(teamName, taskId)}
 7. Use \`omx team api release-task-claim --input '{"team_name":"${teamName}","task_id":"${taskId}","claim_token":"<claim-token>","worker":"${workerName}"}' --json\` only for rollback to \`pending\`
 8. Write \`{"state": "idle", "updated_at": "<current ISO timestamp>"}\` to your status file
 

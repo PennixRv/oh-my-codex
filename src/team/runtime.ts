@@ -1478,6 +1478,7 @@ const WORKTREE_TRIGGER_STATE_ROOT = '$OMX_TEAM_STATE_ROOT';
 const STARTUP_EVIDENCE_TIMEOUT_MS = 15_000;
 const STARTUP_EVIDENCE_POLL_MS = 100;
 const STARTUP_EVIDENCE_LAUNCH_TIMEOUT_MS = 45_000;
+const STARTUP_READY_SHORTCUT_TIMEOUT_MS = 2_000;
 const STARTUP_TIMING_LOG_VERSION = 1;
 
 type StartupTimingPhase =
@@ -1651,6 +1652,25 @@ function resolveWorkerStartupEvidenceTimeoutMs(
     STARTUP_EVIDENCE_TIMEOUT_MS,
     Math.min(workerReadyTimeoutMs, STARTUP_EVIDENCE_LAUNCH_TIMEOUT_MS),
   );
+}
+
+function resolveStartupReadyProbeTimeoutMs(
+  workerCli: TeamWorkerCli | undefined,
+  workerReadyTimeoutMs: number,
+): { timeoutMs: number; shortcut: boolean } {
+  if (
+    (workerCli === 'codex' || workerCli === 'claude')
+    && workerReadyTimeoutMs > STARTUP_READY_SHORTCUT_TIMEOUT_MS
+  ) {
+    return {
+      timeoutMs: STARTUP_READY_SHORTCUT_TIMEOUT_MS,
+      shortcut: true,
+    };
+  }
+  return {
+    timeoutMs: workerReadyTimeoutMs,
+    shortcut: false,
+  };
 }
 
 async function readTeamActivitySnapshot(teamName: string, cwd: string): Promise<TeamActivitySnapshot | null> {
@@ -1879,7 +1899,13 @@ async function assertNestedTeamAllowed(cwd: string): Promise<void> {
   throw new Error('nested_team_disallowed');
 }
 
-type WorkerStartupEvidence = 'task_claim' | 'worker_progress' | 'leader_ack' | 'ready_prompt' | 'none';
+type WorkerStartupEvidence =
+  | 'task_claim'
+  | 'worker_progress'
+  | 'leader_ack'
+  | 'ready_prompt'
+  | 'dispatch_active_task'
+  | 'none';
 
 function resolveStartupEvidenceStateRoots(cwd: string): string[] {
   return [...new Set([
@@ -1953,12 +1979,48 @@ async function hasStartupEvidenceLeaderAck(
   }
 }
 
+async function hasStartupEvidenceDispatchActiveTask(
+  stateRoot: string,
+  teamName: string,
+  requestId: string,
+): Promise<boolean> {
+  try {
+    const raw = await readFile(
+      join(stateRoot, 'team', teamName, 'dispatch', 'requests.json'),
+      'utf-8',
+    );
+    const parsed = JSON.parse(raw) as unknown;
+    if (!Array.isArray(parsed)) return false;
+    return parsed.some((entry) => {
+      if (!entry || typeof entry !== 'object') return false;
+      const request = entry as {
+        request_id?: unknown;
+        status?: unknown;
+        last_reason?: unknown;
+      };
+      return request.request_id === requestId
+        && (request.status === 'notified' || request.status === 'delivered')
+        && request.last_reason === 'tmux_send_keys_confirmed_active_task';
+    });
+  } catch {
+    return false;
+  }
+}
+
 async function readWorkerStartupEvidence(
   teamName: string,
   workerName: string,
   cwd: string,
+  startupRequestId?: string,
 ): Promise<WorkerStartupEvidence> {
   const stateRoots = resolveStartupEvidenceStateRoots(cwd);
+  if (startupRequestId) {
+    for (const stateRoot of stateRoots) {
+      if (await hasStartupEvidenceDispatchActiveTask(stateRoot, teamName, startupRequestId)) {
+        return 'dispatch_active_task';
+      }
+    }
+  }
   for (const stateRoot of stateRoots) {
     const status = await readStartupEvidenceWorkerStatus(stateRoot, teamName, workerName);
     if (typeof status.current_task_id === 'string' && status.current_task_id.trim() !== '') {
@@ -1993,6 +2055,7 @@ export async function waitForWorkerStartupEvidence(params: {
   workerName: string;
   workerCli: TeamWorkerCli;
   cwd: string;
+  startupRequestId?: string;
   timeoutMs?: number;
   pollMs?: number;
 }): Promise<WorkerStartupEvidence> {
@@ -2001,7 +2064,12 @@ export async function waitForWorkerStartupEvidence(params: {
   const deadline = Date.now() + timeoutMs;
 
   while (true) {
-    const evidence = await readWorkerStartupEvidence(params.teamName, params.workerName, params.cwd);
+    const evidence = await readWorkerStartupEvidence(
+      params.teamName,
+      params.workerName,
+      params.cwd,
+      params.startupRequestId,
+    );
     if (doesStartupEvidenceSettle(params.workerCli, evidence)) return evidence;
     if (Date.now() >= deadline) return 'none';
     await new Promise((resolve) => setTimeout(resolve, pollMs));
@@ -3191,19 +3259,35 @@ export async function startTeam(
 
       let startupReadyPromptObserved = false;
       if (workerLaunchMode === 'interactive' && !skipWorkerReadyWait && !initialPrompt && !startupDirectOutcome?.ok) {
+        const readyProbe = resolveStartupReadyProbeTimeoutMs(
+          workerCliPlan[workerIndex - 1],
+          workerReadyTimeoutMs,
+        );
         startupTiming.mark('ready_wait_start', { worker: workerName, pane_id: paneId });
-        const ready = await waitForWorkerReadyAsync(sessionName, workerIndex, workerReadyTimeoutMs, paneId);
-        startupTiming.mark('ready_wait_end', { worker: workerName, pane_id: paneId, ok: ready });
+        const ready = await waitForWorkerReadyAsync(
+          sessionName,
+          workerIndex,
+          readyProbe.timeoutMs,
+          paneId,
+        );
+        startupTiming.mark('ready_wait_end', {
+          worker: workerName,
+          pane_id: paneId,
+          ok: ready,
+          reason: !ready && readyProbe.shortcut ? 'shortcut_timeout' : undefined,
+        });
         if (!ready) {
           const workerAlive = isWorkerPaneOpen(sessionName, workerIndex, paneId);
           if (workerAlive) {
-            await recordRecoverableStartupIssue({
-              teamName: sanitized,
-              workerName,
-              taskIds: workerTasks.map((task) => task.id),
-              reason: 'ready_prompt_timeout',
-              cwd: leaderCwd,
-            });
+            if (!readyProbe.shortcut) {
+              await recordRecoverableStartupIssue({
+                teamName: sanitized,
+                workerName,
+                taskIds: workerTasks.map((task) => task.id),
+                reason: 'ready_prompt_timeout',
+                cwd: leaderCwd,
+              });
+            }
           } else {
             return {
               ok: false,
@@ -3217,10 +3301,34 @@ export async function startTeam(
         }
       }
 
+      const shouldAttemptReadyPromptStartupDirectTrigger = workerLaunchMode === 'interactive'
+        && !initialPrompt
+        && !startupDirectOutcome?.ok
+        && startupReadyPromptObserved
+        && (workerCliPlan[workerIndex - 1] === 'codex' || workerCliPlan[workerIndex - 1] === 'claude');
+      const readyPromptStartupDirectOutcome = shouldAttemptReadyPromptStartupDirectTrigger
+        ? await attemptStartupDirectTrigger({
+          teamName: sanitized,
+          config: config!,
+          workerName,
+          workerIndex,
+          paneId,
+          workerCli: workerCliPlan[workerIndex - 1],
+          inbox,
+          triggerMessage: trigger,
+          intent: triggerIntent,
+          taskIds: workerTasks.map((task) => task.id),
+          cwd: leaderCwd,
+          timing: startupTiming,
+          startupEvidenceTimeoutMs: workerStartupEvidenceTimeoutMs,
+          startupEvidenceOverride: 'ready_prompt',
+        })
+        : null;
+
       let dispatchOutcome: DispatchOutcome = initialPrompt
         ? { ok: true, transport: 'none', reason: 'startup_prompt_delivered_at_launch' }
-        : (startupDirectOutcome ?? { ok: false, transport: 'none', reason: 'not_attempted' });
-      if (!initialPrompt && !startupDirectOutcome?.ok) {
+        : (readyPromptStartupDirectOutcome ?? startupDirectOutcome ?? { ok: false, transport: 'none', reason: 'not_attempted' });
+      if (!initialPrompt && !startupDirectOutcome?.ok && !readyPromptStartupDirectOutcome?.ok) {
         dispatchOutcome = await dispatchCriticalInboxInstruction({
           teamName: sanitized,
           config: config!,
@@ -4561,6 +4669,7 @@ async function attemptStartupDirectTrigger(params: {
   cwd: string;
   timing: StartupTimingRecorder;
   startupEvidenceTimeoutMs: number;
+  startupEvidenceOverride?: WorkerStartupEvidence;
 }): Promise<DispatchOutcome | null> {
   const {
     teamName,
@@ -4576,6 +4685,7 @@ async function attemptStartupDirectTrigger(params: {
     cwd,
     timing,
     startupEvidenceTimeoutMs,
+    startupEvidenceOverride,
   } = params;
 
   const safety = await evaluateStartupDirectTriggerSafety(config.tmux_session, workerIndex, paneId, workerCli);
@@ -4621,12 +4731,28 @@ async function attemptStartupDirectTrigger(params: {
   });
   if (!queued.ok) return queued;
 
+  if (startupEvidenceOverride && startupEvidenceOverride !== 'none') {
+    timing.mark('startup_evidence', {
+      worker: workerName,
+      pane_id: paneId,
+      ok: true,
+      reason: startupEvidenceOverride,
+      transport: queued.transport,
+      request_id: queued.request_id,
+    });
+    return {
+      ...queued,
+      reason: `startup_direct_trigger_sent:${startupEvidenceOverride}`,
+    };
+  }
+
   const effectiveWorkerCli = workerCli ?? 'codex';
   const workerStartupEvidence = await waitForWorkerStartupEvidence({
     teamName,
     workerName,
     workerCli: effectiveWorkerCli,
     cwd,
+    startupRequestId: queued.request_id,
     timeoutMs: startupEvidenceTimeoutMs,
     pollMs: STARTUP_EVIDENCE_POLL_MS,
   });
@@ -4798,6 +4924,7 @@ async function dispatchCriticalInboxInstruction(params: {
       workerName,
       workerCli,
       cwd,
+      startupRequestId: queued.request_id,
       timeoutMs: startupEvidenceTimeoutMs,
     });
     noteTiming('startup_evidence', {
@@ -4852,6 +4979,7 @@ async function dispatchCriticalInboxInstruction(params: {
           teamName,
           workerName,
           cwd,
+          startupRequestId: queued.request_id,
           timeoutMs: startupEvidenceTimeoutMs,
         });
       noteTiming('startup_evidence', {
@@ -4932,6 +5060,7 @@ async function dispatchCriticalInboxInstruction(params: {
         teamName,
         workerName,
         cwd,
+        startupRequestId: queued.request_id,
         timeoutMs: startupEvidenceTimeoutMs,
       });
     noteTiming('startup_evidence', {
@@ -5013,6 +5142,7 @@ async function waitForRequiredStartupEvidenceAfterDirectFallback(params: {
   teamName: string;
   workerName: string;
   cwd: string;
+  startupRequestId?: string;
   timeoutMs?: number;
 }): Promise<WorkerStartupEvidence> {
   const {
@@ -5021,6 +5151,7 @@ async function waitForRequiredStartupEvidenceAfterDirectFallback(params: {
     teamName,
     workerName,
     cwd,
+    startupRequestId,
     timeoutMs,
   } = params;
   const requiresObservedStartupEvidence = requireWorkerStartupEvidence === true
@@ -5033,6 +5164,7 @@ async function waitForRequiredStartupEvidenceAfterDirectFallback(params: {
     workerName,
     workerCli,
     cwd,
+    startupRequestId,
     timeoutMs,
   });
 }

@@ -4,6 +4,20 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+## [0.18.30] - 2026-06-24
+
+Patch release for the remaining post-`0.18.29` team lifecycle regressions: plain `omx team` no longer forces detached worktree mode too early in fresh repositories, and leader mailbox/fallback notifications no longer recreate visible tmux prompt injection on the leader pane.
+
+### Fixed
+
+- **Unborn repositories no longer crash at team startup** — plain `omx team` now defers default worktree resolution to runtime instead of forcing detached worktrees in the CLI layer, which avoids the `fatal: ambiguous argument 'HEAD'` failure in repos with no initial commit.
+- **Default worktree behavior stays intact for normal repos** — explicit `--worktree` still forces worktree mode, while the runtime probe keeps detached worktrees as the default in ordinary committed repos and falls back to `single` only when the repository cannot support worktrees yet.
+- **Leader mailbox notifications stay non-visible by default** — fallback watcher nudges no longer recreate leader-side `send-keys` prompts, and leader mailbox dispatch records mailbox transport instead of dropping back to visible tmux injection when mailbox delivery is the canonical path.
+
+### Verification
+
+- Release readiness evidence is tracked in `docs/qa/release-readiness-0.18.30.md`.
+
 ## [0.18.29] - 2026-06-24
 
 Patch release for the remaining trivial-team-task completion drift found during the real `0.18.28` npm-installed lifecycle smoke: exact-content single-file tasks now get genuinely lightweight worker inboxes, and worker completion guidance no longer misreads runtime auto-checkpoint/integration as a failed commit step.

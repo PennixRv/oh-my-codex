@@ -376,7 +376,7 @@ const TEAM_API_OPERATION_OPTIONAL_FIELDS: Partial<Record<TeamApiOperation, strin
 const TEAM_API_OPERATION_NOTES: Partial<Record<TeamApiOperation, string>> = {
   'update-task': 'Only non-lifecycle task metadata can be updated.',
   'release-task-claim': 'Use this only for rollback/requeue to pending (not for completion).',
-  'transition-task-status': 'Lifecycle flow is claim-safe and typically transitions in_progress -> completed|failed.',
+  'transition-task-status': 'Lifecycle flow is claim-safe and typically transitions in_progress -> completed|failed. For multi-line completion evidence, prefer --result-file / --error-file over hand-escaped inline JSON strings.',
   'cleanup': 'Uses the runtime shutdown contract; add confirm_issues=true when failed tasks are acknowledged and shutdown should still proceed.',
   'orphan-cleanup': 'Destructive escape hatch for known orphan recovery. Bypasses shutdown orchestration.',
   'read-events': 'Events are returned in canonical form; worker_idle log entries normalize to type worker_state_changed with source_type worker_idle. wakeable_only defaults to false; set wakeable_only=true to mirror omx team await semantics (wakeable events now include merge conflicts and per-signal stale alerts).',
@@ -456,6 +456,9 @@ function buildTeamApiOperationHelp(operation: TeamApiOperation): string {
   const optional = optionalFields.length > 0
     ? `\nOptional input fields:\n${optionalFields.map((field) => `  - ${field}`).join('\n')}\n`
     : '\n';
+  const additionalFlags = operation === 'transition-task-status'
+    ? '\nAdditional flags:\n  - --result-file <path>\n  - --error-file <path>\n'
+    : '';
   const note = TEAM_API_OPERATION_NOTES[operation]
     ? `\nNote:\n  ${TEAM_API_OPERATION_NOTES[operation]}\n`
     : '';
@@ -464,7 +467,7 @@ function buildTeamApiOperationHelp(operation: TeamApiOperation): string {
 Usage: omx team api ${operation} --input <json> [--json]
 
 Required input fields:
-${required}${optional}${note}Example:
+${required}${optional}${additionalFlags}${note}Example:
   omx team api ${operation} --input '${sampleInputJson}' --json
 `.trim();
 }
@@ -511,11 +514,6 @@ export interface ParsedTeamStartArgs {
   worktreeMode: WorktreeMode;
 }
 
-function resolveDefaultTeamWorktreeMode(mode: WorktreeMode): WorktreeMode {
-  if (mode.enabled) return mode;
-  return { enabled: true, detached: true, name: null };
-}
-
 function parseTeamApiArgs(args: string[]): {
   operation: TeamApiOperation;
   input: Record<string, unknown>;
@@ -527,6 +525,8 @@ function parseTeamApiArgs(args: string[]): {
   }
   let input: Record<string, unknown> = {};
   let json = false;
+  let resultFilePath: string | null = null;
+  let errorFilePath: string | null = null;
   for (let i = 1; i < args.length; i += 1) {
     const token = args[i];
     if (token === '--json') {
@@ -561,7 +561,48 @@ function parseTeamApiArgs(args: string[]): {
       }
       continue;
     }
+    if (token === '--result-file') {
+      const next = args[i + 1];
+      if (!next) throw new Error('Missing value after --result-file');
+      resultFilePath = next;
+      i += 1;
+      continue;
+    }
+    if (token.startsWith('--result-file=')) {
+      resultFilePath = token.slice('--result-file='.length);
+      continue;
+    }
+    if (token === '--error-file') {
+      const next = args[i + 1];
+      if (!next) throw new Error('Missing value after --error-file');
+      errorFilePath = next;
+      i += 1;
+      continue;
+    }
+    if (token.startsWith('--error-file=')) {
+      errorFilePath = token.slice('--error-file='.length);
+      continue;
+    }
     throw new Error(`Unknown argument for "omx team api": ${token}`);
+  }
+  if (resultFilePath !== null || errorFilePath !== null) {
+    if (operation !== 'transition-task-status') {
+      throw new Error('--result-file and --error-file are only supported for omx team api transition-task-status');
+    }
+    if (resultFilePath !== null) {
+      try {
+        input.result = readFileSync(resultFilePath, 'utf-8');
+      } catch (error) {
+        throw new Error(`Failed to read --result-file: ${error instanceof Error ? error.message : String(error)}`);
+      }
+    }
+    if (errorFilePath !== null) {
+      try {
+        input.error = readFileSync(errorFilePath, 'utf-8');
+      } catch (error) {
+        throw new Error(`Failed to read --error-file: ${error instanceof Error ? error.message : String(error)}`);
+      }
+    }
   }
   return { operation, input, json };
 }
@@ -946,7 +987,7 @@ export function parseTeamStartArgs(args: string[]): ParsedTeamStartArgs {
   const parsedWorktree = parseWorktreeMode(args);
   return {
     parsed: parseTeamArgs(parsedWorktree.remainingArgs),
-    worktreeMode: resolveDefaultTeamWorktreeMode(parsedWorktree.mode),
+    worktreeMode: parsedWorktree.mode,
   };
 }
 
@@ -1402,7 +1443,7 @@ export async function teamCommand(args: string[], _options: TeamCliOptions = {})
   const cwd = process.cwd();
   const codexHomeOverride = resolveCodexHomeForLaunch(cwd, process.env);
   const parsedWorktree = parseWorktreeMode(args);
-  const worktreeMode = resolveDefaultTeamWorktreeMode(parsedWorktree.mode);
+  const worktreeMode = parsedWorktree.mode;
   const teamArgs = parsedWorktree.remainingArgs;
   const [subcommandRaw] = teamArgs;
   const subcommand = (subcommandRaw || '').toLowerCase();
@@ -1759,7 +1800,7 @@ export async function teamCommand(args: string[], _options: TeamCliOptions = {})
     cwd,
     {
       codexHomeOverride,
-      worktreeMode,
+      ...(worktreeMode.enabled ? { worktreeMode } : {}),
       decompositionMetadata: executionPlan.metadata,
       approvedExecution: parsed.approvedExecution ?? null,
     },

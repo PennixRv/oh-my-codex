@@ -262,9 +262,9 @@ async function waitForFileText(filePath: string, timeoutMs: number = 5_000): Pro
 }
 
 describe('parseTeamStartArgs', () => {
-  it('parses default team start args with automatic detached worktrees', () => {
+  it('parses default team start args without forcing explicit worktree mode', () => {
     const result = parseTeamStartArgs(['2:executor', 'build', 'feature']);
-    assert.deepEqual(result.worktreeMode, { enabled: true, detached: true, name: null });
+    assert.deepEqual(result.worktreeMode, { enabled: false });
     assert.equal(result.parsed.workerCount, 2);
     assert.equal(result.parsed.agentType, 'executor');
     assert.equal(result.parsed.task, 'build feature');
@@ -1873,6 +1873,21 @@ describe('teamCommand api', () => {
     }
   });
 
+  it('prints transition-task-status file-input flags in operation help', async () => {
+    const logs: string[] = [];
+    const originalLog = console.log;
+    try {
+      console.log = (...args: unknown[]) => logs.push(args.map(String).join(' '));
+      await teamCommand(['api', 'transition-task-status', '--help']);
+      assert.equal(logs.length, 1);
+      assert.match(logs[0] ?? '', /--result-file <path>/);
+      assert.match(logs[0] ?? '', /--error-file <path>/);
+      assert.match(logs[0] ?? '', /prefer --result-file \/ --error-file/);
+    } finally {
+      console.log = originalLog;
+    }
+  });
+
   it('executes read-events via CLI api with canonical JSON results', async () => {
     const wd = await mkdtemp(join(tmpdir(), 'omx-team-api-read-events-'));
     const previousCwd = process.cwd();
@@ -2247,6 +2262,91 @@ describe('teamCommand api', () => {
       assert.equal(transitioned.ok, true);
       assert.equal(transitioned.data?.ok, true);
       assert.equal(transitioned.data?.task?.status, 'completed');
+    } finally {
+      console.log = originalLog;
+      process.chdir(previousCwd);
+      await rm(wd, { recursive: true, force: true });
+    }
+  });
+
+  it('supports transition-task-status result payload from --result-file', async () => {
+    const wd = await mkdtemp(join(tmpdir(), 'omx-team-api-transition-file-'));
+    const previousCwd = process.cwd();
+    const logs: string[] = [];
+    const originalLog = console.log;
+    try {
+      process.chdir(wd);
+      await initTeamState('transition-file-team', 'transition file test', 'executor', 1, wd);
+      console.log = (...args: unknown[]) => logs.push(args.map(String).join(' '));
+
+      await teamCommand([
+        'api',
+        'create-task',
+        '--input',
+        JSON.stringify({
+          team_name: 'transition-file-team',
+          subject: 'file-backed completion',
+          description: 'store completion result from a file',
+        }),
+        '--json',
+      ]);
+      const created = JSON.parse(logs.at(-1) ?? '{}') as {
+        ok?: boolean;
+        data?: { task?: { id?: string } };
+      };
+      assert.equal(created.ok, true);
+      const taskId = created.data?.task?.id;
+      assert.equal(typeof taskId, 'string');
+
+      await teamCommand([
+        'api',
+        'claim-task',
+        '--input',
+        JSON.stringify({
+          team_name: 'transition-file-team',
+          task_id: taskId,
+          worker: 'worker-1',
+          expected_version: 1,
+        }),
+        '--json',
+      ]);
+      const claimed = JSON.parse(logs.at(-1) ?? '{}') as {
+        ok?: boolean;
+        data?: { claimToken?: string };
+      };
+      assert.equal(claimed.ok, true);
+      const claimToken = claimed.data?.claimToken;
+      assert.equal(typeof claimToken, 'string');
+
+      const resultPath = join(wd, 'result.txt');
+      await writeFile(resultPath, 'Verification:\n- PASS exact content\n- PASS no extra edits\n', 'utf8');
+
+      await teamCommand([
+        'api',
+        'transition-task-status',
+        '--input',
+        JSON.stringify({
+          team_name: 'transition-file-team',
+          task_id: taskId,
+          from: 'in_progress',
+          to: 'completed',
+          claim_token: claimToken,
+        }),
+        '--result-file',
+        resultPath,
+        '--json',
+      ]);
+      const transitioned = JSON.parse(logs.at(-1) ?? '{}') as {
+        ok?: boolean;
+        data?: { ok?: boolean; task?: { status?: string; result?: string } };
+      };
+      assert.equal(transitioned.ok, true);
+      assert.equal(transitioned.data?.ok, true);
+      assert.equal(transitioned.data?.task?.status, 'completed');
+      assert.equal(
+        transitioned.data?.task?.result,
+        'Verification:\n- PASS exact content\n- PASS no extra edits\n',
+      );
     } finally {
       console.log = originalLog;
       process.chdir(previousCwd);

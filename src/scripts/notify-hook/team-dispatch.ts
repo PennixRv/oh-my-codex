@@ -576,7 +576,7 @@ async function finalizeClaimedDispatchRequest({
           request_id: request.request_id,
           message_id: request.message_id || null,
           to_worker: request.to_worker,
-          transport: 'send-keys',
+          transport: resolveDispatchTransport(request, result),
           result: 'retry',
           reason: result.reason,
         });
@@ -612,7 +612,7 @@ async function finalizeClaimedDispatchRequest({
           request_id: request.request_id,
           message_id: request.message_id || null,
           to_worker: request.to_worker,
-          transport: 'send-keys',
+          transport: resolveDispatchTransport(request, result),
           result: 'failed',
           reason: request.last_reason,
         });
@@ -654,7 +654,7 @@ async function finalizeClaimedDispatchRequest({
           request_id: request.request_id,
           message_id: request.message_id || null,
           to_worker: request.to_worker,
-          transport: 'send-keys',
+          transport: resolveDispatchTransport(request, result),
           result: 'notified',
           reason: result.reason,
         });
@@ -682,7 +682,7 @@ async function finalizeClaimedDispatchRequest({
         request_id: request.request_id,
         message_id: request.message_id || null,
         to_worker: request.to_worker,
-        transport: 'send-keys',
+        transport: resolveDispatchTransport(request, result),
         result: 'failed',
         reason: result.reason,
       });
@@ -759,6 +759,17 @@ async function injectDispatchRequest(request, config, cwd, stateDir) {
     return { ok: false, reason: 'missing_tmux_target' };
   }
   const leaderTargeted = request.to_worker === 'leader-fixed';
+  if (leaderTargeted) {
+    return {
+      ok: true,
+      reason: 'leader_mailbox_notified',
+      pane: null,
+      pane_source: 'leader_mailbox_persisted',
+      readiness_evidence: null,
+      pane_current_command: null,
+      tmux_injection_attempted: false,
+    };
+  }
   let resolution;
   if (target.type === 'session') {
     const paneId = await resolveSessionToPane(target.value).catch(() => null);
@@ -954,6 +965,13 @@ async function appendDeliveryTelemetry(logsDir, event) {
     source: 'notify-hook.team-dispatch',
     ...event,
   }).catch(() => {});
+}
+
+function resolveDispatchTransport(request, result) {
+  const isLeaderMailboxNotify =
+    safeString(request?.to_worker).trim() === 'leader-fixed'
+    && safeString(result?.reason).trim() === 'leader_mailbox_notified';
+  return isLeaderMailboxNotify ? 'mailbox' : 'send-keys';
 }
 
 function buildDispatchAttemptEvidence(result, fallback = {}) {

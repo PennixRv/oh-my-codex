@@ -136,10 +136,6 @@ export async function sendPaneInput({
   typePrompt = true,
   queueFirstSubmit = false,
 }: any): Promise<any> {
-  // Pennix fork: tmux send-keys injection into any pane is disabled.
-  // Leader notification goes through hookSpecificOutput + mailbox files.
-  return { ok: true, sent: false, reason: 'pennix_no_inject', paneTarget: '' };
-
   const target = safeString(paneTarget).trim();
   if (!target) {
     return { ok: false, sent: false, reason: 'missing_pane_target', paneTarget: '' };

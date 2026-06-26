@@ -24,3 +24,11 @@
 - **Pages:** omx-team-lifecycle-restart-smoke-failures-2026-06-24.md
 - **Summary:** Refreshed wiki index and derived metadata surfaces
 
+## [2026-06-26T01:56:19.208Z] query
+- **Pages:** omx-team-lifecycle-restart-smoke-failures-2026-06-24.md
+- **Summary:** Query "team fallback prompt injection startup release" → 1 results (of 1 total)
+
+## [2026-06-26T02:06:08.972Z] add
+- **Pages:** omx-team-lifecycle-restart-smoke-failures-2026-06-24.md, omx-tmux-inject-marker-multisource-analysis-2026-06-26.md
+- **Summary:** Refreshed wiki index and derived metadata surfaces
+

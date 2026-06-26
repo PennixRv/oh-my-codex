@@ -10,14 +10,13 @@ import { resolveWorkerNotifyTeamStateRootPath } from '../../team/state-root.js';
 import { asNumber, safeString, isTerminalPhase } from './utils.js';
 import { readJsonIfExists } from './state-io.js';
 import { logTmuxHookEvent } from './log.js';
-import { evaluatePaneInjectionReadiness, sendPaneInput } from './team-tmux-guard.js';
+import { evaluatePaneInjectionReadiness } from './team-tmux-guard.js';
 import { resolvePaneTarget } from './tmux-injection.js';
 import {
   classifyLeaderActionState,
   resolveAllWorkersIdleIntent,
   resolveWorkerIdleIntent,
 } from './orchestration-intent.js';
-import { DEFAULT_MARKER } from '../tmux-hook-engine.js';
 const LEADER_PANE_SHELL_NO_INJECTION_REASON = 'leader_pane_shell_no_injection';
 
 export async function resolveTeamStateDirForWorker(cwd, parsedTeamWorker) {
@@ -424,7 +423,6 @@ export async function maybeNotifyLeaderAllWorkersIdle({ cwd, stateDir, logsDir, 
 
   const N = workers.length;
   const nextAction = `Run \`omx team status ${teamName}\` now, read unread worker messages, then assign the next concrete task, reconcile results, or shut the team down.`;
-  const message = `[OMX] All ${N} worker${N === 1 ? '' : 's'} idle. ${nextAction} ${DEFAULT_MARKER}`;
   const tmuxTarget = canonicalLeaderPaneId;
   const paneGuard = await checkLeaderPaneReadyForWorkerStateReminder(tmuxTarget);
   if (!paneGuard.ok) {
@@ -454,14 +452,6 @@ export async function maybeNotifyLeaderAllWorkersIdle({ cwd, stateDir, logsDir, 
   }
 
   try {
-    const sendResult = await sendPaneInput({
-      paneTarget: tmuxTarget,
-      prompt: message,
-      submitKeyPresses: 2,
-      submitDelayMs: 100,
-    });
-    if (!sendResult.ok) throw new Error(sendResult.error || sendResult.reason || 'send_failed');
-
     const nextIdleState = {
       ...idleState,
       last_notified_at_ms: nowMs,
@@ -495,6 +485,8 @@ export async function maybeNotifyLeaderAllWorkersIdle({ cwd, stateDir, logsDir, 
       worker: workerName,
       worker_count: N,
       orchestration_intent: orchestrationIntent,
+      visible_injection_suppressed: true,
+      suppression_reason: 'leader_visible_injection_disabled',
     });
   } catch (err) {
     await logTmuxHookEvent(logsDir, {
@@ -643,17 +635,7 @@ export async function maybeNotifyLeaderWorkerIdle({ cwd, stateDir, logsDir, pars
   if (currentTaskId) parts.push(`task: ${currentTaskId}`);
   if (currentReason) parts.push(`reason: ${currentReason}`);
   parts.push(`Next: read ${workerName}'s latest message/output, then assign the next concrete step or mark the task complete.`);
-  const message = `${parts.join('. ')}. ${DEFAULT_MARKER}`;
-
   try {
-    const sendResult = await sendPaneInput({
-      paneTarget: tmuxTarget,
-      prompt: message,
-      submitKeyPresses: 2,
-      submitDelayMs: 100,
-    });
-    if (!sendResult.ok) throw new Error(sendResult.error || sendResult.reason || 'send_failed');
-
     // Update cooldown state
     try {
       const tmpPath = cooldownPath + '.tmp.' + process.pid;
@@ -694,6 +676,8 @@ export async function maybeNotifyLeaderWorkerIdle({ cwd, stateDir, logsDir, pars
       prev_state: prevState,
       task_id: currentTaskId || null,
       orchestration_intent: orchestrationIntent,
+      visible_injection_suppressed: true,
+      suppression_reason: 'leader_visible_injection_disabled',
     });
   } catch (err) {
     await logTmuxHookEvent(logsDir, {

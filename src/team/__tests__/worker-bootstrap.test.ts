@@ -55,7 +55,8 @@ describe("worker bootstrap", () => {
     assert.match(workerSkill, /runtime-generated worker instructions plus your inbox as authoritative/i);
     assert.match(workerSkill, /omx team api claim-task --input/);
     assert.match(workerSkill, /omx team api transition-task-status --input/);
-    assert.match(workerSkill, /omx team api release-task-claim --input/);
+    assert.match(workerSkill, /--result-file "\$RESULT_FILE"/);
+    assert.match(workerSkill, /--error-file "\$ERROR_FILE"/);
     assert.match(workerSkill, /--input '\{"team_name":"<teamName>"/);
     assert.match(workerSkill, /continue your assigned work or the next feasible task/i);
     assert.doesNotMatch(workerSkill, /Load Worker Skill Path/);
@@ -108,6 +109,9 @@ describe("worker bootstrap", () => {
     assert.match(overlay, /omx team api claim-task --input/);
     assert.match(overlay, /omx team api transition-task-status --input/);
     assert.match(overlay, /omx team api release-task-claim --input/);
+    assert.match(overlay, /rollback\/requeue to `pending`|rollback to `pending`/i);
+    assert.match(overlay, /--result-file "\$RESULT_FILE"/);
+    assert.match(overlay, /--error-file "\$ERROR_FILE"/);
     assert.match(overlay, /--input '\{"team_name":"my-team"/);
     assert.match(overlay, /re-check your inbox and mailbox state/i);
     assert.doesNotMatch(overlay, /Load the worker skill instructions from the first path that exists/);
@@ -290,6 +294,9 @@ describe("worker bootstrap", () => {
     assert.match(inbox, /omx team api claim-task --input/);
     assert.match(inbox, /omx team api transition-task-status --input/);
     assert.match(inbox, /omx team api release-task-claim --input/);
+    assert.match(inbox, /rollback\/requeue to `pending`|rollback to `pending`/i);
+    assert.match(inbox, /--result-file "\$RESULT_FILE"/);
+    assert.match(inbox, /--error-file "\$ERROR_FILE"/);
     assert.match(inbox, /--input '\{"team_name":"team-inbox"/);
     assert.match(inbox, /ACK: worker-1 initialized/);
     assert.match(inbox, /Mailbox Delivery Protocol \(Required\)/);
@@ -931,7 +938,7 @@ describe("worker bootstrap", () => {
     assert.match(inbox, /team\/team-followup\/tasks\/task-42\.json/);
     assert.match(inbox, /omx team api claim-task --input/);
     assert.match(inbox, /omx team api transition-task-status --input/);
-    assert.match(inbox, /omx team api release-task-claim --input/);
+    assert.match(inbox, /--result-file "\$RESULT_FILE"/);
     assert.match(inbox, /ensure your task result is preserved in git history/i);
     assert.match(inbox, /If your worktree still has task changes, commit them/i);
     assert.match(inbox, /If the worktree is already clean because OMX runtime auto-checkpoint\/integration already captured the result/i);
@@ -1308,7 +1315,10 @@ describe("worker bootstrap", () => {
     assert.match(content, /runtime file plus your inbox as the authoritative instructions/i);
     assert.match(content, /omx team api claim-task --input/);
     assert.match(content, /omx team api transition-task-status --input/);
-    assert.match(content, /omx team api release-task-claim --input/);
+    assert.match(content, /--result-file "\$RESULT_FILE"/);
+    assert.match(content, /--error-file "\$ERROR_FILE"/);
+    assert.doesNotMatch(content, /omx team api release-task-claim --input/);
+    assert.doesNotMatch(content, /rollback\/requeue to `pending`|rollback to `pending`/i);
     assert.match(content, /--input '\{"team_name":"root-team"/);
     assert.doesNotMatch(content, /Load the worker skill from the first existing path/);
     assert.doesNotMatch(content, /--input "\{/);
@@ -1398,6 +1408,7 @@ describe("worker bootstrap", () => {
     assert.match(content, /You are operating as the \*\*writer\*\* role/);
     assert.match(content, /omx team api claim-task --input/);
     assert.match(content, /omx team api transition-task-status --input/);
+    assert.match(content, /--result-file "\$RESULT_FILE"/);
     assert.match(content, /--input '\{"team_name":"root-team"/);
     assert.doesNotMatch(content, /Load the worker skill from the first existing path/);
     assert.doesNotMatch(content, /--input "\{/);
