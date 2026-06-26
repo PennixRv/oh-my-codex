@@ -41,6 +41,30 @@ describe('reconcileHudForPromptSubmit', () => {
     assert.equal(created, false);
   });
 
+  it('skips reconciliation when automatic HUD is disabled in config', async () => {
+    let listed = false;
+    let created = false;
+
+    const result = await reconcileHudForPromptSubmit('/repo', {
+      env: { TMUX: '1', TMUX_PANE: '%1', OMX_SESSION_ID: 'sess-a', [OMX_TMUX_HUD_OWNER_ENV]: '1' },
+      readHudConfig: async () => ({ enabled: false, preset: 'focused', git: { display: 'branch' }, statusLine: { preset: 'focused' } }),
+      listCurrentWindowPanes: () => {
+        listed = true;
+        return [{ paneId: '%1', currentCommand: 'codex', startCommand: 'codex' }];
+      },
+      createHudWatchPane: () => {
+        created = true;
+        return '%hud';
+      },
+      resolveOmxCliEntryPath: () => '/repo/dist/cli/omx.js',
+    });
+
+    assert.equal(result.status, 'skipped_disabled');
+    assert.equal(result.paneId, null);
+    assert.equal(listed, false);
+    assert.equal(created, false);
+  });
+
   it('skips recreating a missing HUD in explicit OMX-owned tmux without a session id', async () => {
     const created: Array<{ cwd: string; cmd: string; options?: { heightLines?: number; targetPaneId?: string } }> = [];
     const resized: Array<{ paneId: string; heightLines: number }> = [];

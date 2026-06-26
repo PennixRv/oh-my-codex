@@ -67,6 +67,7 @@ function sanitizeOptionalString(value: unknown): string | undefined {
 
 export function normalizeHudConfig(raw: HudConfig | null | undefined): ResolvedHudConfig {
   const normalized: ResolvedHudConfig = {
+    enabled: DEFAULT_HUD_CONFIG.enabled,
     preset: DEFAULT_HUD_CONFIG.preset,
     git: {
       ...DEFAULT_HUD_CONFIG.git,
@@ -77,6 +78,10 @@ export function normalizeHudConfig(raw: HudConfig | null | undefined): ResolvedH
   };
 
   if (!raw || typeof raw !== 'object') return normalized;
+
+  if (typeof raw.enabled === 'boolean') {
+    normalized.enabled = raw.enabled;
+  }
 
   if (isValidPreset(raw.preset)) {
     normalized.preset = raw.preset;

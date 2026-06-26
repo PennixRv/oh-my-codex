@@ -2935,11 +2935,15 @@ export async function setup(options: SetupOptions = {}): Promise<void> {
 	const hudConfigPath = join(projectRoot, ".omx", "hud-config.json");
 	if (force || !existsSync(hudConfigPath)) {
 		if (!dryRun) {
-			const defaultHudConfig = { preset: "focused" };
+			const defaultHudConfig = {
+				enabled: DEFAULT_HUD_CONFIG.enabled,
+				preset: DEFAULT_HUD_CONFIG.preset,
+				statusLine: { preset: DEFAULT_HUD_CONFIG.statusLine.preset },
+			};
 			await writeFile(hudConfigPath, JSON.stringify(defaultHudConfig, null, 2));
 		}
 		if (verbose) console.log("  Wrote .omx/hud-config.json");
-		console.log("  HUD config created (preset: focused).");
+		console.log(`  HUD config created (enabled: ${DEFAULT_HUD_CONFIG.enabled ? "true" : "false"}, preset: ${DEFAULT_HUD_CONFIG.preset}).`);
 	} else {
 		console.log("  HUD config already exists (use --force to overwrite).");
 	}

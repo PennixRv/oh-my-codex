@@ -137,7 +137,7 @@ import type { UnifiedMcpRegistryServer } from "../config/mcp-registry.js";
 import { OMX_FIRST_PARTY_MCP_SERVER_NAMES } from "../config/omx-first-party-mcp.js";
 import { HUD_TMUX_HEIGHT_LINES, HUD_TMUX_MIN_LAUNCH_WINDOW_HEIGHT_LINES, isTmuxWindowTooCrampedForHudSplit } from "../hud/constants.js";
 import { OMX_TMUX_HUD_OWNER_ENV } from "../hud/reconcile.js";
-import { readUltragoalState } from "../hud/state.js";
+import { normalizeHudConfig, readUltragoalState } from "../hud/state.js";
 import {
   createHudWatchPane as createSharedHudWatchPane,
   killTmuxPane as killSharedTmuxPane,
@@ -1067,6 +1067,15 @@ export function buildDetachedHudHookEnv(
     ...(omxRootOverride ? { OMX_ROOT: omxRootOverride } : {}),
     OMX_ENTRY_PATH: omxBin,
   };
+}
+
+function isAutomaticHudEnabled(cwd: string): boolean {
+  try {
+    const raw = JSON.parse(readFileSync(join(cwd, ".omx", "hud-config.json"), "utf-8")) as Record<string, unknown>;
+    return normalizeHudConfig(raw).enabled !== false;
+  } catch {
+    return false;
+  }
 }
 
 export function registerDetachedHudLayoutReconcileHook(options: {
@@ -3678,6 +3687,7 @@ export function buildDetachedSessionBootstrapSteps(
   env: NodeJS.ProcessEnv = process.env,
   sqliteHomeOverride?: string,
   parentEnvFilePath?: string,
+  automaticHudEnabled = true,
 ): DetachedSessionTmuxStep[] {
   const detachedLeaderCmd = nativeWindows
     ? "powershell.exe"
@@ -3710,6 +3720,7 @@ export function buildDetachedSessionBootstrapSteps(
     sessionId,
     ...hudRuntimeRoot,
   }).env;
+  delete hudRuntimeEnv[OMX_TMUX_HUD_OWNER_ENV];
   const newSessionArgs: string[] = [
     "new-session",
     "-d",
@@ -3733,21 +3744,6 @@ export function buildDetachedSessionBootstrapSteps(
       : []),
     detachedLeaderCmd,
   ];
-  const splitCaptureArgs: string[] = [
-    "split-window",
-    "-v",
-    "-l",
-    String(HUD_TMUX_HEIGHT_LINES),
-    "-d",
-    "-t",
-    sessionName,
-    "-c",
-    cwd,
-    "-P",
-    "-F",
-    "#{pane_id}",
-    hudCmd,
-  ];
   return [
     { name: "new-session", args: newSessionArgs },
     ...(sessionId
@@ -3758,7 +3754,26 @@ export function buildDetachedSessionBootstrapSteps(
           },
         ]
       : []),
-    { name: "split-and-capture-hud-pane", args: splitCaptureArgs },
+    ...(automaticHudEnabled
+      ? [{
+          name: "split-and-capture-hud-pane" as const,
+          args: [
+            "split-window",
+            "-v",
+            "-l",
+            String(HUD_TMUX_HEIGHT_LINES),
+            "-d",
+            "-t",
+            sessionName,
+            "-c",
+            cwd,
+            "-P",
+            "-F",
+            "#{pane_id}",
+            hudCmd,
+          ],
+        }]
+      : []),
   ];
 }
 
@@ -4515,15 +4530,8 @@ function runCodex(
   }
   const omxRootOverride = resolveOmxRootForLaunch(cwd, process.env);
   const currentPaneId = process.env.TMUX_PANE;
+  const automaticHudEnabled = isAutomaticHudEnabled(cwd);
   const hudRuntimeRoot = resolveHudRuntimeRootForLaunch(cwd, process.env);
-  const hudEnvArgs = Object.entries(buildHudRuntimeEnv({
-    sessionId,
-    leaderPaneId: currentPaneId,
-    ...hudRuntimeRoot,
-  }).env).map(([key, value]) => `${key}=${value}`);
-  const hudCmd = nativeWindows
-    ? buildWindowsPromptCommand("node", [omxBin, "hud", "--watch"])
-    : buildTmuxPaneCommand("env", [...hudEnvArgs, "node", omxBin, "hud", "--watch"]);
   const inheritLeaderFlags = process.env[TEAM_INHERIT_LEADER_FLAGS_ENV] !== "0";
   const workerLaunchArgs = resolveTeamWorkerLaunchArgsEnv(
     process.env[TEAM_WORKER_LAUNCH_ARGS_ENV],
@@ -4543,7 +4551,7 @@ function runCodex(
   );
   const codexEnvWithSession = {
     ...codexBaseEnv,
-    ...buildHudRuntimeEnv({ sessionId }).env,
+    ...(sessionId ? { OMX_SESSION_ID: sessionId } : {}),
   };
   const codexEnv = workerLaunchArgs
     ? { ...codexEnvWithSession, [TEAM_WORKER_LAUNCH_ARGS_ENV]: workerLaunchArgs }
@@ -4581,52 +4589,57 @@ function runCodex(
       : [];
 
     let hudPaneId: string | null = null;
-    const [keeperHudPaneId, ...duplicateHudPaneIds] = staleHudPaneIds;
-    for (const paneId of duplicateHudPaneIds) {
-      killTmuxPane(paneId);
-    }
-
-    if (keeperHudPaneId) {
-      hudPaneId = keeperHudPaneId;
-      try {
-        resizeTmuxPane(hudPaneId, HUD_TMUX_HEIGHT_LINES);
-        registerInsideTmuxHudResizeHook({
-          hudPaneId,
-          currentPaneId,
-          cwd,
-          sessionId,
-          omxRootOverride,
-        });
-      } catch (err) {
-        logCliOperationFailure(err);
+    if (automaticHudEnabled) {
+      const hudEnvArgs = Object.entries(buildHudRuntimeEnv({
+        sessionId,
+        leaderPaneId: currentPaneId,
+        ...hudRuntimeRoot,
+      }).env).map(([key, value]) => `${key}=${value}`);
+      const hudCmd = nativeWindows
+        ? buildWindowsPromptCommand("node", [omxBin, "hud", "--watch"])
+        : buildTmuxPaneCommand("env", [...hudEnvArgs, "node", omxBin, "hud", "--watch"]);
+      const [keeperHudPaneId, ...duplicateHudPaneIds] = staleHudPaneIds;
+      for (const paneId of duplicateHudPaneIds) {
+        killTmuxPane(paneId);
       }
-    } else if (
-      isExistingTmuxWindowTooCrampedForLaunchHud(
-        readCurrentWindowSize(undefined, currentPaneId).height,
-      )
-    ) {
-      // Existing tmux window is height-constrained: forcing a launch-time HUD
-      // split here would steal rows from the Codex TUI and make the
-      // transcript/input area unreadable. Skip the split at launch; the
-      // prompt-submit reconcile path can add the HUD later when there is room.
-      // (closes #2754)
-      hudPaneId = null;
-    } else {
-      try {
-        hudPaneId = createHudWatchPane(cwd, hudCmd, {
-          heightLines: HUD_TMUX_HEIGHT_LINES,
-          targetPaneId: currentPaneId,
-        });
-        registerInsideTmuxHudResizeHook({
-          hudPaneId,
-          currentPaneId,
-          cwd,
-          sessionId,
-          omxRootOverride,
-        });
-      } catch (err) {
-        logCliOperationFailure(err);
-        // HUD split failed, continue without it
+
+      if (keeperHudPaneId) {
+        hudPaneId = keeperHudPaneId;
+        try {
+          resizeTmuxPane(hudPaneId, HUD_TMUX_HEIGHT_LINES);
+          registerInsideTmuxHudResizeHook({
+            hudPaneId,
+            currentPaneId,
+            cwd,
+            sessionId,
+            omxRootOverride,
+          });
+        } catch (err) {
+          logCliOperationFailure(err);
+        }
+      } else if (
+        isExistingTmuxWindowTooCrampedForLaunchHud(
+          readCurrentWindowSize(undefined, currentPaneId).height,
+        )
+      ) {
+        hudPaneId = null;
+      } else {
+        try {
+          hudPaneId = createHudWatchPane(cwd, hudCmd, {
+            heightLines: HUD_TMUX_HEIGHT_LINES,
+            targetPaneId: currentPaneId,
+          });
+          registerInsideTmuxHudResizeHook({
+            hudPaneId,
+            currentPaneId,
+            cwd,
+            sessionId,
+            omxRootOverride,
+          });
+        } catch (err) {
+          logCliOperationFailure(err);
+          // HUD split failed, continue without it
+        }
       }
     }
 
@@ -4689,6 +4702,18 @@ function runCodex(
       : null;
     const sessionName = buildDetachedTmuxSessionName(cwd, sessionId);
     const launchDetachedSession = (): { postLaunchHandledExternally: boolean } => {
+      const hudEnvArgs = automaticHudEnabled
+        ? Object.entries(buildHudRuntimeEnv({
+            sessionId,
+            leaderPaneId: currentPaneId,
+            ...hudRuntimeRoot,
+          }).env).map(([key, value]) => `${key}=${value}`)
+        : [];
+      const hudCmd = automaticHudEnabled
+        ? nativeWindows
+          ? buildWindowsPromptCommand("node", [omxBin, "hud", "--watch"])
+          : buildTmuxPaneCommand("env", [...hudEnvArgs, "node", omxBin, "hud", "--watch"])
+        : "";
       const contextKey = process.env[OMX_MADMAX_DETACHED_CONTEXT_ENV]?.trim();
       const runsRoot = resolveMadmaxRunsRoot(process.env);
       const activeRecordPath = contextKey
@@ -4790,6 +4815,7 @@ function runCodex(
           process.env,
           sqliteHomeOverride,
           detachedParentEnvFilePath,
+          automaticHudEnabled,
         );
         for (const step of bootstrapSteps) {
           const output = execTmuxFileSync(step.args, {

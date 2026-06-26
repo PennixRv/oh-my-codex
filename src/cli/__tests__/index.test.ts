@@ -3061,6 +3061,31 @@ describe.skip("detached tmux new-session sequencing", () => {
     );
   });
 
+  it("buildDetachedSessionBootstrapSteps omits HUD split when automatic HUD is disabled", () => {
+    const steps = buildDetachedSessionBootstrapSteps(
+      "omx-demo",
+      "/tmp/project",
+      "'codex' '--model' 'gpt-5'",
+      "'node' '/tmp/omx.js' 'hud' '--watch'",
+      null,
+      undefined,
+      null,
+      false,
+      "omx-session-test",
+      undefined,
+      undefined,
+      undefined,
+      process.env,
+      undefined,
+      undefined,
+      false,
+    );
+    assert.deepEqual(
+      steps.map((step) => step.name),
+      ["new-session", "tag-session"],
+    );
+  });
+
   it("buildDetachedSessionBootstrapSteps forwards OMX_SESSION_ID to detached tmux session", () => {
     const steps = buildDetachedSessionBootstrapSteps(
       "omx-demo",

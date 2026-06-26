@@ -4,6 +4,10 @@ import { normalizeHudConfig } from '../state.js';
 import { DEFAULT_HUD_CONFIG } from '../types.js';
 
 describe('DEFAULT_HUD_CONFIG', () => {
+  it('defaults automatic tmux HUD to disabled in the Pennix fork', () => {
+    assert.equal(DEFAULT_HUD_CONFIG.enabled, false);
+  });
+
   it('has preset set to "focused"', () => {
     assert.equal(DEFAULT_HUD_CONFIG.preset, 'focused');
   });
@@ -25,6 +29,7 @@ describe('normalizeHudConfig', () => {
 
   it('keeps legacy preset-only configs backward compatible', () => {
     assert.deepEqual(normalizeHudConfig({ preset: 'minimal' }), {
+      enabled: false,
       preset: 'minimal',
       git: { display: 'repo-branch' },
       statusLine: { preset: 'focused' },
@@ -46,6 +51,7 @@ describe('normalizeHudConfig', () => {
         remoteName: 'upstream',
         repoLabel: 'manual-repo',
       },
+      enabled: false,
       statusLine: { preset: 'focused' },
     });
   });
@@ -84,5 +90,13 @@ describe('normalizeHudConfig', () => {
     });
     assert.equal(resolved.preset, 'minimal');
     assert.equal(resolved.statusLine.preset, 'full');
+  });
+
+  it('accepts an explicit enabled flag', () => {
+    const resolved = normalizeHudConfig({
+      enabled: true,
+      preset: 'focused',
+    });
+    assert.equal(resolved.enabled, true);
   });
 });

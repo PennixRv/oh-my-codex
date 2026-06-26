@@ -1,3 +1,5 @@
+import { existsSync } from 'fs';
+import { join } from 'path';
 import { readAllState, readHudConfig } from './state.js';
 import { getHudRenderMaxLines } from './render.js';
 import { HUD_TMUX_HEIGHT_LINES, isTmuxWindowTooCrampedForHudSplit } from './constants.js';
@@ -114,6 +116,7 @@ export interface ReconcileHudForPromptSubmitResult {
     | 'skipped_not_tmux'
     | 'skipped_no_entry'
     | 'skipped_not_omx_owned_tmux'
+    | 'skipped_disabled'
     | 'skipped_no_session_id'
     | 'skipped_window_too_cramped'
     | 'unchanged'
@@ -247,6 +250,17 @@ export async function reconcileHudForPromptSubmit(
   const createPane = deps.createHudWatchPane ?? ((hudCwd, hudCmd, options) => createHudWatchPane(hudCwd, hudCmd, options));
   const killPane = deps.killTmuxPane ?? ((paneId) => killTmuxPane(paneId));
   const resizePane = deps.resizeTmuxPane ?? ((paneId, lines) => resizeTmuxPane(paneId, lines));
+  const readHudConfigFn = deps.readHudConfig ?? readHudConfig;
+  const shouldReadHudConfig = Boolean(deps.readHudConfig) || existsSync(join(cwd, '.omx', 'hud-config.json'));
+  const hudConfig = shouldReadHudConfig ? await readHudConfigFn(cwd).catch(() => null) : null;
+  if (hudConfig && hudConfig.enabled === false) {
+    return {
+      status: 'skipped_disabled',
+      paneId: null,
+      desiredHeight: null,
+      duplicateCount: 0,
+    };
+  }
 
   const currentPaneId = env.TMUX_PANE?.trim();
   const resolvedSessionId = deps.sessionId?.trim() || env.OMX_SESSION_ID?.trim() || undefined;
@@ -299,8 +313,6 @@ export async function reconcileHudForPromptSubmit(
     ...findLegacyFocusedHudWatchPaneIds(panes, currentPaneId),
   ].filter((paneId, index, paneIds) => paneIds.indexOf(paneId) === index);
   const duplicateCount = Math.max(0, hudPaneIds.length - 1);
-  const readHudConfigFn = deps.readHudConfig ?? readHudConfig;
-  const hudConfig = await readHudConfigFn(cwd).catch(() => null);
   const readAllStateFn = deps.readAllState ?? readAllState;
   const hudState = hudConfig ? await readAllStateFn(cwd, hudConfig).catch(() => null) : null;
   const desiredHeight = hudState ? getHudRenderMaxLines(hudState) : HUD_TMUX_HEIGHT_LINES;

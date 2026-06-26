@@ -157,6 +157,7 @@ export interface HudStatusLineConfig {
 
 /** HUD configuration stored in .omx/hud-config.json */
 export interface HudConfig {
+  enabled?: boolean;
   preset?: HudPreset;
   git?: HudGitConfig;
   statusLine?: HudStatusLineConfig;
@@ -173,6 +174,7 @@ export interface ResolvedHudStatusLineConfig {
 }
 
 export interface ResolvedHudConfig {
+  enabled?: boolean;
   preset: HudPreset;
   git: ResolvedHudGitConfig;
   statusLine: ResolvedHudStatusLineConfig;
@@ -180,6 +182,7 @@ export interface ResolvedHudConfig {
 
 /** Default HUD configuration */
 export const DEFAULT_HUD_CONFIG: ResolvedHudConfig = {
+  enabled: false,
   preset: 'focused',
   git: {
     display: 'repo-branch',

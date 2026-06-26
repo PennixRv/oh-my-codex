@@ -563,8 +563,10 @@ describe.skip("omx setup refresh summary and dry-run behavior", () => {
 
       const hudConfig = JSON.parse(
         await readFile(join(wd, ".omx", "hud-config.json"), "utf-8"),
-      ) as { preset?: unknown };
+      ) as { enabled?: unknown; preset?: unknown; statusLine?: { preset?: unknown } };
+      assert.equal(hudConfig.enabled, false);
       assert.equal(hudConfig.preset, "focused");
+      assert.equal(hudConfig.statusLine?.preset, "focused");
 
       const config = await readFile(join(wd, ".codex", "config.toml"), "utf-8");
       assert.match(
