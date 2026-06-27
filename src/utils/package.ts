@@ -12,6 +12,7 @@ export const OMX_DISPLAY_NAME = OMX_PACKAGE_NAME;
 export const OMX_LEGACY_DISPLAY_NAME = OMX_LEGACY_PACKAGE_NAME;
 export const OMX_FORK_PRODUCT_NAME = 'oh-my-codex-pennix';
 export const OMX_FORK_BRAND_NAME = 'OMX';
+export const OMX_FORK_USER_FACING_NAME = 'Pennix OMX';
 export const OMX_FORK_AGENTS_HEADING = 'Pennix OMX';
 export const OMX_FORK_REPO_SLUG = 'PennixRv/oh-my-codex';
 export const OMX_FORK_REPO_URL = `https://github.com/${OMX_FORK_REPO_SLUG}.git`;

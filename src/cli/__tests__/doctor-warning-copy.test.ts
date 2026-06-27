@@ -238,7 +238,7 @@ command = "node"
 			await writeFile(
 				join(codexDir, "config.toml"),
 				[
-					'developer_instructions = "You have oh-my-codex installed through Codex plugin mode. AGENTS.md is the orchestration brain and main control surface."',
+					'developer_instructions = "You have Pennix OMX installed through Codex plugin mode. AGENTS.md is the orchestration brain and main control surface."',
 					"plugin_hooks = true",
 					"goals = true",
 					"",
@@ -316,7 +316,7 @@ command = "node"
 					"<!-- AUTONOMY DIRECTIVE — DO NOT REMOVE -->",
 					"<!-- END AUTONOMY DIRECTIVE -->",
 					"<!-- omx:generated:agents-md -->",
-					"# oh-my-codex - Intelligent Multi-Agent Orchestration",
+					"# Pennix OMX - Intelligent Multi-Agent Orchestration",
 					"AGENTS.md is the top-level operating contract for the workspace.",
 					"",
 				].join("\n"),

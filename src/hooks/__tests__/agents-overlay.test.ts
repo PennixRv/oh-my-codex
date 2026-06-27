@@ -647,7 +647,7 @@ DO NOT STOP TO ASK "SHOULD I PROCEED?" — PROCEED. DO NOT WAIT FOR CONFIRMATION
 IF BLOCKED, TRY AN ALTERNATIVE APPROACH. ONLY ASK WHEN TRULY AMBIGUOUS OR DESTRUCTIVE.
 <!-- END AUTONOMY DIRECTIVE -->
 
-# oh-my-codex - Intelligent Multi-Agent Orchestration
+# Pennix OMX - Intelligent Multi-Agent Orchestration
 `;
     await writeFile(agentsMd, autonomyContent);
 
@@ -918,7 +918,7 @@ describe("session-scoped model instructions file", () => {
         "<!-- END AUTONOMY DIRECTIVE -->",
         OMX_GENERATED_AGENTS_MARKER,
         "",
-        "# oh-my-codex - Intelligent Multi-Agent Orchestration",
+        "# Pennix OMX - Intelligent Multi-Agent Orchestration",
         "",
         "Generated orchestration brain.",
       ].join("\n"),
@@ -947,7 +947,7 @@ describe("session-scoped model instructions file", () => {
         "<!-- END AUTONOMY DIRECTIVE -->",
         OMX_GENERATED_AGENTS_MARKER,
         "",
-        "# oh-my-codex - Intelligent Multi-Agent Orchestration",
+        "# Pennix OMX - Intelligent Multi-Agent Orchestration",
         "",
         "User profile OMX brain.",
       ].join("\n"),
@@ -960,7 +960,7 @@ describe("session-scoped model instructions file", () => {
         "<!-- END AUTONOMY DIRECTIVE -->",
         OMX_GENERATED_AGENTS_MARKER,
         "",
-        "# oh-my-codex - Intelligent Multi-Agent Orchestration",
+        "# Pennix OMX - Intelligent Multi-Agent Orchestration",
         "",
         "Project generated OMX boilerplate.",
       ].join("\n"),
@@ -1012,7 +1012,7 @@ describe("session-scoped model instructions file", () => {
         "",
         OMX_MANAGED_AGENTS_START_MARKER,
         OMX_GENERATED_AGENTS_MARKER,
-        "# oh-my-codex - Intelligent Multi-Agent Orchestration",
+        "# Pennix OMX - Intelligent Multi-Agent Orchestration",
         "Generated managed block.",
         OMX_MANAGED_AGENTS_END_MARKER,
         "",

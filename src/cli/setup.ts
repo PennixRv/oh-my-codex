@@ -117,6 +117,7 @@ import {
 import { resolveCodexHookFeatureSupportForCli } from "./codex-feature-probe.js";
 import {
 	OMX_DISPLAY_NAME,
+	OMX_FORK_USER_FACING_NAME,
 	OMX_FORK_REPO_SLUG,
 } from "../utils/package.js";
 
@@ -296,7 +297,7 @@ function applyPluginModeWordingToAgentsTemplate(
 			: "`~/.codex/skills`";
 	return scopedContent.replace(
 		/Role prompts under `prompts\/\*\.md` are narrower execution surfaces\. They must follow this file, not override it\.\nWhen OMX is installed, load the installed prompt\/skill\/agent surfaces from [^\n]+active\)\./,
-		`Registered Codex plugin marketplace surfaces supply OMX workflows and plugin-scoped companion resources when the plugin is installed. Native agent roles are installed as setup-owned Codex agent TOML files in plugin mode so agent_type routing works. They must follow this file, not override it.\nUser-installed skills may still live under ${userSkillPath}.`,
+		`Registered Codex plugin marketplace surfaces supply ${OMX_FORK_USER_FACING_NAME} workflows and plugin-scoped companion resources when the plugin is installed. Native agent roles are installed as setup-owned Codex agent TOML files in plugin mode so agent_type routing works. They must follow this file, not override it.\nUser-installed skills may still live under ${userSkillPath}.`,
 		);
 }
 

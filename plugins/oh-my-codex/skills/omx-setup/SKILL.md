@@ -88,7 +88,7 @@ The source repo ships `skills/omx-setup/SKILL.md` and the catalog marks it activ
 1. Run `omx setup --verbose` in the intended scope.
 2. Run `omx doctor` and check the reported setup scope, Codex home, skill root, and hook/config status.
 3. If using project scope, confirm `./.codex/skills/omx-setup/SKILL.md` exists.
-4. If using user scope, confirm `${CODEX_HOME:-~/.codex}/skills/omx-setup/SKILL.md` exists in legacy mode, or that the internal `oh-my-codex` compatibility plugin is installed/discovered in plugin mode.
+4. If using user scope, confirm `${CODEX_HOME:-~/.codex}/skills/omx-setup/SKILL.md` exists in legacy mode, or that the internal Pennix OMX compatibility plugin package (`name: oh-my-codex`) is installed/discovered in plugin mode.
 5. If duplicate/stale skills appear, check for legacy `~/.agents/skills` overlap and follow the cleanup hint printed by setup/doctor.
 
 ## Recommended workflow

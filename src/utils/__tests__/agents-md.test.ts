@@ -19,14 +19,14 @@ describe('agents-md helpers', () => {
       'DO NOT STOP TO ASK "SHOULD I PROCEED?" — PROCEED. DO NOT WAIT FOR CONFIRMATION ON OBVIOUS NEXT STEPS.',
       'IF BLOCKED, TRY AN ALTERNATIVE APPROACH. ONLY ASK WHEN TRULY AMBIGUOUS OR DESTRUCTIVE.',
       '<!-- END AUTONOMY DIRECTIVE -->',
-      '# oh-my-codex - Intelligent Multi-Agent Orchestration',
+      '# Pennix OMX - Intelligent Multi-Agent Orchestration',
     ].join('\n');
 
     const result = addGeneratedAgentsMarker(content);
 
     assert.match(
       result,
-      /<!-- END AUTONOMY DIRECTIVE -->\n<!-- omx:generated:agents-md -->\n# oh-my-codex - Intelligent Multi-Agent Orchestration/,
+      /<!-- END AUTONOMY DIRECTIVE -->\n<!-- omx:generated:agents-md -->\n# Pennix OMX - Intelligent Multi-Agent Orchestration/,
     );
   });
 
@@ -58,7 +58,7 @@ describe('agents-md helpers', () => {
 
   it('does not treat title-only user AGENTS.md content as OMX-generated', () => {
     const content = [
-      '# oh-my-codex - Intelligent Multi-Agent Orchestration',
+      '# Pennix OMX - Intelligent Multi-Agent Orchestration',
       '',
       'User-authored guidance without any OMX ownership markers.',
     ].join('\n');

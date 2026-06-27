@@ -1738,11 +1738,11 @@ describe.skip("omx setup install mode behavior", () => {
 						"utf-8",
 					);
 					assert.match(config, /developer_instructions\s*=/);
-					assert.match(config, /<omx version=\\"1\\">You have oh-my-codex installed through Codex plugin mode/);
+					assert.match(config, /<omx version=\\"1\\">You have Pennix OMX installed through Codex plugin mode/);
 					assert.ok(config.includes("detail.</omx>"));
 					assert.match(
 						config,
-						/Registered Codex plugin marketplace surfaces supply OMX workflows and plugin-scoped companion resources/,
+						/Registered Codex plugin marketplace surfaces supply Pennix OMX workflows and plugin-scoped companion resources/,
 					);
 					assert.match(config, /User-installed skills may still live under ~\/.codex\/skills/);
 					assert.match(
@@ -1762,7 +1762,7 @@ describe.skip("omx setup install mode behavior", () => {
 					);
 					assert.match(
 						agentsMd,
-						/oh-my-codex - Intelligent Multi-Agent Orchestration/,
+						/Pennix OMX - Intelligent Multi-Agent Orchestration/,
 					);
 					assert.match(agentsMd, /<!-- omx:generated:agents-md -->/);
 					assert.match(agentsMd, /<!-- OMX:MODELS:START -->/);
@@ -1775,7 +1775,7 @@ describe.skip("omx setup install mode behavior", () => {
 					);
 					assert.match(
 						agentsMd,
-						/Registered Codex plugin marketplace surfaces supply OMX workflows and plugin-scoped companion resources/,
+						/Registered Codex plugin marketplace surfaces supply Pennix OMX workflows and plugin-scoped companion resources/,
 					);
 					assert.match(agentsMd, /User-installed skills may still live under `~\/.codex\/skills`/);
 					assert.match(
@@ -1806,7 +1806,7 @@ describe.skip("omx setup install mode behavior", () => {
 					const agentsMd = await readFile(join(wd, "AGENTS.md"), "utf-8");
 					assert.match(
 						agentsMd,
-						/Registered Codex plugin marketplace surfaces supply OMX workflows and plugin-scoped companion resources/,
+						/Registered Codex plugin marketplace surfaces supply Pennix OMX workflows and plugin-scoped companion resources/,
 					);
 					assert.match(
 						agentsMd,
@@ -1879,7 +1879,7 @@ describe.skip("omx setup install mode behavior", () => {
 
 					assert.equal(promptCount, 0);
 					const config = await readFile(configPath, "utf-8");
-					assert.match(config, /<omx version=\\"1\\">You have oh-my-codex installed through Codex plugin mode/);
+					assert.match(config, /<omx version=\\"1\\">You have Pennix OMX installed through Codex plugin mode/);
 					assert.equal(
 						(config.match(/^developer_instructions\s*=/gm) ?? []).length,
 						1,
@@ -1898,7 +1898,7 @@ describe.skip("omx setup install mode behavior", () => {
 				await withTempCwd(wd, async () => {
 					const configPath = join(codexHomeDir, "config.toml");
 					const latestUnwrapped =
-						"You have oh-my-codex installed through Codex plugin mode. AGENTS.md is the orchestration brain and main control surface. Follow AGENTS.md for skill/keyword routing and $name workflow invocation. When spawning native subagents, set `agent_type` to an installed role and never omit it for OMX work. Registered Codex plugin marketplace surfaces supply OMX workflows and plugin-scoped companion resources when the plugin is installed; native agent roles are installed as setup-owned Codex agent TOML files in plugin mode so agent_type routing works. User-installed skills may still live under ~/.codex/skills. Use outcome-first, concise progress updates: state the target result, constraints, validation evidence, and stop condition before adding process detail.";
+						"You have Pennix OMX installed through Codex plugin mode. AGENTS.md is the orchestration brain and main control surface. Follow AGENTS.md for skill/keyword routing and $name workflow invocation. When spawning native subagents, set `agent_type` to an installed role and never omit it for OMX work. Registered Codex plugin marketplace surfaces supply Pennix OMX workflows and plugin-scoped companion resources when the plugin is installed; native agent roles are installed as setup-owned Codex agent TOML files in plugin mode so agent_type routing works. User-installed skills may still live under ~/.codex/skills. Use outcome-first, concise progress updates: state the target result, constraints, validation evidence, and stop condition before adding process detail.";
 					await writeFile(
 						configPath,
 						`developer_instructions = ${JSON.stringify(latestUnwrapped)}\n`,
@@ -1916,7 +1916,7 @@ describe.skip("omx setup install mode behavior", () => {
 
 					assert.equal(promptCount, 0);
 					const config = await readFile(configPath, "utf-8");
-					assert.match(config, /You have oh-my-codex installed through Codex plugin mode/);
+					assert.match(config, /You have Pennix OMX installed through Codex plugin mode/);
 					assert.doesNotMatch(config, /<omx version=/);
 					assert.equal(
 						(config.match(/^developer_instructions\s*=/gm) ?? []).length,
@@ -1954,7 +1954,7 @@ describe.skip("omx setup install mode behavior", () => {
 					const config = await readFile(configPath, "utf-8");
 					assert.match(
 						config,
-						/<omx version=\\"1\\">You have oh-my-codex installed through Codex plugin mode/,
+						/<omx version=\\"1\\">You have Pennix OMX installed through Codex plugin mode/,
 					);
 					assert.doesNotMatch(
 						config,
@@ -2065,7 +2065,7 @@ describe.skip("omx setup install mode behavior", () => {
 					assert.equal(promptCount, 0);
 					const config = await readFile(configPath, "utf-8");
 					assert.match(config, /Custom instructions/);
-					assert.doesNotMatch(config, /Registered Codex plugin marketplace surfaces supply OMX workflows/);
+					assert.doesNotMatch(config, /Registered Codex plugin marketplace surfaces supply Pennix OMX workflows/);
 					assert.equal(
 						(config.match(/^developer_instructions\s*=/gm) ?? []).length,
 						1,
@@ -2102,7 +2102,7 @@ describe.skip("omx setup install mode behavior", () => {
 					assert.equal(promptCount, 0);
 					const config = await readFile(configPath, "utf-8");
 					assert.match(config, /version=\\"2\\">Custom instructions/);
-					assert.doesNotMatch(config, /Registered Codex plugin marketplace surfaces supply OMX workflows/);
+					assert.doesNotMatch(config, /Registered Codex plugin marketplace surfaces supply Pennix OMX workflows/);
 					assert.equal(
 						(config.match(/^developer_instructions\s*=/gm) ?? []).length,
 						1,
@@ -2681,7 +2681,7 @@ describe.skip("omx setup install mode behavior", () => {
 
 					const after = await readFile(agentsMdPath, "utf-8");
 					assert.match(after, /<!-- omx:generated:agents-md -->/);
-					assert.match(after, /oh-my-codex - Intelligent Multi-Agent Orchestration/);
+					assert.match(after, /Pennix OMX - Intelligent Multi-Agent Orchestration/);
 					const backupRoot = join(wd, "home", ".omx", "backups", "setup");
 					const backupRuns = await readdir(backupRoot);
 					assert.equal(
