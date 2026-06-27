@@ -584,6 +584,33 @@ export function listCurrentWindowHudPaneIds(
   return findHudWatchPaneIds(listCurrentWindowPanes(execTmuxSync, currentPaneId), currentPaneId, owner);
 }
 
+export function listTmuxSessionHudPaneIds(
+  sessionName: string,
+  execTmuxSync: TmuxExecSync = defaultExecTmuxSync,
+): string[] {
+  try {
+    return findHudWatchPaneIds(
+      parseTmuxPaneSnapshot(
+        execTmuxSync([
+          'list-panes',
+          '-t',
+          sessionName,
+          '-a',
+          '-F',
+          [
+            '#{pane_id}',
+            '#{pane_current_command}',
+            '#{pane_start_command}',
+          ].join(TMUX_PANE_FIELD_SEPARATOR),
+        ]),
+      ),
+      undefined,
+    );
+  } catch {
+    return [];
+  }
+}
+
 export function readCurrentWindowSize(
   execTmuxSync: TmuxExecSync = defaultExecTmuxSync,
   currentPaneId?: string,

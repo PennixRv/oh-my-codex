@@ -253,14 +253,6 @@ export async function reconcileHudForPromptSubmit(
   const readHudConfigFn = deps.readHudConfig ?? readHudConfig;
   const shouldReadHudConfig = Boolean(deps.readHudConfig) || existsSync(join(cwd, '.omx', 'hud-config.json'));
   const hudConfig = shouldReadHudConfig ? await readHudConfigFn(cwd).catch(() => null) : null;
-  if (hudConfig && hudConfig.enabled === false) {
-    return {
-      status: 'skipped_disabled',
-      paneId: null,
-      desiredHeight: null,
-      duplicateCount: 0,
-    };
-  }
 
   const currentPaneId = env.TMUX_PANE?.trim();
   const resolvedSessionId = deps.sessionId?.trim() || env.OMX_SESSION_ID?.trim() || undefined;
@@ -301,6 +293,26 @@ export async function reconcileHudForPromptSubmit(
   if (reapedStaleLeaderPaneIds.length > 0) {
     const reapedPaneIdSet = new Set(reapedStaleLeaderPaneIds);
     panes = panes.filter((pane) => !reapedPaneIdSet.has(pane.paneId));
+  }
+
+  if (hudConfig && hudConfig.enabled === false) {
+    const disabledHudPaneIds = [
+      ...findHudWatchPaneIds(panes, currentPaneId, {
+        sessionId: resolvedSessionId,
+        sessionIds: equivalentSessionIds,
+        leaderPaneId: currentPaneId,
+      }),
+      ...findLegacyFocusedHudWatchPaneIds(panes, currentPaneId),
+    ].filter((paneId, index, paneIds) => paneIds.indexOf(paneId) === index);
+    for (const paneId of disabledHudPaneIds) {
+      killPane(paneId);
+    }
+    return {
+      status: 'skipped_disabled',
+      paneId: null,
+      desiredHeight: null,
+      duplicateCount: 0,
+    };
   }
 
   const owner = {

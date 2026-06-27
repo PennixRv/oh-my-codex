@@ -148,6 +148,7 @@ import {
   reapDeadHudPanes,
   registerHudResizeHook,
   OMX_TMUX_HUD_LEADER_PANE_ENV,
+  listTmuxSessionHudPaneIds,
   type RegisterHudResizeHookOptions,
   readCurrentWindowSize,
   resizeTmuxPane,
@@ -4741,14 +4742,19 @@ function runCodex(
             activeRecord.tmux_session_name,
             activeRecord.tmux_pane_id!,
           );
-          process.stderr.write(
-            `[omx] madmax detached launch already active for this context; reusing ${activeRecord.tmux_session_name} without attaching because this launch is a Hermes MCP bridge.\n`,
-          );
-          return { postLaunchHandledExternally: true };
-        }
         process.stderr.write(
-          `[omx] madmax detached launch already active for this context; attaching ${activeRecord.tmux_session_name} instead of starting a duplicate.\n`,
+          `[omx] madmax detached launch already active for this context; reusing ${activeRecord.tmux_session_name} without attaching because this launch is a Hermes MCP bridge.\n`,
         );
+        return { postLaunchHandledExternally: true };
+      }
+      if (!automaticHudEnabled) {
+        for (const paneId of listTmuxSessionHudPaneIds(activeRecord.tmux_session_name)) {
+          killTmuxPane(paneId);
+        }
+      }
+      process.stderr.write(
+        `[omx] madmax detached launch already active for this context; attaching ${activeRecord.tmux_session_name} instead of starting a duplicate.\n`,
+      );
         try {
           execTmuxFileSync(["attach-session", "-t", activeRecord.tmux_session_name], {
             stdio: "inherit",

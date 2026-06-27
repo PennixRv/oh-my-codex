@@ -44,25 +44,38 @@ describe('reconcileHudForPromptSubmit', () => {
   it('skips reconciliation when automatic HUD is disabled in config', async () => {
     let listed = false;
     let created = false;
+    const killed: string[] = [];
 
     const result = await reconcileHudForPromptSubmit('/repo', {
       env: { TMUX: '1', TMUX_PANE: '%1', OMX_SESSION_ID: 'sess-a', [OMX_TMUX_HUD_OWNER_ENV]: '1' },
       readHudConfig: async () => ({ enabled: false, preset: 'focused', git: { display: 'branch' }, statusLine: { preset: 'focused' } }),
       listCurrentWindowPanes: () => {
         listed = true;
-        return [{ paneId: '%1', currentCommand: 'codex', startCommand: 'codex' }];
+        return [
+          { paneId: '%1', currentCommand: 'codex', startCommand: 'codex' },
+          {
+            paneId: '%2',
+            currentCommand: 'node',
+            startCommand: `env OMX_SESSION_ID='sess-a' OMX_TMUX_HUD_OWNER='1' ${OMX_TMUX_HUD_LEADER_PANE_ENV}='%1' node omx hud --watch`,
+          },
+        ];
       },
       createHudWatchPane: () => {
         created = true;
         return '%hud';
+      },
+      killTmuxPane: (paneId) => {
+        killed.push(paneId);
+        return true;
       },
       resolveOmxCliEntryPath: () => '/repo/dist/cli/omx.js',
     });
 
     assert.equal(result.status, 'skipped_disabled');
     assert.equal(result.paneId, null);
-    assert.equal(listed, false);
+    assert.equal(listed, true);
     assert.equal(created, false);
+    assert.deepEqual(killed, ['%2']);
   });
 
   it('skips recreating a missing HUD in explicit OMX-owned tmux without a session id', async () => {
