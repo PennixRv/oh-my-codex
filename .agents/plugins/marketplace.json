@@ -1,7 +1,7 @@
 {
   "name": "oh-my-codex-local",
   "interface": {
-    "displayName": "oh-my-codex Local Plugins"
+    "displayName": "Pennix OMX Local Plugins"
   },
   "plugins": [
     {

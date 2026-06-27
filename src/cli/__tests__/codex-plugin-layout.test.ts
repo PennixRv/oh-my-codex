@@ -386,7 +386,7 @@ describe('official Codex plugin layout', () => {
     assert.equal(manifest.skills, './skills/');
     assert.equal(manifest.mcpServers, './.mcp.json');
     assert.equal(manifest.apps, './.app.json');
-    assert.equal(manifest.interface?.displayName, 'oh-my-codex');
+    assert.equal(manifest.interface?.displayName, 'Pennix OMX');
     assert.equal(manifest.interface?.category, 'Developer Tools');
     assert.ok(manifest.interface?.shortDescription, 'expected short interface description');
     assert.ok(manifest.interface?.longDescription, 'expected long interface description');
@@ -932,7 +932,7 @@ process.stdin.on('end', () => {
     const entry = marketplace.plugins?.find((candidate) => candidate.name === pluginName);
 
     assert.equal(marketplace.name, 'oh-my-codex-local');
-    assert.equal(marketplace.interface?.displayName, 'oh-my-codex Local Plugins');
+    assert.equal(marketplace.interface?.displayName, 'Pennix OMX Local Plugins');
     assert.ok(entry, 'expected marketplace entry for oh-my-codex');
     assert.equal(entry.source?.source, 'local');
     assert.equal(entry.source?.path, './plugins/oh-my-codex');
