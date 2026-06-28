@@ -56,3 +56,10 @@
 - **Pages:** omx-leader-mailbox-notification-chain-analysis-2026-06-28.md, omx-team-lifecycle-restart-smoke-failures-2026-06-24.md, omx-team-smoke-findings-2026-06-28.md, omx-tmux-inject-marker-multisource-analysis-2026-06-26.md
 - **Summary:** Refreshed wiki index and derived metadata surfaces
 
+## [2026-06-28T05:00:00.000Z] add
+- **Pages:** omx-0-18-41-release-prep-block-summary-2026-06-28.md
+- **Summary:** Added 0.18.41 release-prep block summary and refreshed wiki index
+## [2026-06-28T07:09:58.781Z] lint
+- **Pages:** omx-0-18-41-release-prep-block-summary-2026-06-28.md, omx-leader-mailbox-notification-chain-analysis-2026-06-28.md, omx-team-lifecycle-restart-smoke-failures-2026-06-24.md, omx-team-smoke-findings-2026-06-28.md, omx-tmux-inject-marker-multisource-analysis-2026-06-26.md
+- **Summary:** Lint: 6 issues (5 orphan, 0 stale, 0 broken, 0 contradictions)
+

@@ -1,16 +1,12 @@
 # oh-my-codex-pennix v0.18.41
 
-> Release notes template for the Pennix fork. The tag workflow regenerates this file into the final GitHub release body.
-
-## Summary
-
-This release is the publishable follow-up to `0.18.40`: it keeps the shared two-stage hook-review send path from that line and repairs the tmux scrollback regression fixture that was blocking release validation.
+`0.18.41` is the publishable follow-up to the failed `0.18.40` release candidate. It keeps the shared two-stage hook-review send path from that line and repairs the tmux scrollback regression fixture that was blocking the release workflow test run.
 
 ## Highlights
 
-- Shared hook-review send path stays fixed - the tmux worker send path still dismisses both hook review layers before typing worker text.
-- Release-prep scrollback coverage is now complete - the fake tmux harness used by the `notify-hook` scrollback regression now implements `capture-pane`, so the release workflow can exercise the send path without a stubbed-command failure.
-- No retry or fallback behavior is reintroduced - the fork keeps the mailbox-first delivery boundary and does not add synthetic reminders back into the leader mailbox.
+- **Shared hook-review send path stays fixed** - the tmux worker send path still dismisses both hook review layers before typing worker text.
+- **Release-prep scrollback coverage is now complete** - the fake tmux harness used by the `notify-hook` scrollback regression now implements `capture-pane`, so the release workflow can exercise the send path without a stubbed-command failure.
+- **No retry or fallback behavior is reintroduced** - the fork keeps the mailbox-first delivery boundary and does not add synthetic reminders back into the leader mailbox.
 
 ## Fixes / compatibility
 

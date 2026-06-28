@@ -4,6 +4,21 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+## [0.18.41] - 2026-06-28
+
+Patch release that finishes the `0.18.40` hook-review line by repairing the tmux scrollback regression fixture used during release validation.
+
+### Fixed
+
+- **Release-prep scrollback coverage is now complete** - the fake tmux harness for the `notify-hook` scrollback regression now answers `capture-pane`, so the release workflow can exercise the shared hook-review send path without failing on a missing command stub.
+- **The shared two-stage hook-review send path remains in place** - the `0.18.40` tmux hook-review fix stays on the branch and continues to dismiss both visible review layers before typing worker text.
+
+### Verification
+
+- `npm run build`
+- `node --test dist/hooks/__tests__/notify-hook-team-tmux-guard.test.js`
+- `node --test dist/hooks/__tests__/notify-hook-tmux-scrollback.test.js`
+
 ## [0.18.30] - 2026-06-24
 
 Patch release for the remaining post-`0.18.29` team lifecycle regressions: plain `omx team` no longer forces detached worktree mode too early in fresh repositories, and leader mailbox/fallback notifications no longer recreate visible tmux prompt injection on the leader pane.
