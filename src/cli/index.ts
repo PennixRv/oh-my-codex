@@ -4701,7 +4701,7 @@ function runCodex(
     runCodexBlocking(cwd, launchArgs, codexEnvWithNotify);
     return { postLaunchHandledExternally: false };
   } else {
-    // Not in tmux: create a new tmux session with codex + HUD pane
+    // Not in tmux: create a new tmux session with codex and an optional HUD pane.
     const codexCmd = buildTmuxPaneCommand("codex", launchArgs);
     const detachedWindowsCodexCmd = nativeWindows
       ? buildWindowsPromptCommand("codex", launchArgs)
@@ -4796,6 +4796,8 @@ function runCodex(
       let registeredClientAttachedHookName: string | null = null;
       let detachedParentEnvFilePath: string | undefined;
       let detachedLeaderPaneId: string | null = null;
+      let detachedHudPaneId: string | null = null;
+      let detachedHookWindowIndex: string | null = null;
       try {
         // This path is the user-shell interactive launch: OMX creates a tmux
         // session and immediately attaches the user's terminal to it. If a tmux
@@ -4856,99 +4858,99 @@ function runCodex(
             }
           }
           if (step.name === "split-and-capture-hud-pane") {
-            const hudPaneId = parsePaneIdFromTmuxOutput(output || "");
-            const hookWindowIndex = hudPaneId
+            detachedHudPaneId = parsePaneIdFromTmuxOutput(output || "");
+            detachedHookWindowIndex = detachedHudPaneId
               ? detectDetachedSessionWindowIndex(sessionName)
               : null;
-            const hookTarget =
-              hudPaneId && hookWindowIndex
-                ? buildResizeHookTarget(sessionName, hookWindowIndex)
-                : null;
-            const hookName =
-              hudPaneId && hookWindowIndex
-                ? buildResizeHookName(
-                    "launch",
-                    sessionName,
-                    hookWindowIndex,
-                    hudPaneId,
-                  )
-                : null;
-            const clientAttachedHookName =
-              hudPaneId && hookWindowIndex
-                ? buildClientAttachedReconcileHookName(
-                    "launch",
-                    sessionName,
-                    hookWindowIndex,
-                    hudPaneId,
-                  )
-                : null;
-            const finalizeSteps = buildDetachedSessionFinalizeSteps(
-              sessionName,
-              hudPaneId,
-              hookWindowIndex,
-              process.env.OMX_MOUSE !== "0",
-              nativeWindows,
-              shouldAttachDetachedTmuxSession(process.env),
-              detachedLeaderPaneId,
-            );
-            if (nativeWindows && detachedWindowsCodexCmd) {
-              scheduleDetachedWindowsCodexLaunch(
+          }
+        }
+        const hookTarget =
+          detachedHudPaneId && detachedHookWindowIndex
+            ? buildResizeHookTarget(sessionName, detachedHookWindowIndex)
+            : null;
+        const hookName =
+          detachedHudPaneId && detachedHookWindowIndex
+            ? buildResizeHookName(
+                "launch",
                 sessionName,
-                detachedWindowsCodexCmd,
+                detachedHookWindowIndex,
+                detachedHudPaneId,
+              )
+            : null;
+        const clientAttachedHookName =
+          detachedHudPaneId && detachedHookWindowIndex
+            ? buildClientAttachedReconcileHookName(
+                "launch",
+                sessionName,
+                detachedHookWindowIndex,
+                detachedHudPaneId,
+              )
+            : null;
+        const finalizeSteps = buildDetachedSessionFinalizeSteps(
+          sessionName,
+          detachedHudPaneId,
+          detachedHookWindowIndex,
+          process.env.OMX_MOUSE !== "0",
+          nativeWindows,
+          shouldAttachDetachedTmuxSession(process.env),
+          detachedLeaderPaneId,
+        );
+        if (nativeWindows && detachedWindowsCodexCmd) {
+          scheduleDetachedWindowsCodexLaunch(
+            sessionName,
+            detachedWindowsCodexCmd,
+          );
+        }
+        for (const finalizeStep of finalizeSteps) {
+          if (finalizeStep.name === "sanitize-copy-mode-style") {
+            try {
+              mitigateCopyModeUnderlineArtifacts(sessionName);
+            } catch (err) {
+              logCliOperationFailure(err);
+            }
+            continue;
+          }
+          const stdio =
+            finalizeStep.name === "attach-session" ? "inherit" : "ignore";
+          try {
+            const startedAtMs = Date.now();
+            execTmuxFileSync(finalizeStep.args, { stdio });
+            if (finalizeStep.name === "attach-session") {
+              assertDetachedAttachDidNotNoop(
+                sessionName,
+                Date.now() - startedAtMs,
+                process.env,
               );
             }
-            for (const finalizeStep of finalizeSteps) {
-              if (finalizeStep.name === "sanitize-copy-mode-style") {
-                try {
-                  mitigateCopyModeUnderlineArtifacts(sessionName);
-                } catch (err) {
-                  logCliOperationFailure(err);
-                }
-                continue;
-              }
-              const stdio =
-                finalizeStep.name === "attach-session" ? "inherit" : "ignore";
-              try {
-                const startedAtMs = Date.now();
-                execTmuxFileSync(finalizeStep.args, { stdio });
-                if (finalizeStep.name === "attach-session") {
-                  assertDetachedAttachDidNotNoop(
-                    sessionName,
-                    Date.now() - startedAtMs,
-                    process.env,
-                  );
-                }
-              } catch (err) {
-                logCliOperationFailure(err);
-                if (finalizeStep.name === "attach-session")
-                  throw new Error("failed to attach detached tmux session");
-                continue;
-              }
-              if (
-                finalizeStep.name === "register-resize-hook" &&
-                hookTarget &&
-                hookName
-              ) {
-                registeredHookTarget = hookTarget;
-                registeredHookName = hookName;
-              }
-              if (
-                finalizeStep.name === "register-client-attached-reconcile" &&
-                clientAttachedHookName
-              ) {
-                registeredClientAttachedHookName = clientAttachedHookName;
-              }
-              if (finalizeStep.name === "reconcile-hud-resize") {
-                registerDetachedHudLayoutReconcileHook({
-                  hudPaneId,
-                  detachedLeaderPaneId,
-                  cwd,
-                  sessionId,
-                  omxBin,
-                  omxRootOverride,
-                });
-              }
-            }
+          } catch (err) {
+            logCliOperationFailure(err);
+            if (finalizeStep.name === "attach-session")
+              throw new Error("failed to attach detached tmux session");
+            continue;
+          }
+          if (
+            finalizeStep.name === "register-resize-hook" &&
+            hookTarget &&
+            hookName
+          ) {
+            registeredHookTarget = hookTarget;
+            registeredHookName = hookName;
+          }
+          if (
+            finalizeStep.name === "register-client-attached-reconcile" &&
+            clientAttachedHookName
+          ) {
+            registeredClientAttachedHookName = clientAttachedHookName;
+          }
+          if (finalizeStep.name === "reconcile-hud-resize") {
+            registerDetachedHudLayoutReconcileHook({
+              hudPaneId: detachedHudPaneId,
+              detachedLeaderPaneId,
+              cwd,
+              sessionId,
+              omxBin,
+              omxRootOverride,
+            });
           }
         }
         return { postLaunchHandledExternally: !nativeWindows };

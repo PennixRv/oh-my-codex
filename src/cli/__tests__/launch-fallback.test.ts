@@ -89,6 +89,14 @@ async function writeExecutable(path: string, content: string): Promise<void> {
   await chmod(path, 0o755);
 }
 
+async function writeHudConfig(cwd: string, enabled: boolean): Promise<void> {
+  await mkdir(join(cwd, '.omx'), { recursive: true });
+  await writeFile(
+    join(cwd, '.omx', 'hud-config.json'),
+    JSON.stringify({ version: 1, enabled }),
+  );
+}
+
 async function createLaunchFixture(
   wd: string,
   tmuxScript: (tmuxLogPath: string) => string,
@@ -324,6 +332,7 @@ describe('Hermes MCP tmux bridge launch', () => {
   it('creates a detached tmux session without attach-session under OMX_HERMES_MCP_BRIDGE', async () => {
     const wd = await mkdtemp(join(tmpdir(), 'omx-launch-hermes-bridge-'));
     try {
+      await writeHudConfig(wd, true);
       const { env, tmuxLogPath } = await createLaunchFixture(
         wd,
         (logPath) => `#!/bin/sh
@@ -684,6 +693,7 @@ exit 0
   it('launches --madmax through explicitly requested detached tmux so HUD bootstrap can run', async () => {
     const wd = await mkdtemp(join(tmpdir(), 'omx-launch-tmux-'));
     try {
+      await writeHudConfig(wd, true);
       const home = join(wd, 'home');
       const fakeBin = join(wd, 'bin');
       const fakeCodexPath = join(fakeBin, 'codex');
@@ -969,6 +979,7 @@ exit 0
   it('preserves HUD split behavior inside tmux when no direct override is present', async () => {
     const wd = await mkdtemp(join(tmpdir(), 'omx-launch-inside-tmux-managed-'));
     try {
+      await writeHudConfig(wd, true);
       const { env, tmuxLogPath } = await createLaunchFixture(
         wd,
         (tmuxLogPath) => `#!/bin/sh
