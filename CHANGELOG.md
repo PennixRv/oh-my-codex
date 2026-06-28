@@ -4,6 +4,21 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+## [0.18.45] - 2026-06-28
+
+Patch release for the Pennix fork native-hook line: internal OMX `PostToolUse` observation and remediation failures no longer surface as fatal Codex hook errors across every session that shares the globally installed user hook.
+
+### Fixed
+
+- **`PostToolUse` internal failures are now fail-open** - runtime lifecycle dispatch failures, transport-remediation/guidance generation failures, and worker success-bridge failures are logged as non-fatal OMX errors instead of exiting the global Codex `PostToolUse` hook with code `1`.
+- **Cross-session UX is cleaner under global hooks** - because OMX installs its native hook through user-global `~/.codex/hooks.json`, one session's internal OMX `PostToolUse` failure no longer pollutes unrelated Codex sessions with `PostToolUse hook (failed)` noise.
+- **`PreToolUse` and `Stop` keep their existing stricter semantics** - the release narrows the fail-open behavior to after-the-fact `PostToolUse` processing only, so blocking and finalization gates remain unchanged.
+- **Active regression coverage now exercises the fail-open contract** - the live `codex-native-hook` suite now proves runtime dispatch failure handling, continued transport-remediation guidance after dispatch failure, and non-fatal worker bridge failures.
+
+### Verification
+
+- Release readiness evidence is tracked in `docs/qa/release-readiness-0.18.45.md`.
+
 ## [0.18.44] - 2026-06-28
 
 Patch release for the Pennix fork team lifecycle line: interactive teams now persist the owning tmux socket identity, so shutdown, resume, activity discovery, and scale-down cleanup stay bound to the tmux server that actually owns the team panes.

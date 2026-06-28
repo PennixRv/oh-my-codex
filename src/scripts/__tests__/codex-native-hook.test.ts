@@ -17317,4 +17317,129 @@ describe("leader mailbox handoff", () => {
       await rm(cwd, { recursive: true, force: true });
     }
   });
+
+  it("keeps PostToolUse runtime dispatch failures non-fatal while logging them", async () => {
+    const cwd = await mkdtemp(join(tmpdir(), "omx-native-hook-posttool-dispatch-nonfatal-"));
+    try {
+      const result = await dispatchCodexNativeHook(
+        {
+          hook_event_name: "PostToolUse",
+          cwd,
+          session_id: "sess-cli-posttool-dispatch-nonfatal",
+          thread_id: "thread-cli-posttool-dispatch-nonfatal",
+          turn_id: "turn-cli-posttool-dispatch-nonfatal",
+          tool_name: "Bash",
+          tool_input: { command: "pwd" },
+          tool_response: "{\"exit_code\":0,\"stdout\":\"/repo\",\"stderr\":\"\"}",
+        },
+        {
+          cwd,
+          dispatchHookEventRuntimeFn: async () => {
+            throw new Error("simulated runtime dispatch failure");
+          },
+        },
+      );
+
+      assert.equal(result.outputJson, null);
+      assert.deepEqual(result.nonFatalErrors, [
+        {
+          stage: "dispatch_hook_event_runtime",
+          error: "simulated runtime dispatch failure",
+        },
+      ]);
+
+      const log = await readFile(
+        join(cwd, ".omx", "logs", `native-hook-${new Date().toISOString().split("T")[0]}.jsonl`),
+        "utf-8",
+      );
+      assert.match(log, /native_hook_posttooluse_nonfatal_error/);
+      assert.match(log, /dispatch_hook_event_runtime/);
+      assert.match(log, /simulated runtime dispatch failure/);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+
+  it("continues PostToolUse remediation when runtime dispatch fails", async () => {
+    const cwd = await mkdtemp(join(tmpdir(), "omx-native-hook-posttool-runtime-dispatch-failopen-"));
+    try {
+      const result = await dispatchCodexNativeHook(
+        {
+          hook_event_name: "PostToolUse",
+          cwd,
+          tool_name: "mcp__omx_state__state_write",
+          tool_use_id: "tool-mcp-transport-failopen",
+          tool_input: { mode: "team", active: true },
+          tool_response: "{\"error\":\"MCP transport closed\",\"details\":\"stdio pipe closed before response\"}",
+        },
+        {
+          cwd,
+          dispatchHookEventRuntimeFn: async () => {
+            throw new Error("simulated runtime dispatch failure");
+          },
+        },
+      );
+
+      assert.equal(result.omxEventName, "post-tool-use");
+      assert.equal(result.outputJson?.decision, "block");
+      assert.match(String(result.outputJson?.reason || ""), /lost its transport\/server connection/);
+      assert.deepEqual(result.nonFatalErrors, [
+        {
+          stage: "dispatch_hook_event_runtime",
+          error: "simulated runtime dispatch failure",
+        },
+      ]);
+
+      const log = await readFile(
+        join(cwd, ".omx", "logs", `native-hook-${new Date().toISOString().split("T")[0]}.jsonl`),
+        "utf-8",
+      );
+      assert.match(log, /native_hook_posttooluse_nonfatal_error/);
+      assert.match(log, /simulated runtime dispatch failure/);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+
+  it("keeps worker PostToolUse bridge failures non-fatal while preserving output guidance", async () => {
+    const cwd = await mkdtemp(join(tmpdir(), "omx-native-hook-posttool-worker-bridge-failopen-"));
+    try {
+      const result = await dispatchCodexNativeHook(
+        {
+          hook_event_name: "PostToolUse",
+          cwd,
+          tool_name: "mcp__omx_state__state_write",
+          tool_use_id: "tool-mcp-transport-bridge-failopen",
+          tool_input: { mode: "team", active: true },
+          tool_response: "{\"error\":\"MCP transport closed\",\"details\":\"stdio pipe closed before response\"}",
+        },
+        {
+          cwd,
+          handleTeamWorkerPostToolUseSuccessFn: async () => {
+            throw new Error("simulated worker bridge failure");
+          },
+        },
+      );
+
+      assert.equal(result.omxEventName, "post-tool-use");
+      assert.equal(result.outputJson?.decision, "block");
+      assert.match(String(result.outputJson?.reason || ""), /lost its transport\/server connection/);
+      assert.deepEqual(result.nonFatalErrors, [
+        {
+          stage: "posttool_worker_success_bridge",
+          error: "simulated worker bridge failure",
+        },
+      ]);
+
+      const log = await readFile(
+        join(cwd, ".omx", "logs", `native-hook-${new Date().toISOString().split("T")[0]}.jsonl`),
+        "utf-8",
+      );
+      assert.match(log, /native_hook_posttooluse_nonfatal_error/);
+      assert.match(log, /posttool_worker_success_bridge/);
+      assert.match(log, /simulated worker bridge failure/);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
 });

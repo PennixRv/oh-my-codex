@@ -134,6 +134,8 @@ interface NativeHookDispatchOptions {
   cwd?: string;
   sessionOwnerPid?: number;
   reconcileHudForPromptSubmitFn?: typeof reconcileHudForPromptSubmit;
+  dispatchHookEventRuntimeFn?: typeof dispatchHookEventRuntime;
+  handleTeamWorkerPostToolUseSuccessFn?: typeof handleTeamWorkerPostToolUseSuccess;
 }
 
 export interface NativeHookDispatchResult {
@@ -141,6 +143,7 @@ export interface NativeHookDispatchResult {
   omxEventName: string | null;
   skillState: SkillActiveState | null;
   outputJson: Record<string, unknown> | null;
+  nonFatalErrors?: Array<{ stage: string; error: string }>;
 }
 
 const TERMINAL_MODE_PHASES = new Set(["complete", "completed", "failed", "cancelled"]);
@@ -4423,6 +4426,7 @@ export async function dispatchCodexNativeHook(
   let goalWorkflowAdditionalContext: string | null = null;
   let ultragoalSteeringAdditionalContext: string | null = null;
   let leaderMailboxHandoffAdditionalContext: string | null = null;
+  const nonFatalErrors: Array<{ stage: string; error: string }> = [];
 
   const nativeSessionId = safeString(payload.session_id ?? payload.sessionId).trim();
   const threadId = safeString(payload.thread_id ?? payload.threadId).trim();
@@ -4523,6 +4527,9 @@ export async function dispatchCodexNativeHook(
   const suppressNoisySubagentLifecycleDispatch =
     (isSubagentSessionStart || isSubagentStop)
     && shouldSuppressSubagentLifecycleHookDispatch();
+  const dispatchHookEventRuntimeFn = options.dispatchHookEventRuntimeFn ?? dispatchHookEventRuntime;
+  const handleTeamWorkerPostToolUseSuccessFn =
+    options.handleTeamWorkerPostToolUseSuccessFn ?? handleTeamWorkerPostToolUseSuccess;
 
   if (hookEventName === "UserPromptSubmit") {
     const prompt = readPromptText(payload);
@@ -4663,11 +4670,25 @@ export async function dispatchCodexNativeHook(
         mode: safeString(payload.mode).trim() || undefined,
       },
     );
-    await dispatchHookEventRuntime({
-      event,
-      cwd,
-      allowTeamWorkerSideEffects: false,
-    });
+    try {
+      await dispatchHookEventRuntimeFn({
+        event,
+        cwd,
+        allowTeamWorkerSideEffects: false,
+      });
+    } catch (error) {
+      if (hookEventName === "PostToolUse") {
+        await recordNonFatalPostToolUseError(
+          cwd,
+          payload,
+          nonFatalErrors,
+          "dispatch_hook_event_runtime",
+          error,
+        );
+      } else {
+        throw error;
+      }
+    }
   }
 
   if (hookEventName === "PreCompact") {
@@ -4720,11 +4741,44 @@ export async function dispatchCodexNativeHook(
       ).catch(() => null),
     );
   } else if (hookEventName === "PostToolUse") {
-    if (detectMcpTransportFailure(payload)) {
-      await markTeamTransportFailure(cwd, payload);
+    let transportFailureDetected = false;
+    try {
+      transportFailureDetected = Boolean(detectMcpTransportFailure(payload));
+      if (transportFailureDetected) {
+        await markTeamTransportFailure(cwd, payload);
+      }
+    } catch (error) {
+      await recordNonFatalPostToolUseError(
+        cwd,
+        payload,
+        nonFatalErrors,
+        "posttool_transport_failure",
+        error,
+      );
     }
-    outputJson = buildNativePostToolUseOutput(payload);
-    await handleTeamWorkerPostToolUseSuccess(payload, cwd);
+    try {
+      outputJson = buildNativePostToolUseOutput(payload);
+    } catch (error) {
+      await recordNonFatalPostToolUseError(
+        cwd,
+        payload,
+        nonFatalErrors,
+        transportFailureDetected ? "posttool_transport_guidance" : "posttool_output",
+        error,
+      );
+      outputJson = null;
+    }
+    try {
+      await handleTeamWorkerPostToolUseSuccessFn(payload, cwd);
+    } catch (error) {
+      await recordNonFatalPostToolUseError(
+        cwd,
+        payload,
+        nonFatalErrors,
+        "posttool_worker_success_bridge",
+        error,
+      );
+    }
   } else if (hookEventName === "Stop") {
     outputJson = await buildStopHookOutput(payload, cwd, stateDir, {
       skipRalphStopBlock: isSubagentStop,
@@ -4736,6 +4790,7 @@ export async function dispatchCodexNativeHook(
     omxEventName,
     skillState,
     outputJson,
+    nonFatalErrors: nonFatalErrors.length > 0 ? nonFatalErrors : undefined,
   };
 }
 
@@ -4948,6 +5003,24 @@ async function logNativeHookCliError(
       ...details,
     }) + "\n",
   ).catch(() => {});
+}
+
+async function recordNonFatalPostToolUseError(
+  cwd: string,
+  payload: CodexHookPayload,
+  nonFatalErrors: Array<{ stage: string; error: string }>,
+  stage: string,
+  error: unknown,
+): Promise<void> {
+  const detail = error instanceof Error ? error.message : String(error);
+  nonFatalErrors.push({ stage, error: detail });
+  await logNativeHookCliError(
+    cwd,
+    "native_hook_posttooluse_nonfatal_error",
+    error,
+    payload,
+    { stage },
+  );
 }
 
 function isStopDispatchFailureTestTrigger(payload: CodexHookPayload): boolean {

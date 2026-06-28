@@ -1,35 +1,33 @@
-# oh-my-codex-pennix v0.18.44
+# oh-my-codex-pennix v0.18.45
 
 > Release notes template for the Pennix fork. The tag workflow regenerates this file into the final GitHub release body.
 
 ## Summary
 
-This release ships a targeted team lifecycle fix for non-ambient tmux servers: interactive teams now persist the owning tmux socket identity, so later shutdown, resume, activity detection, and scale-down cleanup stay bound to the server that actually owns the team panes.
+This release ships a targeted native-hook reliability fix for the Pennix fork: internal OMX `PostToolUse` observation and remediation failures are now logged and surfaced as OMX diagnostics instead of failing the global Codex `PostToolUse` hook for every session that shares `~/.codex/hooks.json`.
 
 ## Highlights
 
-- Team state now preserves tmux server identity - interactive team startup records `tmux_socket_path` together with the saved tmux target, so later lifecycle commands do not depend on ambient `TMUX` inheritance.
-- Shutdown, resume, and activity checks are deterministic across synthetic tmux servers - worker liveness checks, pane listings, PID lookup, teardown, shared-session shutdown topology, and active-team detection now run against the persisted tmux socket when one is available.
-- Synthetic-server cleanup is covered by a real regression test - runtime coverage now proves that forced shutdown on a synthetic tmux server kills only the worker pane and preserves the leader pane.
+- `PostToolUse` internal failures are now fail-open - runtime lifecycle dispatch failures, transport-remediation/guidance generation failures, and worker success-bridge failures are logged as non-fatal OMX diagnostics instead of exiting the Codex hook with code `1`.
+- Global-hook cross-session noise is reduced - because OMX installs through user-global `~/.codex/hooks.json`, a single session's internal OMX `PostToolUse` failure no longer produces unrelated `PostToolUse hook (failed)` banners across other Codex sessions.
+- The fail-open contract is regression-covered - active tests now prove non-fatal runtime dispatch failure handling, preserved transport-remediation guidance after dispatch failure, and non-fatal worker bridge failures.
 
 ## Fixes / compatibility
 
-- `src/team/state.ts` and `src/team/state/types.ts` now persist `tmux_socket_path` in config/manifest defaults and round-tripping.
-- `src/team/tmux-session.ts` captures `#{socket_path}` during interactive session creation, and `src/team/runtime.ts` stores it on the team config.
-- `src/team/runtime.ts` and `src/team/scaling.ts` temporarily bind tmux-dependent lifecycle operations to the persisted socket when present; ambient-session behavior is unchanged when no socket is persisted.
+- `src/scripts/codex-native-hook.ts` now records non-fatal `PostToolUse` internal failures and keeps returning normal hook output when the user-facing hook contract can still proceed.
+- Only `PostToolUse` received the fail-open handling; `PreToolUse` and `Stop` keep their prior fail-closed behavior.
+- `src/scripts/__tests__/codex-native-hook.test.ts` adds active regression coverage for the new `PostToolUse` fail-open contract.
 
 ## Merged PR inventory
 
-- No merged PRs. `0.18.44` is a direct release-line commit on the Pennix fork.
+- No merged PRs. `0.18.45` is a direct release-line commit on the Pennix fork.
 
 ## Validation
 
 - `npm run build`
-- `npm run verify:native-agents`
-- `npm run verify:plugin-bundle`
-- `node --test --test-name-pattern "applyCreatedInteractiveSessionToConfig persists worker pane ids before readiness waits|shutdownTeam uses persisted tmux socket identity for synthetic-server cleanup|shutdownTeam preserves leader exclusion while tearing down the hud pane|shutdownTeam skips prekill and keeps the leader pane alive on shared-session shutdown|shutdownTeam reconciles persisted worker panes with live tmux panes before teardown" dist/team/__tests__/runtime.test.js`
-- `node --test --test-name-pattern "initTeamState creates correct directory structure and config.json|initTeamState persists the default lifecycle profile" dist/team/__tests__/state.test.js`
-- `node dist/scripts/check-version-sync.js --tag v0.18.44`
+- `node dist/scripts/run-test-files.js dist/scripts/__tests__/codex-native-hook.test.js dist/hooks/extensibility/__tests__/runtime.test.js`
+- `node --test dist/scripts/__tests__/codex-native-hook.test.js`
+- `node dist/scripts/check-version-sync.js --tag v0.18.45`
 - `git diff --check`
 - `npm pack --dry-run`
 
@@ -37,4 +35,4 @@ This release ships a targeted team lifecycle fix for non-ambient tmux servers: i
 
 Thanks to the contributors who made this release possible.
 
-**Full Changelog**: [`v0.18.43...v0.18.44`](https://github.com/PennixRv/oh-my-codex/compare/v0.18.43...v0.18.44)
+**Full Changelog**: [`v0.18.44...v0.18.45`](https://github.com/PennixRv/oh-my-codex/compare/v0.18.44...v0.18.45)
