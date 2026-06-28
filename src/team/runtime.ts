@@ -4192,7 +4192,7 @@ export async function shutdownTeam(teamName: string, cwd: string, options: Shutd
       if (sessionName.includes(':')) {
         restoredHudPaneId = restoreStandaloneHudPane(effectiveLeaderPaneId, cwd);
         if (!restoredHudPaneId) {
-          console.warn(`[team shutdown] ${sanitized}: failed to restore standalone HUD pane`);
+          config.hud_pane_id = null;
         }
       }
     }

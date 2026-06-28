@@ -138,6 +138,7 @@ import { OMX_FIRST_PARTY_MCP_SERVER_NAMES } from "../config/omx-first-party-mcp.
 import { HUD_TMUX_HEIGHT_LINES, HUD_TMUX_MIN_LAUNCH_WINDOW_HEIGHT_LINES, isTmuxWindowTooCrampedForHudSplit } from "../hud/constants.js";
 import { OMX_TMUX_HUD_OWNER_ENV } from "../hud/reconcile.js";
 import { normalizeHudConfig, readUltragoalState } from "../hud/state.js";
+import { DEFAULT_HUD_CONFIG } from "../hud/types.js";
 import {
   createHudWatchPane as createSharedHudWatchPane,
   killTmuxPane as killSharedTmuxPane,
@@ -1073,7 +1074,7 @@ export function buildDetachedHudHookEnv(
 function isAutomaticHudEnabled(cwd: string): boolean {
   const configPath = join(cwd, ".omx", "hud-config.json");
   if (!existsSync(configPath)) {
-    return true;
+    return DEFAULT_HUD_CONFIG.enabled !== false;
   }
   try {
     const raw = JSON.parse(readFileSync(configPath, "utf-8")) as Record<string, unknown>;

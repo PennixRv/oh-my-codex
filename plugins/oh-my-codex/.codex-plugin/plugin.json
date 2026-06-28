@@ -1,6 +1,6 @@
 {
   "name": "oh-my-codex",
-  "version": "0.18.41",
+  "version": "0.18.42",
   "description": "Pennix OMX plugin surfaces for OpenAI Codex CLI",
   "author": {
     "name": "PennixRv",

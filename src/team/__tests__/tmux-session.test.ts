@@ -89,6 +89,15 @@ function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
+async function writeEnabledHudConfig(cwd: string): Promise<void> {
+  await mkdir(join(cwd, '.omx'), { recursive: true });
+  await writeFile(
+    join(cwd, '.omx', 'hud-config.json'),
+    JSON.stringify({ enabled: true, preset: 'focused', statusLine: { preset: 'focused' } }),
+    'utf-8',
+  );
+}
+
 const CLAUDE_BYPASS_PROMPT_CAPTURE = `Bypass Permissions mode
 
 1. No, exit
@@ -3631,7 +3640,7 @@ esac
           const tmuxLog = await readFile(logPath, 'utf-8');
           assert.match(tmuxLog, /select-layout -t leader:0 main-vertical/);
           assert.match(tmuxLog, /set-window-option -t leader:0 main-pane-width 60/);
-          assert.match(tmuxLog, /split-window -v -f -l 3 -t leader:0 -d -P -F #\{pane_id\}/);
+          assert.doesNotMatch(tmuxLog, /split-window -v -f -l 3 -t leader:0 -d -P -F #\{pane_id\}/);
           assert.match(
             tmuxLog,
             /send-keys -t %1 C-l/,
@@ -3723,14 +3732,14 @@ esac
           assert.equal(session.name, 'shared:0');
           assert.equal(session.leaderPaneId, '%1');
           assert.deepEqual(session.workerPaneIds, ['%2']);
-          assert.equal(session.hudPaneId, '%3');
+          assert.equal(session.hudPaneId, null);
 
           const tmuxLog = await readFile(logPath, 'utf-8');
           assert.match(tmuxLog, /set-option -t shared @omx_instance_id omx-pane-scope/);
           assert.match(tmuxLog, /set-option -p -t %1 @omx_pane_instance_id omx-pane-scope/);
           assert.match(tmuxLog, /set-option -p -t %2 @omx_pane_instance_id omx-pane-scope/);
-          assert.match(tmuxLog, /set-option -p -t %3 @omx_pane_instance_id omx-pane-scope/);
-          assert.match(tmuxLog, /exec env OMX_SESSION_ID='omx-pane-scope' OMX_TMUX_HUD_OWNER=1 OMX_TMUX_HUD_LEADER_PANE='%1' .*hud --watch/);
+          assert.doesNotMatch(tmuxLog, /set-option -p -t %3 @omx_pane_instance_id omx-pane-scope/);
+          assert.doesNotMatch(tmuxLog, /hud --watch/);
         },
       );
     } finally {
@@ -3746,7 +3755,7 @@ esac
     }
   });
 
-  it('uses tmux 3.2a-compatible client-resized hook registration for team HUD resize', async () => {
+  it('does not register tmux HUD resize hooks when team HUD is disabled by default', async () => {
     const cwd = await mkdtemp(join(tmpdir(), 'omx-team-resize-hook-fallback-'));
     const prevTmux = process.env.TMUX;
     const prevTmuxPane = process.env.TMUX_PANE;
@@ -3833,18 +3842,16 @@ esac
           console.warn = (...args: unknown[]) => { warnings.push(args.map(String).join(' ')); };
 
           const session = createTeamSession('Resize Hook Fallback', 1, cwd);
-          assert.equal(session.hudPaneId, '%3');
-          assert.ok(session.resizeHookName);
-          assert.equal(session.resizeHookTarget, 'leader:0');
+          assert.equal(session.hudPaneId, null);
+          assert.equal(session.resizeHookName, null);
+          assert.equal(session.resizeHookTarget, null);
           assert.equal(warnings.join('\n'), '');
 
           const tmuxLog = await readFile(logPath, 'utf-8');
-          assert.match(tmuxLog, /set-hook -t leader:0 client-resized\[\d+\]/);
-          assert.doesNotMatch(tmuxLog, /window-resized\[/);
-          assert.doesNotMatch(tmuxLog, /set-hook -w /);
-          assert.match(tmuxLog, /set-hook -t leader:0 client-attached\[\d+\]/);
-          assert.match(tmuxLog, new RegExp(`run-shell -b sleep ${HUD_RESIZE_RECONCILE_DELAY_SECONDS}; .*resize-pane -t %3 -y ${HUD_TMUX_TEAM_HEIGHT_LINES}`));
-          assert.match(tmuxLog, new RegExp(`run-shell .*resize-pane -t %3 -y ${HUD_TMUX_TEAM_HEIGHT_LINES}`));
+          assert.doesNotMatch(tmuxLog, /set-hook -t leader:0 client-resized\[\d+\]/);
+          assert.doesNotMatch(tmuxLog, /set-hook -t leader:0 client-attached\[\d+\]/);
+          assert.doesNotMatch(tmuxLog, /run-shell -b sleep/);
+          assert.doesNotMatch(tmuxLog, /resize-pane -t %3/);
           assert.doesNotMatch(tmuxLog, /kill-pane -t %2/);
           assert.doesNotMatch(tmuxLog, /kill-pane -t %3/);
         },
@@ -3861,7 +3868,7 @@ esac
     }
   });
 
-  it('degrades HUD run-shell resize failures to warnings during team startup', async () => {
+  it('does not emit HUD resize warnings during team startup when team HUD is disabled', async () => {
     const cwd = await mkdtemp(join(tmpdir(), 'omx-team-runshell-fallback-'));
     const prevTmux = process.env.TMUX;
     const prevTmuxPane = process.env.TMUX_PANE;
@@ -3924,11 +3931,10 @@ esac
           console.warn = (...args: unknown[]) => { warnings.push(args.map(String).join(' ')); };
 
           const session = createTeamSession('Run Shell Fallback', 1, cwd);
-          assert.equal(session.hudPaneId, '%3');
-          assert.match(warnings.join('\n'), /HUD resize/);
-          assert.match(warnings.join('\n'), /Unsupported tmux compatibility command: run-shell/);
+          assert.equal(session.hudPaneId, null);
+          assert.equal(warnings.join('\n'), '');
           const tmuxLog = await readFile(logPath, 'utf-8');
-          assert.match(tmuxLog, /run-shell -b sleep/);
+          assert.doesNotMatch(tmuxLog, /run-shell -b sleep/);
           assert.doesNotMatch(tmuxLog, /kill-pane -t %2/);
           assert.doesNotMatch(tmuxLog, /kill-pane -t %3/);
         },
@@ -4028,13 +4034,13 @@ esac
           const session = createTeamSession('Windows Team', 1, cwd);
           assert.equal(session.name, 'leader:0');
           assert.equal(session.leaderPaneId, '%1');
-          assert.equal(session.hudPaneId, '%3');
+          assert.equal(session.hudPaneId, null);
 
           const tmuxLog = await readFile(logPath, 'utf-8');
           assert.match(tmuxLog, /display-message -p #\{session_name\}:#\{window_index\} #\{pane_id\}/);
           assert.match(tmuxLog, /powershell\.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -EncodedCommand/);
           assert.doesNotMatch(tmuxLog, /\/bin\/sh -lc/);
-          assert.match(tmuxLog, new RegExp(`resize-pane -t %3 -y ${HUD_TMUX_TEAM_HEIGHT_LINES}`));
+          assert.doesNotMatch(tmuxLog, /resize-pane -t %3/);
         },
       );
     } finally {
@@ -4057,7 +4063,7 @@ esac
     }
   });
 
-  it('avoids nested tmux run-shell hooks during team HUD startup on native Windows', async () => {
+  it('avoids nested tmux HUD hooks entirely on native Windows when team HUD is disabled', async () => {
     const cwd = await mkdtemp(join(tmpdir(), 'omx-team-win32-hud-'));
     const prevTmux = process.env.TMUX;
     const prevTmuxPane = process.env.TMUX_PANE;
@@ -4139,12 +4145,12 @@ esac
           Object.defineProperty(process, 'platform', { value: 'win32', configurable: true });
 
           const session = createTeamSession('Windows Team', 1, cwd);
-          assert.equal(session.hudPaneId, '%3');
+          assert.equal(session.hudPaneId, null);
           assert.equal(session.resizeHookName, null);
           assert.equal(session.resizeHookTarget, null);
 
           const tmuxLog = await readFile(logPath, 'utf-8');
-          assert.match(tmuxLog, new RegExp(`resize-pane -t %3 -y ${HUD_TMUX_TEAM_HEIGHT_LINES}`));
+          assert.doesNotMatch(tmuxLog, /resize-pane -t %3/);
           assert.doesNotMatch(tmuxLog, /set-hook -w /);
           assert.doesNotMatch(tmuxLog, /window-resized\[/);
           assert.doesNotMatch(tmuxLog, /set-hook -t leader:0 client-attached\[\d+\]/);
@@ -4293,6 +4299,7 @@ esac
     const origPlatform = Object.getOwnPropertyDescriptor(process, 'platform');
 
     try {
+      await writeEnabledHudConfig(cwd);
       await withMockTmuxFixture(
         'omx-tmux-win32-standalone-hud-',
         (logPath) => `#!/bin/sh
@@ -4354,6 +4361,7 @@ esac
     const cwd = await mkdtemp(join(tmpdir(), 'omx-standalone-reuse-hud-'));
 
     try {
+      await writeEnabledHudConfig(cwd);
       await withMockTmuxFixture(
         'omx-tmux-reuse-standalone-hud-',
         (logPath) => {
@@ -4410,6 +4418,7 @@ esac
     const previousArgv = process.argv;
 
     try {
+      await writeEnabledHudConfig(cwd);
       const launcherDir = join(startupCwd, 'dist', 'cli');
       const launcherPath = join(launcherDir, 'omx.js');
       await mkdir(launcherDir, { recursive: true });
@@ -4463,6 +4472,7 @@ esac
     const previousArgv = process.argv;
 
     try {
+      await writeEnabledHudConfig(cwd);
       await withMockTmuxFixture(
         'omx-tmux-noncli-standalone-hud-',
         (logPath) => `#!/bin/sh
@@ -4504,6 +4514,7 @@ esac
     const previousOmxRoot = process.env.OMX_ROOT;
 
     try {
+      await writeEnabledHudConfig(cwd);
       await withMockTmuxFixture(
         'omx-tmux-root-standalone-hud-',
         (logPath) => `#!/bin/sh

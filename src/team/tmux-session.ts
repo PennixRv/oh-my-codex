@@ -37,6 +37,7 @@ const execFileAsync = promisify(execFile);
 import { HUD_RESIZE_RECONCILE_DELAY_SECONDS, HUD_TMUX_TEAM_HEIGHT_LINES } from '../hud/constants.js';
 import { OMX_TMUX_HUD_OWNER_ENV } from '../hud/reconcile.js';
 import { findHudWatchPaneIds, OMX_TMUX_HUD_LEADER_PANE_ENV } from '../hud/tmux.js';
+import { DEFAULT_HUD_CONFIG } from '../hud/types.js';
 
 const OMX_INSTANCE_OPTION = '@omx_instance_id';
 const OMX_PANE_INSTANCE_OPTION = '@omx_pane_instance_id';
@@ -1303,6 +1304,20 @@ export function isTmuxAvailable(): boolean {
   return result.status === 0;
 }
 
+function isAutomaticTeamHudEnabled(cwd: string): boolean {
+  const configPath = join(cwd, '.omx', 'hud-config.json');
+  if (!existsSync(configPath)) {
+    return DEFAULT_HUD_CONFIG.enabled !== false;
+  }
+  try {
+    const raw = JSON.parse(readFileSync(configPath, 'utf-8')) as { enabled?: unknown };
+    if (typeof raw.enabled === 'boolean') return raw.enabled;
+    return DEFAULT_HUD_CONFIG.enabled !== false;
+  } catch {
+    return false;
+  }
+}
+
 // Create tmux session with N worker windows
 // Split the current tmux leader window into worker panes.
 // Returns TeamSession or throws if tmux not available
@@ -1368,16 +1383,14 @@ export function createTeamSession(
     const panes = listPanes(teamTarget);
     const leaderPaneId = chooseTeamLeaderPaneId(panes, detectedLeaderPaneId);
     tagPaneInstance(leaderPaneId, instanceId);
+    const automaticHudEnabled = isAutomaticTeamHudEnabled(cwd);
     const initialHudPaneIds = findHudPaneIds(teamTarget, leaderPaneId);
     const omxEntry = resolveOmxCliEntryPath();
-    const canRecreateTeamHud = Boolean(omxEntry && omxEntry.trim() !== '');
-    // Team mode prioritizes leader + worker visibility. Remove HUD panes only
-    // when we can recreate the team HUD. Otherwise keep the existing HUD alive
-    // instead of making it disappear on team startup failures or broken installs.
-    if (canRecreateTeamHud) {
-      for (const hudPaneId of initialHudPaneIds) {
-        runTmux(['kill-pane', '-t', hudPaneId]);
-      }
+    const canRecreateTeamHud = automaticHudEnabled && Boolean(omxEntry && omxEntry.trim() !== '');
+    // Pennix fork default is HUD-disabled. When disabled, remove inherited HUD
+    // panes so the team window stays strictly leader + workers.
+    for (const hudPaneId of initialHudPaneIds) {
+      runTmux(['kill-pane', '-t', hudPaneId]);
     }
 
     const workerPaneIds: string[] = [];
@@ -1454,10 +1467,6 @@ export function createTeamSession(
       }
     }
 
-    // Re-create a single team HUD as a full-width bottom strip spanning both
-    // leader + worker columns. Keep this after layout sizing so the main
-    // leader/worker topology stays readable and the HUD remains compact.
-    // Capture the HUD pane ID so it can be tracked and excluded from worker cleanup.
     let hudPaneId: string | null = null;
     let resizeHookName: string | null = null;
     let resizeHookTarget: string | null = null;
@@ -1478,8 +1487,6 @@ export function createTeamSession(
           hudPaneId = id;
 
           if (isNativeWindows()) {
-            // Native Windows tmux support may flow through psmux; issuing a
-            // direct control-plane resize avoids nested run-shell PATH drift.
             const reconcile = runTmux(buildHudResizeArgs(hudPaneId));
             if (!reconcile.ok) {
               throw new Error(`failed to reconcile HUD resize: ${reconcile.stderr}`);
@@ -1499,12 +1506,6 @@ export function createTeamSession(
               resizeHookName = hookName;
               registeredResizeHook = { name: resizeHookName, target: resizeHookTarget };
             } else {
-              // tmux versions/builds that reject indexed client-resized hooks should not
-              // abort madmax/team startup after panes were successfully created. Keep the
-              // fallback narrow: skip only the long-lived resize hook metadata, then
-              // still try the one-shot client-attached reconcile plus the explicit
-              // delayed/direct resize checks below so real tmux/run-shell failures
-              // still surface.
               console.warn(
                 `[omx] tmux resize hook unavailable for ${hookTarget} (${hookName}): ${registerHook.stderr}; `
                   + 'continuing with best-effort HUD resize fallback.',
@@ -1582,6 +1583,7 @@ export function restoreStandaloneHudPane(
 ): string | null {
   const normalizedLeaderPaneId = normalizePaneTarget(leaderPaneId);
   if (!normalizedLeaderPaneId) return null;
+  if (!isAutomaticTeamHudEnabled(cwd)) return null;
 
   const omxEntry = resolveOmxCliEntryPath();
   if (!omxEntry || omxEntry.trim() === '') return null;
