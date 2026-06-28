@@ -2,10 +2,12 @@ import { safeString } from './utils.js';
 import { runProcess } from './process-runner.js';
 import {
   buildCapturePaneArgv,
+  buildVisibleCapturePaneArgv,
   buildPaneInModeArgv,
   buildPaneCurrentCommandArgv,
   buildSendKeysArgv,
   isPaneRunningShell,
+  paneHasHookReviewPrompt,
   paneHasActiveTask,
   paneLooksReady,
 } from '../tmux-hook-engine.js';
@@ -161,6 +163,16 @@ export async function sendPaneInput({
   }
 
   try {
+    const visibleCapture = await runProcess('tmux', buildVisibleCapturePaneArgv(target), 3000);
+    if (paneHasHookReviewPrompt(safeString(visibleCapture.stdout))) {
+      await runProcess('tmux', ['send-keys', '-t', target, 'Escape'], 3000);
+      await new Promise((resolve) => setTimeout(resolve, 120));
+      const afterFirstEscape = await runProcess('tmux', buildVisibleCapturePaneArgv(target), 3000);
+      if (paneHasHookReviewPrompt(safeString(afterFirstEscape.stdout))) {
+        await runProcess('tmux', ['send-keys', '-t', target, 'Escape'], 3000);
+        await new Promise((resolve) => setTimeout(resolve, 200));
+      }
+    }
     if (typePrompt) {
       await runProcess('tmux', argv.typeArgv, 3000);
     }

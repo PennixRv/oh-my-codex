@@ -304,6 +304,33 @@ export function paneLooksReady(captured: any): boolean {
   return lines.some((line) => /^\s*(?:[›>❯]\s*)?[A-Z][A-Z0-9]+-\d+\s+only(?:\s*(?:…|\.{3}))?\s*$/iu.test(line));
 }
 
+function normalizeHookPromptLines(captured: any): string[] {
+  return String(captured ?? '')
+    .split('\n')
+    .map((line) => line.replace(/\r/g, '').trim())
+    .filter((line) => line.length > 0);
+}
+
+function paneHasHookOverviewPrompt(captured: any): boolean {
+  const lines = normalizeHookPromptLines(captured);
+  const tail = lines.slice(-32);
+  const hasTitle = tail.some((line) => /^Hooks$/i.test(line));
+  const hasInstruction = tail.some((line) => /Lifecycle hooks from config and enabled plugins/i.test(line));
+  const hasExitHint = tail.some((line) => /Press enter to view hooks;\s*esc to close/i.test(line));
+  return hasTitle && hasInstruction && hasExitHint;
+}
+
+export function paneHasHookReviewPrompt(captured: any): boolean {
+  const lines = normalizeHookPromptLines(captured);
+  const tail = lines.slice(-32);
+  const hasHookEvent = tail.some((line) =>
+    /^(?:SessionStart|UserPromptSubmit|PreToolUse|PostToolUse|PreCompact|PostCompact|Stop|PermissionRequest)\s+hooks$/i.test(line)
+  );
+  const hasInstruction = tail.some((line) => /Turn hooks on or off/i.test(line));
+  const hasExitHint = tail.some((line) => /Press space or enter to toggle;\s*esc to go back/i.test(line));
+  return paneHasHookOverviewPrompt(captured) || (hasHookEvent && hasInstruction && hasExitHint);
+}
+
 export function paneShowsCodexViewport(captured: any): boolean {
   const lines = normalizePaneLines(captured);
   if (lines.length === 0) return false;

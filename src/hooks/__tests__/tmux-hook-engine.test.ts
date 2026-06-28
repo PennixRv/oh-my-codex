@@ -7,6 +7,7 @@ import {
   normalizeTmuxHookConfig,
   pickActiveMode,
   paneHasActiveTask,
+  paneHasHookReviewPrompt,
   paneIsBootstrapping,
   paneShowsCodexViewport,
   paneLooksReady,
@@ -354,6 +355,26 @@ describe('paneLooksReady', () => {
 ╰────────────────────────────────────────────╯
 
 ⚠ MCP startup incomplete (failed: hf request)`), false);
+  });
+});
+
+describe('paneHasHookReviewPrompt', () => {
+  it('recognizes both hook review and hooks overview prompts', () => {
+    assert.equal(
+      paneHasHookReviewPrompt(`SessionStart hooks
+Turn hooks on or off. Your changes are saved automatically.
+
+Press space or enter to toggle; esc to go back`),
+      true,
+    );
+    assert.equal(
+      paneHasHookReviewPrompt(`Hooks
+Lifecycle hooks from config and enabled plugins.
+
+Press enter to view hooks; esc to close`),
+      true,
+    );
+    assert.equal(paneHasHookReviewPrompt('How can I help you today?'), false);
   });
 });
 

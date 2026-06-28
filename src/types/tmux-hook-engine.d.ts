@@ -55,6 +55,7 @@ declare module '*tmux-hook-engine.js' {
   export function buildPaneCurrentCommandArgv(paneTarget: string): string[];
   export function resolveCodexPane(): string;
   export function isPaneRunningShell(paneCurrentCommand: string): boolean;
+  export function paneHasHookReviewPrompt(captured: string): boolean;
   export function buildSendKeysArgv(args: {
     paneTarget: string;
     prompt: string;

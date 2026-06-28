@@ -16,6 +16,7 @@ import {
   buildCapturePaneArgv as sharedBuildCapturePaneArgv,
   buildVisibleCapturePaneArgv as sharedBuildVisibleCapturePaneArgv,
   normalizeTmuxCapture as sharedNormalizeTmuxCapture,
+  paneHasHookReviewPrompt as sharedPaneHasHookReviewPrompt,
   paneHasActiveTask as sharedPaneHasActiveTask,
   paneIsBootstrapping as sharedPaneIsBootstrapping,
   paneShowsCodexViewport as sharedPaneShowsCodexViewport,
@@ -1694,40 +1695,13 @@ function paneHasClaudeBypassPermissionsPrompt(captured: string): boolean {
   return hasWarning && hasChoices;
 }
 
-function paneHasHookOverviewPrompt(captured: string): boolean {
-  const lines = captured
-    .split('\n')
-    .map((line) => line.replace(/\r/g, '').trim())
-    .filter((line) => line.length > 0);
-  const tail = lines.slice(-32);
-  const hasTitle = tail.some((line) => /^Hooks$/i.test(line));
-  const hasInstruction = tail.some((line) => /Lifecycle hooks from config and enabled plugins/i.test(line));
-  const hasExitHint = tail.some((line) => /Press enter to view hooks;\s*esc to close/i.test(line));
-  return hasTitle && hasInstruction && hasExitHint;
-}
-
-function paneHasHookReviewPrompt(captured: string): boolean {
-  const lines = captured
-    .split('\n')
-    .map((line) => line.replace(/\r/g, '').trim())
-    .filter((line) => line.length > 0);
-  const tail = lines.slice(-32);
-  const hasHookEvent = tail.some((line) =>
-    /^(?:SessionStart|UserPromptSubmit|PreToolUse|PostToolUse|PreCompact|PostCompact|Stop|PermissionRequest)\s+hooks$/i.test(line)
-  );
-  const hasInstruction = tail.some((line) => /Turn hooks on or off/i.test(line));
-  const hasExitHint = tail.some((line) => /Press space or enter to toggle;\s*esc to go back/i.test(line));
-  return paneHasHookOverviewPrompt(captured) || (hasHookEvent && hasInstruction && hasExitHint);
-}
-
-
 export type StartupDirectTriggerSafety =
   | { safe: true; reason: 'ready_prompt' | 'codex_viewport' }
   | { safe: false; reason: 'tmux_unavailable' | 'capture_failed' | 'trust_prompt' | 'hook_review_prompt' | 'claude_bypass_prompt' | 'bootstrapping' | 'not_agent_viewport' };
 
 export function evaluateStartupDirectTriggerSafetyCapture(captured: string, workerCli?: TeamWorkerCli): StartupDirectTriggerSafety {
   if (paneHasTrustPrompt(captured)) return { safe: false, reason: 'trust_prompt' };
-  if (paneHasHookReviewPrompt(captured)) return { safe: false, reason: 'hook_review_prompt' };
+  if (sharedPaneHasHookReviewPrompt(captured)) return { safe: false, reason: 'hook_review_prompt' };
   if (paneHasClaudeBypassPermissionsPrompt(captured)) return { safe: false, reason: 'claude_bypass_prompt' };
   if (paneLooksReady(captured)) return { safe: true, reason: 'ready_prompt' };
   if (paneIsBootstrapping(captured)) return { safe: false, reason: 'bootstrapping' };
@@ -1779,7 +1753,7 @@ export type WorkerStartupInjectSafety =
 
 export function classifyWorkerStartupInjectSafety(captured: string): WorkerStartupInjectSafety {
   if (paneHasTrustPrompt(captured)) return 'trust_prompt';
-  if (paneHasHookReviewPrompt(captured)) return 'hook_review_prompt';
+  if (sharedPaneHasHookReviewPrompt(captured)) return 'hook_review_prompt';
   if (paneHasClaudeBypassPermissionsPrompt(captured)) return 'claude_bypass_prompt';
   if (paneIsBootstrapping(captured)) return 'bootstrapping';
   if (paneHasActiveTask(captured)) return 'active_task';
@@ -1994,7 +1968,7 @@ export function waitForWorkerReady(
       blockedByTrustPrompt = true;
       return false;
     }
-    if (paneHasHookReviewPrompt(result.stdout)) {
+    if (sharedPaneHasHookReviewPrompt(result.stdout)) {
       dismissHookReview();
       promptDismissed = true;
       return false;
@@ -2079,7 +2053,7 @@ export async function waitForWorkerReadyAsync(
       blockedByTrustPrompt = true;
       return false;
     }
-    if (paneHasHookReviewPrompt(result.stdout)) {
+    if (sharedPaneHasHookReviewPrompt(result.stdout)) {
       await dismissHookReview();
       promptDismissed = true;
       return false;
@@ -2198,11 +2172,11 @@ export async function sendToWorker(
     await sendKeyAsync(target, 'C-m');
     await sleep(200);
   }
-  if (paneHasHookReviewPrompt(capturedStr)) {
+  if (sharedPaneHasHookReviewPrompt(capturedStr)) {
     await sendKeyAsync(target, 'Escape');
     await sleep(120);
     const afterFirstEscape = await captureVisiblePaneAsync(target);
-    if (paneHasHookReviewPrompt(afterFirstEscape)) {
+    if (sharedPaneHasHookReviewPrompt(afterFirstEscape)) {
       await sendKeyAsync(target, 'Escape');
       await sleep(200);
     }
