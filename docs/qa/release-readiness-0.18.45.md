@@ -28,26 +28,34 @@
 
 ## Local validation evidence
 
-- [ ] `npm run build`
-- [ ] `node dist/scripts/run-test-files.js dist/scripts/__tests__/codex-native-hook.test.js dist/hooks/extensibility/__tests__/runtime.test.js`
-- [ ] `node --test dist/scripts/__tests__/codex-native-hook.test.js`
-- [ ] `node dist/scripts/check-version-sync.js --tag v0.18.45`
-- [ ] `git diff --check`
-- [ ] `npm pack --dry-run`
+- [x] `npm run build`
+- [x] `node dist/scripts/run-test-files.js dist/scripts/__tests__/codex-native-hook.test.js dist/hooks/extensibility/__tests__/runtime.test.js`
+- [x] `node --test dist/scripts/__tests__/codex-native-hook.test.js`
+- [x] `node dist/scripts/check-version-sync.js --tag v0.18.45`
+- [x] `git diff --check`
+- [x] `npm pack --dry-run`
+- [x] post-release workflow follow-up: `node --test dist/verification/__tests__/release-workflow-release-body.test.js`
 
 ## CI / publication evidence
 
-- [ ] `CI` workflow on `main` for the release candidate commit
-- [ ] tag-triggered `Release` workflow
-- [ ] GitHub release exists and is non-draft/non-prerelease
-- [ ] `npm view oh-my-codex-pennix version` returns `0.18.45`
-- [ ] clean uninstall / reinstall from npm
-- [ ] post-install multi-session `PostToolUse` smoke without cross-session `hook exited with code 1` noise
+- [x] `CI` workflow on `main` for the release candidate commit: run `28323359815` (`success`)
+- [x] tag-triggered `Release` workflow: run `28323625393` (`success`)
+- [x] GitHub release exists and is non-draft/non-prerelease: <https://github.com/PennixRv/oh-my-codex/releases/tag/v0.18.45>
+- [x] `npm view oh-my-codex-pennix version` returns `0.18.45`
+- [x] clean uninstall / reinstall from npm: `omx uninstall --keep-config --purge`, `npm uninstall -g oh-my-codex-pennix`, `npm install -g oh-my-codex-pennix@0.18.45`, `omx setup --scope user --force`
+- [x] post-install `PostToolUse` smoke confirms internal transport/runtime bridge failures fail open instead of surfacing cross-session `hook exited with code 1` noise
 
 ## Known gaps
 
-- None at release-prep time beyond the pending CI / publication evidence above.
+- Runtime release goal is closed.
+- Post-release workflow follow-up remains on `main`: the original `release.yml` generated GitHub release notes without `--previous-tag`, so the compare link in the live `v0.18.45` release body had to be manually corrected after publish.
+
+## Post-release follow-up
+
+- Live GitHub release notes for `v0.18.45` were manually corrected after publication so the changelog points at the proper compare range instead of a self-referential tag link.
+- Repository follow-up adds automatic previous-tag detection to `.github/workflows/release.yml`.
+- Regression coverage now checks that the release workflow passes `--previous-tag` to `dist/scripts/generate-release-body.js`.
 
 ## Current readiness verdict
 
-Local release prep for `0.18.45` is ready once the focused native-hook gates pass. Remaining work is standard `main` CI on the candidate commit, the tag-triggered GitHub release workflow, npm publication, a clean reinstall from npm, and a post-publish multi-session smoke that confirms internal OMX `PostToolUse` failures no longer leak noisy fatal hook banners across other Codex sessions.
+`0.18.45` is released, published, and reinstalled from npm with the native-hook fail-open fix validated in the installed package. The only remaining work is to merge the release-workflow follow-up on `main` and run CI so future tags generate the correct GitHub release compare range automatically.
