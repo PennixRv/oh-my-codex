@@ -1694,6 +1694,18 @@ function paneHasClaudeBypassPermissionsPrompt(captured: string): boolean {
   return hasWarning && hasChoices;
 }
 
+function paneHasHookOverviewPrompt(captured: string): boolean {
+  const lines = captured
+    .split('\n')
+    .map((line) => line.replace(/\r/g, '').trim())
+    .filter((line) => line.length > 0);
+  const tail = lines.slice(-32);
+  const hasTitle = tail.some((line) => /^Hooks$/i.test(line));
+  const hasInstruction = tail.some((line) => /Lifecycle hooks from config and enabled plugins/i.test(line));
+  const hasExitHint = tail.some((line) => /Press enter to view hooks;\s*esc to close/i.test(line));
+  return hasTitle && hasInstruction && hasExitHint;
+}
+
 function paneHasHookReviewPrompt(captured: string): boolean {
   const lines = captured
     .split('\n')
@@ -1705,7 +1717,7 @@ function paneHasHookReviewPrompt(captured: string): boolean {
   );
   const hasInstruction = tail.some((line) => /Turn hooks on or off/i.test(line));
   const hasExitHint = tail.some((line) => /Press space or enter to toggle;\s*esc to go back/i.test(line));
-  return hasHookEvent && hasInstruction && hasExitHint;
+  return paneHasHookOverviewPrompt(captured) || (hasHookEvent && hasInstruction && hasExitHint);
 }
 
 
@@ -2188,7 +2200,12 @@ export async function sendToWorker(
   }
   if (paneHasHookReviewPrompt(capturedStr)) {
     await sendKeyAsync(target, 'Escape');
-    await sleep(200);
+    await sleep(120);
+    const afterFirstEscape = await captureVisiblePaneAsync(target);
+    if (paneHasHookReviewPrompt(afterFirstEscape)) {
+      await sendKeyAsync(target, 'Escape');
+      await sleep(200);
+    }
   }
 
   sendLiteralTextOrThrow(target, text);

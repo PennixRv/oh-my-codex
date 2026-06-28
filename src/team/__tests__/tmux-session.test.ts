@@ -111,6 +111,23 @@ Trust     Trusted
 
 Press space or enter to toggle; esc to go back`;
 
+const HOOKS_OVERVIEW_CAPTURE = `Hooks
+Lifecycle hooks from config and enabled plugins.
+
+Event                 Installed   Active      Description
+PreToolUse            2           2           Before a tool executes
+PermissionRequest     1           1           When permission is requested
+PostToolUse           2           2           After a tool executes
+PreCompact            1           1           Before context compaction
+PostCompact           1           1           After context compaction
+SessionStart          2           1           When a new session starts
+UserPromptSubmit      2           2           When the user submits a prompt
+SubagentStart         0           0           When a subagent is created
+SubagentStop          0           0           Right before a subagent ends its turn
+Stop                  2           2           Right before Codex ends its turn
+
+Press enter to view hooks; esc to close`;
+
 const READY_HELPER_CAPTURE = `╭────────────────────────────────────────────╮
 │ >_ OpenAI Codex (v0.114.0)                 │
 │                                            │
@@ -460,13 +477,21 @@ esac
       (logPath) => `#!/bin/sh
 set -eu
 state_dir="$(dirname "${logPath}")"
-dismissed_file="$state_dir/dismissed"
+stage_file="$state_dir/stage"
 printf '%s\n' "$*" >> "${logPath}"
 case "$1" in
   capture-pane)
-    if [ -f "$dismissed_file" ]; then
+    stage=0
+    if [ -f "$stage_file" ]; then
+      stage=$(cat "$stage_file")
+    fi
+    if [ "$stage" -ge 2 ]; then
       cat <<'EOF'
 How can I help you today?
+EOF
+    elif [ "$stage" -eq 1 ]; then
+      cat <<'EOF'
+${HOOKS_OVERVIEW_CAPTURE}
 EOF
     else
       cat <<'EOF'
@@ -477,7 +502,12 @@ EOF
     ;;
   send-keys)
     if [ "\${4:-}" = "Escape" ]; then
-      : > "$dismissed_file"
+      stage=0
+      if [ -f "$stage_file" ]; then
+        stage=$(cat "$stage_file")
+      fi
+      stage=$((stage + 1))
+      printf '%s' "$stage" > "$stage_file"
     fi
     exit 0
     ;;
@@ -489,11 +519,11 @@ esac
       async ({ logPath }) => {
         await sendToWorker('omx-team-x', 1, 'check inbox');
         const log = await readFile(logPath, 'utf-8');
-        const dismissIndex = log.indexOf('send-keys -t omx-team-x:1 Escape');
+        const dismissCount = (log.match(/send-keys -t omx-team-x:1 Escape/g) || []).length;
         const submitIndex = log.indexOf('send-keys -t omx-team-x:1 -l -- check inbox');
-        assert.notEqual(dismissIndex, -1, `expected hook-review dismissal in log:\n${log}`);
+        assert.equal(dismissCount, 2, `expected two hook-review dismissals in log:\n${log}`);
         assert.notEqual(submitIndex, -1, `expected worker text submission in log:\n${log}`);
-        assert.ok(dismissIndex < submitIndex, `expected hook-review dismissal before worker text:\n${log}`);
+        assert.match(log, /send-keys -t omx-team-x:1 Escape[\s\S]*send-keys -t omx-team-x:1 Escape[\s\S]*send-keys -t omx-team-x:1 -l -- check inbox/);
       },
     );
   });
@@ -748,6 +778,7 @@ describe('startup direct trigger safety', () => {
       'trust_prompt',
     );
     assert.equal(classifyWorkerStartupInjectSafety(SESSION_START_HOOK_REVIEW_CAPTURE), 'hook_review_prompt');
+    assert.equal(classifyWorkerStartupInjectSafety(HOOKS_OVERVIEW_CAPTURE), 'hook_review_prompt');
     assert.equal(classifyWorkerStartupInjectSafety(CLAUDE_BYPASS_PROMPT_CAPTURE), 'claude_bypass_prompt');
     assert.equal(classifyWorkerStartupInjectSafety('OpenAI Codex\nmodel: loading'), 'bootstrapping');
     assert.equal(
@@ -3181,13 +3212,21 @@ esac
       (logPath) => `#!/bin/sh
 set -eu
 state_dir="$(dirname "${logPath}")"
-dismissed_file="$state_dir/dismissed"
+stage_file="$state_dir/stage"
 printf '%s\n' "$*" >> "${logPath}"
 case "$1" in
   capture-pane)
-    if [ -f "$dismissed_file" ]; then
+    stage=0
+    if [ -f "$stage_file" ]; then
+      stage=$(cat "$stage_file")
+    fi
+    if [ "$stage" -ge 2 ]; then
       cat <<'EOF'
 ${READY_HELPER_CAPTURE}
+EOF
+    elif [ "$stage" -eq 1 ]; then
+      cat <<'EOF'
+${HOOKS_OVERVIEW_CAPTURE}
 EOF
     else
       cat <<'EOF'
@@ -3198,7 +3237,12 @@ EOF
     ;;
   send-keys)
     if [ "\${4:-}" = "Escape" ]; then
-      : > "$dismissed_file"
+      stage=0
+      if [ -f "$stage_file" ]; then
+        stage=$(cat "$stage_file")
+      fi
+      stage=$((stage + 1))
+      printf '%s' "$stage" > "$stage_file"
     fi
     exit 0
     ;;
@@ -3210,7 +3254,7 @@ esac
       async ({ logPath }) => {
         assert.equal(waitForWorkerReady('omx-team-x', 1, 5_000), true);
         const log = await readFile(logPath, 'utf-8');
-        assert.match(log, /send-keys -t omx-team-x:1 Escape/);
+        assert.equal((log.match(/send-keys -t omx-team-x:1 Escape/g) || []).length, 2);
       },
     );
   });
@@ -3441,13 +3485,21 @@ esac
       (logPath) => `#!/bin/sh
 set -eu
 state_dir="$(dirname "${logPath}")"
-dismissed_file="$state_dir/dismissed"
+stage_file="$state_dir/stage"
 printf '%s\n' "$*" >> "${logPath}"
 case "$1" in
   capture-pane)
-    if [ -f "$dismissed_file" ]; then
+    stage=0
+    if [ -f "$stage_file" ]; then
+      stage=$(cat "$stage_file")
+    fi
+    if [ "$stage" -ge 2 ]; then
       cat <<'EOF'
 ${READY_HELPER_CAPTURE}
+EOF
+    elif [ "$stage" -eq 1 ]; then
+      cat <<'EOF'
+${HOOKS_OVERVIEW_CAPTURE}
 EOF
     else
       cat <<'EOF'
@@ -3458,7 +3510,12 @@ EOF
     ;;
   send-keys)
     if [ "\${4:-}" = "Escape" ]; then
-      : > "$dismissed_file"
+      stage=0
+      if [ -f "$stage_file" ]; then
+        stage=$(cat "$stage_file")
+      fi
+      stage=$((stage + 1))
+      printf '%s' "$stage" > "$stage_file"
     fi
     exit 0
     ;;
@@ -3470,7 +3527,7 @@ esac
       async ({ logPath }) => {
         assert.equal(await waitForWorkerReadyAsync('omx-team-x', 1, 5_000), true);
         const log = await readFile(logPath, 'utf-8');
-        assert.match(log, /send-keys -t omx-team-x:1 Escape/);
+        assert.equal((log.match(/send-keys -t omx-team-x:1 Escape/g) || []).length, 2);
       },
     );
   });
