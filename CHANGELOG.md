@@ -4,6 +4,21 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+## [0.18.47] - 2026-06-28
+
+Patch release for the Pennix fork installation/injection contract line: the installed AGENTS and developer-instruction surfaces now accurately describe where OMX workflows, skills, prompts, and native agent roles come from in legacy versus plugin setup modes.
+
+### Fixed
+
+- **Persistent AGENTS wording now matches real setup-mode surface resolution** - the default `AGENTS.md` template now explicitly distinguishes legacy setup from plugin setup instead of implying all bundled surfaces always come from local `~/.codex/...` or `./.codex/...` directories.
+- **Plugin-mode AGENTS text no longer over-claims local prompt/skill copies** - plugin-mode setup now rewrites the `AGENTS.md` surface-resolution block to state that bundled Pennix OMX workflows come from the registered Codex marketplace/plugin while setup still installs native-agent TOMLs for `agent_type` routing.
+- **Injected developer instructions match the same contract** - plugin-mode `developer_instructions` now say not to assume bundled prompt/skill files were copied into local `.codex prompts/skills` directories, while still documenting the setup-owned native-agent TOMLs and possible user-installed skill roots.
+- **Setup regression coverage was updated with the new contract** - current scope/install-mode tests now assert the legacy/plugin surface-resolution wording that users actually see after setup.
+
+### Verification
+
+- Release readiness evidence is tracked in `docs/qa/release-readiness-0.18.47.md`.
+
 ## [0.18.46] - 2026-06-28
 
 Patch release for the Pennix fork team communication contract: the currently injected/runtime-visible team guidance now consistently describes the real leader/worker mailbox handoff model instead of older reminder-oriented wording.

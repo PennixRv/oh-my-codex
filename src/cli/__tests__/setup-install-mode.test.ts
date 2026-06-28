@@ -1744,10 +1744,14 @@ describe.skip("omx setup install mode behavior", () => {
 						config,
 						/Registered Codex plugin marketplace surfaces supply Pennix OMX workflows and plugin-scoped companion resources/,
 					);
+					assert.match(
+						config,
+						/Do not assume bundled prompt\/skill files are copied into local \.codex prompts\/skills directories in plugin mode/,
+					);
 					assert.match(config, /User-installed skills may still live under ~\/.codex\/skills/);
 					assert.match(
 						config,
-						/native agent roles are installed as setup-owned Codex agent TOML files in plugin mode so agent_type routing works/i,
+						/Setup still installs native agent role TOML files under the active Codex home so agent_type routing works/i,
 					);
 					assert.doesNotMatch(config, /Native subagents live in \.codex\/agents/);
 					assert.doesNotMatch(config, /Treat installed prompts as narrower execution surfaces/);
@@ -1777,10 +1781,14 @@ describe.skip("omx setup install mode behavior", () => {
 						agentsMd,
 						/Registered Codex plugin marketplace surfaces supply Pennix OMX workflows and plugin-scoped companion resources/,
 					);
+					assert.match(
+						agentsMd,
+						/Do not assume bundled prompt\/skill files are copied into local `prompts\/` or `skills\/` directories in plugin mode/,
+					);
 					assert.match(agentsMd, /User-installed skills may still live under `~\/.codex\/skills`/);
 					assert.match(
 						agentsMd,
-						/native agent roles are installed as setup-owned Codex agent TOML files in plugin mode so agent_type routing works/i,
+						/Setup still installs native agent role TOML files under the active Codex home so agent_type routing works/i,
 					);
 					assert.doesNotMatch(agentsMd, /Role prompts under `prompts\/\*\.md`/);
 					assert.doesNotMatch(agentsMd, /load the installed prompt\/skill\/agent surfaces from/);
@@ -1807,6 +1815,10 @@ describe.skip("omx setup install mode behavior", () => {
 					assert.match(
 						agentsMd,
 						/Registered Codex plugin marketplace surfaces supply Pennix OMX workflows and plugin-scoped companion resources/,
+					);
+					assert.match(
+						agentsMd,
+						/Do not assume bundled prompt\/skill files are copied into local `prompts\/` or `skills\/` directories in plugin mode/,
 					);
 					assert.match(
 						agentsMd,
@@ -1898,7 +1910,7 @@ describe.skip("omx setup install mode behavior", () => {
 				await withTempCwd(wd, async () => {
 					const configPath = join(codexHomeDir, "config.toml");
 					const latestUnwrapped =
-						"You have Pennix OMX installed through Codex plugin mode. AGENTS.md is the orchestration brain and main control surface. Follow AGENTS.md for skill/keyword routing and $name workflow invocation. When spawning native subagents, set `agent_type` to an installed role and never omit it for OMX work. Registered Codex plugin marketplace surfaces supply Pennix OMX workflows and plugin-scoped companion resources when the plugin is installed; native agent roles are installed as setup-owned Codex agent TOML files in plugin mode so agent_type routing works. User-installed skills may still live under ~/.codex/skills. Use outcome-first, concise progress updates: state the target result, constraints, validation evidence, and stop condition before adding process detail.";
+						"You have Pennix OMX installed through Codex plugin mode. AGENTS.md is the orchestration brain and main control surface. Follow AGENTS.md for skill/keyword routing and $name workflow invocation. When spawning native subagents, set `agent_type` to an installed role and never omit it for OMX work. Registered Codex plugin marketplace surfaces supply Pennix OMX workflows and plugin-scoped companion resources when the plugin is installed. Setup still installs native agent role TOML files under the active Codex home so agent_type routing works. Do not assume bundled prompt/skill files are copied into local .codex prompts/skills directories in plugin mode. User-installed skills may still live under ~/.codex/skills. Use outcome-first, concise progress updates: state the target result, constraints, validation evidence, and stop condition before adding process detail.";
 					await writeFile(
 						configPath,
 						`developer_instructions = ${JSON.stringify(latestUnwrapped)}\n`,

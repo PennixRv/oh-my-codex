@@ -296,9 +296,16 @@ function applyPluginModeWordingToAgentsTemplate(
 			? "`./.codex/skills` for project scope, or `~/.codex/skills` for user-installed skills"
 			: "`~/.codex/skills`";
 	return scopedContent.replace(
-		/Role prompts under `prompts\/\*\.md` are narrower execution surfaces\. They must follow this file, not override it\.\nWhen OMX is installed, load the installed prompt\/skill\/agent surfaces from [^\n]+active\)\./,
-		`Registered Codex plugin marketplace surfaces supply ${OMX_FORK_USER_FACING_NAME} workflows and plugin-scoped companion resources when the plugin is installed. Native agent roles are installed as setup-owned Codex agent TOML files in plugin mode so agent_type routing works. They must follow this file, not override it.\nUser-installed skills may still live under ${userSkillPath}.`,
-		);
+		/<surface_resolution>[\s\S]*?<\/surface_resolution>/,
+		[
+			"<surface_resolution>",
+			"Role prompts and installed workflow surfaces are narrower execution surfaces. They must follow this file, not override it.",
+			`Registered Codex plugin marketplace surfaces supply ${OMX_FORK_USER_FACING_NAME} workflows and plugin-scoped companion resources when the plugin is installed. Setup still installs native agent role TOML files under the active Codex home so agent_type routing works.`,
+			"Do not assume bundled prompt/skill files are copied into local `prompts/` or `skills/` directories in plugin mode.",
+			`User-installed skills may still live under ${userSkillPath}.`,
+			"</surface_resolution>",
+		].join("\n"),
+	);
 }
 
 function stripNamedXmlSection(content: string, sectionName: string): string {

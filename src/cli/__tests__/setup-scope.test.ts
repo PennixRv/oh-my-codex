@@ -249,8 +249,15 @@ describe("omx setup scope behavior", () => {
       assert.ok(hooksJson.hooks?.UserPromptSubmit, "hooks.json should register UserPromptSubmit");
       assert.ok(hooksJson.hooks?.Stop, "hooks.json should register Stop");
       const agentsMd = await readFile(agentsMdPath, "utf-8");
-      assert.match(agentsMd, /prompts\/\*\.md/);
-      assert.match(agentsMd, /\.\/\.codex\/skills/);
+      assert.match(agentsMd, /<surface_resolution>/);
+      assert.match(
+        agentsMd,
+        /Legacy setup installs prompts, skills, and native-agent TOMLs under the active Codex home \(`\.\/\.codex\/\.\.\.` or project-local `\.\/\.codex\/\.\.\.` when project scope is active\)\./,
+      );
+      assert.match(
+        agentsMd,
+        /User-installed skills may still live under the active Codex-home `skills\/` directory\./,
+      );
       const persistedScope = JSON.parse(await readFile(scopeFile, "utf-8")) as {
         scope: string;
       };
@@ -385,7 +392,11 @@ describe("omx setup scope behavior", () => {
         join(home, ".codex", "AGENTS.md"),
         "utf-8",
       );
-      assert.match(agentsMd, /~\/\.codex\/skills/);
+      assert.match(agentsMd, /<surface_resolution>/);
+      assert.match(
+        agentsMd,
+        /Legacy setup installs prompts, skills, and native-agent TOMLs under the active Codex home \(`~\/\.codex\/\.\.\.` or project-local `\.\/\.codex\/\.\.\.` when project scope is active\)\./,
+      );
       assert.equal(
         await readFile(join(wd, "AGENTS.md"), "utf-8"),
         existingAgents,
