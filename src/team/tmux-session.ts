@@ -1694,13 +1694,28 @@ function paneHasClaudeBypassPermissionsPrompt(captured: string): boolean {
   return hasWarning && hasChoices;
 }
 
+function paneHasHookReviewPrompt(captured: string): boolean {
+  const lines = captured
+    .split('\n')
+    .map((line) => line.replace(/\r/g, '').trim())
+    .filter((line) => line.length > 0);
+  const tail = lines.slice(-32);
+  const hasHookEvent = tail.some((line) =>
+    /^(?:SessionStart|UserPromptSubmit|PreToolUse|PostToolUse|PreCompact|PostCompact|Stop|PermissionRequest)\s+hooks$/i.test(line)
+  );
+  const hasInstruction = tail.some((line) => /Turn hooks on or off/i.test(line));
+  const hasExitHint = tail.some((line) => /Press space or enter to toggle;\s*esc to go back/i.test(line));
+  return hasHookEvent && hasInstruction && hasExitHint;
+}
+
 
 export type StartupDirectTriggerSafety =
   | { safe: true; reason: 'ready_prompt' | 'codex_viewport' }
-  | { safe: false; reason: 'tmux_unavailable' | 'capture_failed' | 'trust_prompt' | 'claude_bypass_prompt' | 'bootstrapping' | 'not_agent_viewport' };
+  | { safe: false; reason: 'tmux_unavailable' | 'capture_failed' | 'trust_prompt' | 'hook_review_prompt' | 'claude_bypass_prompt' | 'bootstrapping' | 'not_agent_viewport' };
 
 export function evaluateStartupDirectTriggerSafetyCapture(captured: string, workerCli?: TeamWorkerCli): StartupDirectTriggerSafety {
   if (paneHasTrustPrompt(captured)) return { safe: false, reason: 'trust_prompt' };
+  if (paneHasHookReviewPrompt(captured)) return { safe: false, reason: 'hook_review_prompt' };
   if (paneHasClaudeBypassPermissionsPrompt(captured)) return { safe: false, reason: 'claude_bypass_prompt' };
   if (paneLooksReady(captured)) return { safe: true, reason: 'ready_prompt' };
   if (paneIsBootstrapping(captured)) return { safe: false, reason: 'bootstrapping' };
@@ -1744,6 +1759,7 @@ export const paneHasActiveTask = sharedPaneHasActiveTask;
 export type WorkerStartupInjectSafety =
   | 'safe'
   | 'trust_prompt'
+  | 'hook_review_prompt'
   | 'claude_bypass_prompt'
   | 'bootstrapping'
   | 'active_task'
@@ -1751,6 +1767,7 @@ export type WorkerStartupInjectSafety =
 
 export function classifyWorkerStartupInjectSafety(captured: string): WorkerStartupInjectSafety {
   if (paneHasTrustPrompt(captured)) return 'trust_prompt';
+  if (paneHasHookReviewPrompt(captured)) return 'hook_review_prompt';
   if (paneHasClaudeBypassPermissionsPrompt(captured)) return 'claude_bypass_prompt';
   if (paneIsBootstrapping(captured)) return 'bootstrapping';
   if (paneHasActiveTask(captured)) return 'active_task';
@@ -1938,6 +1955,10 @@ export function waitForWorkerReady(
     sleepFractionalSeconds(0.12);
     runTmux(['send-keys', '-t', target, 'C-m']);
   };
+  const dismissHookReview = (): void => {
+    const target = paneTarget(sessionName, workerIndex, workerPaneId);
+    runTmux(['send-keys', '-t', target, 'Escape']);
+  };
 
   const check = (): boolean => {
     const target = paneTarget(sessionName, workerIndex, workerPaneId);
@@ -1959,6 +1980,11 @@ export function waitForWorkerReady(
         return false;
       }
       blockedByTrustPrompt = true;
+      return false;
+    }
+    if (paneHasHookReviewPrompt(result.stdout)) {
+      dismissHookReview();
+      promptDismissed = true;
       return false;
     }
     if (paneLooksReady(result.stdout)) return true;
@@ -2014,6 +2040,10 @@ export async function waitForWorkerReadyAsync(
     await sleep(120);
     await runTmuxAsync(['send-keys', '-t', target, 'C-m']);
   };
+  const dismissHookReview = async (): Promise<void> => {
+    const target = paneTarget(sessionName, workerIndex, workerPaneId);
+    await runTmuxAsync(['send-keys', '-t', target, 'Escape']);
+  };
 
   const check = async (): Promise<boolean> => {
     const target = paneTarget(sessionName, workerIndex, workerPaneId);
@@ -2035,6 +2065,11 @@ export async function waitForWorkerReadyAsync(
         return false;
       }
       blockedByTrustPrompt = true;
+      return false;
+    }
+    if (paneHasHookReviewPrompt(result.stdout)) {
+      await dismissHookReview();
+      promptDismissed = true;
       return false;
     }
     if (paneLooksReady(result.stdout)) return true;
@@ -2149,6 +2184,10 @@ export async function sendToWorker(
     await sendKeyAsync(target, 'C-m');
     await sleep(120);
     await sendKeyAsync(target, 'C-m');
+    await sleep(200);
+  }
+  if (paneHasHookReviewPrompt(capturedStr)) {
+    await sendKeyAsync(target, 'Escape');
     await sleep(200);
   }
 

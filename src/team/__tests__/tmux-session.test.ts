@@ -96,6 +96,21 @@ const CLAUDE_BYPASS_PROMPT_CAPTURE = `Bypass Permissions mode
 
 Press Enter to confirm`;
 
+const SESSION_START_HOOK_REVIEW_CAPTURE = `SessionStart hooks
+Turn hooks on or off. Your changes are saved automatically.
+
+[ ] Hook 1
+[x] Hook 2
+
+Event     SessionStart
+Matcher   startup|resume|clear
+Source    User config - ~/.codex/hooks.json
+Command   "/usr/bin/node" "/home/penn/.npm-global/lib/node_modules/oh-my-codex-pennix/dist/scripts/codex-native-hook.js"
+Timeout   600s
+Trust     Trusted
+
+Press space or enter to toggle; esc to go back`;
+
 const READY_HELPER_CAPTURE = `╭────────────────────────────────────────────╮
 │ >_ OpenAI Codex (v0.114.0)                 │
 │                                            │
@@ -439,6 +454,50 @@ esac
     );
   });
 
+  it('dismisses SessionStart hook review before sending worker text', async () => {
+    await withMockTmuxFixture(
+      'omx-tmux-hook-review-send-',
+      (logPath) => `#!/bin/sh
+set -eu
+state_dir="$(dirname "${logPath}")"
+dismissed_file="$state_dir/dismissed"
+printf '%s\n' "$*" >> "${logPath}"
+case "$1" in
+  capture-pane)
+    if [ -f "$dismissed_file" ]; then
+      cat <<'EOF'
+How can I help you today?
+EOF
+    else
+      cat <<'EOF'
+${SESSION_START_HOOK_REVIEW_CAPTURE}
+EOF
+    fi
+    exit 0
+    ;;
+  send-keys)
+    if [ "\${4:-}" = "Escape" ]; then
+      : > "$dismissed_file"
+    fi
+    exit 0
+    ;;
+  *)
+    exit 0
+    ;;
+esac
+`,
+      async ({ logPath }) => {
+        await sendToWorker('omx-team-x', 1, 'check inbox');
+        const log = await readFile(logPath, 'utf-8');
+        const dismissIndex = log.indexOf('send-keys -t omx-team-x:1 Escape');
+        const submitIndex = log.indexOf('send-keys -t omx-team-x:1 -l -- check inbox');
+        assert.notEqual(dismissIndex, -1, `expected hook-review dismissal in log:\n${log}`);
+        assert.notEqual(submitIndex, -1, `expected worker text submission in log:\n${log}`);
+        assert.ok(dismissIndex < submitIndex, `expected hook-review dismissal before worker text:\n${log}`);
+      },
+    );
+  });
+
   it('ignores stale queued-next-tool-call banner text that only survives in scrollback history', async () => {
     await withMockTmuxFixture(
       'omx-tmux-codex-stale-queued-scrollback-',
@@ -682,12 +741,13 @@ describe('sendToWorker adaptive retry matching', () => {
 });
 
 describe('startup direct trigger safety', () => {
-  it('classifies ready panes as safe and blocks trust, bypass, bootstrapping, and active-task captures', () => {
+  it('classifies ready panes as safe and blocks trust, hook-review, bypass, bootstrapping, and active-task captures', () => {
     assert.equal(classifyWorkerStartupInjectSafety(READY_HELPER_CAPTURE), 'safe');
     assert.equal(
       classifyWorkerStartupInjectSafety('Do you trust the contents of this directory?\nPress enter to continue'),
       'trust_prompt',
     );
+    assert.equal(classifyWorkerStartupInjectSafety(SESSION_START_HOOK_REVIEW_CAPTURE), 'hook_review_prompt');
     assert.equal(classifyWorkerStartupInjectSafety(CLAUDE_BYPASS_PROMPT_CAPTURE), 'claude_bypass_prompt');
     assert.equal(classifyWorkerStartupInjectSafety('OpenAI Codex\nmodel: loading'), 'bootstrapping');
     assert.equal(
@@ -719,6 +779,35 @@ esac
         assert.deepEqual(
           await checkWorkerStartupInjectSafety('omx-team-x', 1),
           { safe: false, reason: 'trust_prompt' },
+        );
+        const log = await readFile(logPath, 'utf-8');
+        assert.doesNotMatch(log, /send-keys/);
+      },
+    );
+  });
+
+  it('checks visible pane first and refuses direct injection through a hook review prompt', async () => {
+    await withMockTmuxFixture(
+      'omx-tmux-startup-direct-hook-review-',
+      (logPath) => `#!/bin/sh
+set -eu
+printf '%s\n' "$*" >> "${logPath}"
+case "$1" in
+  capture-pane)
+    cat <<'EOF'
+${SESSION_START_HOOK_REVIEW_CAPTURE}
+EOF
+    exit 0
+    ;;
+  *)
+    exit 0
+    ;;
+esac
+`,
+      async ({ logPath }) => {
+        assert.deepEqual(
+          await checkWorkerStartupInjectSafety('omx-team-x', 1),
+          { safe: false, reason: 'hook_review_prompt' },
         );
         const log = await readFile(logPath, 'utf-8');
         assert.doesNotMatch(log, /send-keys/);
@@ -3086,6 +3175,46 @@ esac
     );
   });
 
+  it('waitForWorkerReady auto-dismisses SessionStart hook review and then observes readiness', async () => {
+    await withMockTmuxFixture(
+      'omx-tmux-hook-review-ready-',
+      (logPath) => `#!/bin/sh
+set -eu
+state_dir="$(dirname "${logPath}")"
+dismissed_file="$state_dir/dismissed"
+printf '%s\n' "$*" >> "${logPath}"
+case "$1" in
+  capture-pane)
+    if [ -f "$dismissed_file" ]; then
+      cat <<'EOF'
+${READY_HELPER_CAPTURE}
+EOF
+    else
+      cat <<'EOF'
+${SESSION_START_HOOK_REVIEW_CAPTURE}
+EOF
+    fi
+    exit 0
+    ;;
+  send-keys)
+    if [ "\${4:-}" = "Escape" ]; then
+      : > "$dismissed_file"
+    fi
+    exit 0
+    ;;
+  *)
+    exit 0
+    ;;
+esac
+`,
+      async ({ logPath }) => {
+        assert.equal(waitForWorkerReady('omx-team-x', 1, 5_000), true);
+        const log = await readFile(logPath, 'utf-8');
+        assert.match(log, /send-keys -t omx-team-x:1 Escape/);
+      },
+    );
+  });
+
   it('waitForWorkerReady leaves the Claude bypass prompt untouched when auto-accept is disabled', async () => {
     const previousAutoAccept = process.env.OMX_TEAM_AUTO_ACCEPT_BYPASS;
     process.env.OMX_TEAM_AUTO_ACCEPT_BYPASS = '0';
@@ -3304,6 +3433,46 @@ esac
       if (typeof previousAutoAccept === 'string') process.env.OMX_TEAM_AUTO_ACCEPT_BYPASS = previousAutoAccept;
       else delete process.env.OMX_TEAM_AUTO_ACCEPT_BYPASS;
     }
+  });
+
+  it('auto-dismisses SessionStart hook review and then observes readiness', async () => {
+    await withMockTmuxFixture(
+      'omx-tmux-worker-ready-async-hook-review-',
+      (logPath) => `#!/bin/sh
+set -eu
+state_dir="$(dirname "${logPath}")"
+dismissed_file="$state_dir/dismissed"
+printf '%s\n' "$*" >> "${logPath}"
+case "$1" in
+  capture-pane)
+    if [ -f "$dismissed_file" ]; then
+      cat <<'EOF'
+${READY_HELPER_CAPTURE}
+EOF
+    else
+      cat <<'EOF'
+${SESSION_START_HOOK_REVIEW_CAPTURE}
+EOF
+    fi
+    exit 0
+    ;;
+  send-keys)
+    if [ "\${4:-}" = "Escape" ]; then
+      : > "$dismissed_file"
+    fi
+    exit 0
+    ;;
+  *)
+    exit 0
+    ;;
+esac
+`,
+      async ({ logPath }) => {
+        assert.equal(await waitForWorkerReadyAsync('omx-team-x', 1, 5_000), true);
+        const log = await readFile(logPath, 'utf-8');
+        assert.match(log, /send-keys -t omx-team-x:1 Escape/);
+      },
+    );
   });
 
   it('returns false on timeout or tmux command failure', async () => {
