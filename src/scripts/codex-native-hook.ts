@@ -1,7 +1,7 @@
 import { execFileSync } from "child_process";
 import { closeSync, existsSync, openSync, readFileSync, readSync, statSync } from "fs";
 import { appendFile, mkdir, readFile, readdir, stat, writeFile } from "fs/promises";
-import { extname, join, relative, resolve } from "path";
+import { dirname, extname, join, relative, resolve } from "path";
 import { pathToFileURL } from "url";
 import { readModeStateForActiveDecision, readModeStateForSession, updateModeState } from "../modes/base.js";
 import { redactAuthSecrets } from "../auth/redact.js";
@@ -31,12 +31,12 @@ import {
 } from "../hooks/session.js";
 import {
   appendTeamEvent,
-  listTasks,
+  listMailboxMessages,
+  listDispatchRequests,
   readTeamLeaderAttention,
   readTeamConfig,
   readTeamManifestV2,
   readTeamPhase,
-  readWorkerStatus,
   writeTeamLeaderAttention,
   writeTeamPhase,
 } from "../team/state.js";
@@ -174,6 +174,8 @@ const SHORT_FOLLOWUP_PRIORITY_PATTERNS = [
   /\b(?:follow up|latest request|this turn|current turn|newest request)\b/i,
 ] as const;
 const MAX_SESSION_META_LINE_BYTES = 256 * 1024;
+const MAX_LEADER_MAILBOX_CONTEXT_MESSAGES = 3;
+const LEADER_MAILBOX_HANDOFF_STATE_FILE = "team-leader-mailbox-handoff.json";
 
 function safeString(value: unknown): string {
   return typeof value === "string" ? value : "";
@@ -216,6 +218,216 @@ function safeContextSnippet(value: unknown, maxLength = 300): string {
   const text = safeString(value).replace(/\s+/g, " ").trim();
   if (text.length <= maxLength) return text;
   return `${text.slice(0, maxLength - 1).trimEnd()}…`;
+}
+
+interface LeaderMailboxHandoffState {
+  team_name?: string;
+  last_signature?: string;
+  last_boundary_key?: string;
+  unread_message_ids?: string[];
+  updated_at?: string;
+}
+
+function buildLeaderMailboxBoundaryKey(
+  hookEventName: "UserPromptSubmit" | "PreToolUse",
+  payload: CodexHookPayload,
+): string {
+  const turnId = readPayloadTurnId(payload);
+  if (turnId) return `turn:${turnId}`;
+
+  if (hookEventName === "PreToolUse") {
+    const toolUseId = safeString(payload.tool_use_id).trim();
+    if (toolUseId) return `pretool:${toolUseId}`;
+    const toolName = safeString(payload.tool_name).trim() || "unknown-tool";
+    const command = readPreToolUseCommand(payload);
+    return `pretool:${toolName}:${promptSignature((command || toolName).trim().toLowerCase())}`;
+  }
+
+  const threadId = readPayloadThreadId(payload) || "no-thread";
+  const prompt = readPromptText(payload).trim().toLowerCase();
+  return `prompt:${threadId}:${promptSignature(prompt || "empty-prompt")}`;
+}
+
+function summarizeLeaderMailboxIntent(value: unknown): string {
+  const intent = safeString(value).trim();
+  switch (intent) {
+    case "pending-mailbox-review":
+      return "review mailbox";
+    case "stalled-unblock":
+      return "unblock worker";
+    case "done-review-or-shutdown":
+      return "review completion";
+    case "followup-relaunch":
+      return "assign follow-up";
+    case "followup-reuse":
+      return "continue orchestration";
+    default:
+      return "review message";
+  }
+}
+
+function buildLeaderMailboxMessageSummary(
+  message: { from_worker?: string; body?: string; message_id?: string; created_at?: string },
+  intent?: string,
+  status?: string,
+): string {
+  const fromWorker = safeString(message.from_worker).trim() || "unknown-worker";
+  const body = safeContextSnippet(message.body, 120) || "no body";
+  const messageId = safeString(message.message_id).trim() || "missing-id";
+  const createdAt = safeString(message.created_at).trim() || "unknown-time";
+  const dispatchStatus = safeString(status).trim() || "untracked";
+  return `- message ${messageId} from ${fromWorker} @ ${createdAt}: ${summarizeLeaderMailboxIntent(intent)}; dispatch=${dispatchStatus}; body: ${body}`;
+}
+
+async function resolveActiveTeamNameForLeaderMailboxHandoff(
+  cwd: string,
+  sessionId: string,
+  threadId: string,
+): Promise<string> {
+  const normalizedSessionId = safeString(sessionId).trim();
+  if (!normalizedSessionId) return "";
+  const teamState = await readModeStateForSession("team", normalizedSessionId, cwd);
+  if (teamState?.active === true && teamStateMatchesThreadForStop(teamState, threadId)) {
+    const teamName = safeString(teamState.team_name).trim();
+    const coarsePhase = formatPhase(teamState.current_phase);
+    if (teamName) {
+      const canonicalPhase = (await readTeamPhase(teamName, cwd))?.current_phase ?? coarsePhase;
+      if (isNonTerminalPhase(canonicalPhase)) return teamName;
+    }
+  }
+  return (await findCanonicalActiveTeamForSession(cwd, normalizedSessionId, threadId))?.teamName ?? "";
+}
+
+async function buildLeaderMailboxHandoffAdditionalContext(
+  payload: CodexHookPayload,
+  cwd: string,
+  sessionId: string,
+  hookEventName: "UserPromptSubmit" | "PreToolUse",
+  threadId: string,
+): Promise<string | null> {
+  const normalizedSessionId = safeString(sessionId).trim();
+  if (!normalizedSessionId) return null;
+
+  const teamName = await resolveActiveTeamNameForLeaderMailboxHandoff(cwd, normalizedSessionId, threadId);
+  if (!teamName) return null;
+
+  const unreadMessages = (await listMailboxMessages(teamName, "leader-fixed", cwd).catch(() => []))
+    .filter((message) => !safeString(message.delivered_at).trim());
+  if (unreadMessages.length === 0) return null;
+
+  const dispatchRequests = await listDispatchRequests(teamName, cwd, {
+    kind: "mailbox",
+    to_worker: "leader-fixed",
+    limit: 200,
+  }).catch(() => []);
+  const dispatchByMessageId = new Map<string, typeof dispatchRequests[number]>();
+  for (const request of dispatchRequests) {
+    const messageId = safeString(request.message_id).trim();
+    if (!messageId) continue;
+    const existing = dispatchByMessageId.get(messageId);
+    const existingTs = Math.max(
+      Date.parse(safeString(existing?.updated_at).trim()) || 0,
+      Date.parse(safeString(existing?.created_at).trim()) || 0,
+    );
+    const nextTs = Math.max(
+      Date.parse(safeString(request.updated_at).trim()) || 0,
+      Date.parse(safeString(request.created_at).trim()) || 0,
+    );
+    if (!existing || nextTs >= existingTs) {
+      dispatchByMessageId.set(messageId, request);
+    }
+  }
+
+  const unreadMessageIds = unreadMessages
+    .map((message) => safeString(message.message_id).trim())
+    .filter(Boolean)
+    .sort();
+  const signature = [teamName, ...unreadMessageIds].join("|");
+  if (!signature) return null;
+
+  const boundaryKey = buildLeaderMailboxBoundaryKey(hookEventName, payload);
+  const handoffPath = getStateFilePath(LEADER_MAILBOX_HANDOFF_STATE_FILE, cwd, normalizedSessionId || undefined);
+  const handoffState = await readJsonIfExists(handoffPath) as LeaderMailboxHandoffState | null;
+  const previousSignature = safeString(handoffState?.last_signature).trim();
+  const previousBoundaryKey = safeString(handoffState?.last_boundary_key).trim();
+  if (signature === previousSignature && previousBoundaryKey === boundaryKey) {
+    return null;
+  }
+
+  await mkdir(dirname(handoffPath), { recursive: true }).catch(() => {});
+  await writeFile(handoffPath, JSON.stringify({
+    team_name: teamName,
+    last_signature: signature,
+    last_boundary_key: boundaryKey,
+    unread_message_ids: unreadMessageIds,
+    updated_at: new Date().toISOString(),
+  }, null, 2)).catch(() => {});
+
+  const dispatchStatusCounts = new Map<string, number>();
+  const requestIntents = new Set<string>();
+  const summaries = unreadMessages
+    .slice(-MAX_LEADER_MAILBOX_CONTEXT_MESSAGES)
+    .reverse()
+    .map((message) => {
+      const messageId = safeString(message.message_id).trim();
+      const dispatch = dispatchByMessageId.get(messageId);
+      const status = safeString(dispatch?.status).trim() || "untracked";
+      const intent = safeString(dispatch?.intent).trim();
+      dispatchStatusCounts.set(status, (dispatchStatusCounts.get(status) ?? 0) + 1);
+      if (intent) requestIntents.add(intent);
+      return buildLeaderMailboxMessageSummary(message, intent, status);
+    });
+  for (const message of unreadMessages.slice(0, Math.max(0, unreadMessages.length - summaries.length))) {
+    const messageId = safeString(message.message_id).trim();
+    const dispatch = dispatchByMessageId.get(messageId);
+    const status = safeString(dispatch?.status).trim() || "untracked";
+    const intent = safeString(dispatch?.intent).trim();
+    dispatchStatusCounts.set(status, (dispatchStatusCounts.get(status) ?? 0) + 1);
+    if (intent) requestIntents.add(intent);
+  }
+  const extraCount = Math.max(0, unreadMessages.length - summaries.length);
+  const mailboxPath = join(resolveCanonicalTeamStateRoot(cwd), "team", teamName, "mailbox", "leader-fixed.json")
+    .replace(/\\/g, "/");
+  const dispatchSummary = [...dispatchStatusCounts.entries()]
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([status, count]) => `${status}=${count}`)
+    .join(", ");
+
+  return [
+    "[OMX team leader mailbox]",
+    `- team: ${teamName}`,
+    `- unread worker messages: ${unreadMessages.length}`,
+    `- source: ${mailboxPath}`,
+    dispatchSummary ? `- dispatch status counts: ${dispatchSummary}` : null,
+    requestIntents.size > 0 ? `- request intents: ${[...requestIntents].sort().join(", ")}` : null,
+    ...summaries,
+    extraCount > 0 ? `- ${extraCount} additional unread message(s) not shown` : null,
+    "- Next boundary action: review these worker messages first, then either continue the mainline or handle the worker request explicitly.",
+  ].filter(Boolean).join("\n");
+}
+
+function appendHookAdditionalContext(
+  outputJson: Record<string, unknown> | null,
+  hookEventName: CodexHookEventName,
+  additionalContext: string | null,
+): Record<string, unknown> | null {
+  const appendedContext = safeString(additionalContext).trim();
+  if (!appendedContext) return outputJson;
+
+  const baseOutput = safeObject(outputJson);
+  const existingHookSpecificOutput = safeObject(baseOutput.hookSpecificOutput);
+  const existingAdditionalContext = safeString(existingHookSpecificOutput.additionalContext).trim();
+
+  return {
+    ...baseOutput,
+    hookSpecificOutput: {
+      ...existingHookSpecificOutput,
+      hookEventName,
+      additionalContext: existingAdditionalContext
+        ? `${existingAdditionalContext}\n\n${appendedContext}`
+        : appendedContext,
+    },
+  };
 }
 
 const SIDE_CONVERSATION_BOUNDARY_PATTERNS = [
@@ -4210,6 +4422,7 @@ export async function dispatchCodexNativeHook(
   let triageAdditionalContext: string | null = null;
   let goalWorkflowAdditionalContext: string | null = null;
   let ultragoalSteeringAdditionalContext: string | null = null;
+  let leaderMailboxHandoffAdditionalContext: string | null = null;
 
   const nativeSessionId = safeString(payload.session_id ?? payload.sessionId).trim();
   const threadId = safeString(payload.thread_id ?? payload.threadId).trim();
@@ -4313,6 +4526,13 @@ export async function dispatchCodexNativeHook(
 
   if (hookEventName === "UserPromptSubmit") {
     const prompt = readPromptText(payload);
+    leaderMailboxHandoffAdditionalContext = await buildLeaderMailboxHandoffAdditionalContext(
+      payload,
+      cwd,
+      sessionIdForState,
+      "UserPromptSubmit",
+      threadId,
+    ).catch(() => null);
     goalWorkflowAdditionalContext = await buildGoalWorkflowReconciliationPromptWarning(cwd, prompt).catch(() => null);
     ultragoalSteeringAdditionalContext = prompt && !isSubagentPromptSubmit
       ? await applyUserPromptUltragoalSteering(cwd, prompt).catch((error) => `OMX native UserPromptSubmit rejected bounded .omx/ultragoal steering for G002-cli-and-prompt-submit-bridge: ${error instanceof Error ? error.message : String(error)}`)
@@ -4467,6 +4687,7 @@ export async function dispatchCodexNativeHook(
         ? null
         : [
           buildAdditionalContextMessage(readPromptText(payload), skillState, cwd, payload),
+          leaderMailboxHandoffAdditionalContext,
           ultragoalSteeringAdditionalContext,
           goalWorkflowAdditionalContext,
           triageAdditionalContext,
@@ -4486,8 +4707,18 @@ export async function dispatchCodexNativeHook(
       : "";
     outputJson = await buildDeepInterviewPreToolUseBoundaryOutput(payload, cwd, stateDir, preToolUseSessionId)
       ?? await buildRalplanPreToolUseBoundaryOutput(payload, cwd, stateDir, preToolUseSessionId)
-      ?? await buildTeamAttentionOutput(cwd, stateDir)
       ?? buildNativePreToolUseOutput(payload);
+    outputJson = appendHookAdditionalContext(
+      outputJson,
+      "PreToolUse",
+      await buildLeaderMailboxHandoffAdditionalContext(
+      payload,
+      cwd,
+      preToolUseSessionId,
+      "PreToolUse",
+      threadId,
+      ).catch(() => null),
+    );
   } else if (hookEventName === "PostToolUse") {
     if (detectMcpTransportFailure(payload)) {
       await markTeamTransportFailure(cwd, payload);
@@ -4598,104 +4829,6 @@ function inferHookEventNameFromMalformedInput(raw: string): CodexHookEventName |
   const value = match?.[1];
   if (!value) return null;
   return readHookEventName({ hook_event_name: value });
-}
-
-/**
- * Check team state for tasks that have completed or failed since the leader
- * last acknowledged them. When there are pending items, inject a non-blocking
- * system reminder via {@code hookSpecificOutput.additionalContext} so the
- * leader sees it on the next turn without a tmux send-keys interrupt.
- *
- * This replaces the old inject-based leader nudge with async file-based
- * attention polling.  The notify hook stays disabled; team workers still
- * write mailbox + status files independently.
- */
-async function buildTeamAttentionOutput(
-  cwd: string,
-  stateDir: string,
-): Promise<Record<string, unknown> | null> {
-  try {
-    if (!readTeamModeConfig(cwd).enabled) return null;
-
-    const teamRoot = resolveCanonicalTeamStateRoot(cwd);
-    const teamDir = join(teamRoot, "team");
-    if (!existsSync(teamDir)) return null;
-
-    const entries = await readdir(teamDir).catch(() => [] as string[]);
-    if (entries.length === 0) return null;
-
-    const parts: string[] = [];
-    let pendingCount = 0;
-
-    for (const teamName of entries) {
-      const teamPath = join(teamDir, teamName);
-      try {
-        if (!(await stat(teamPath)).isDirectory()) continue;
-      } catch { continue; }
-
-      // ── tasks ────────────────────────────────────────────────
-      let tasks: Array<{ id: string; status: string }> = [];
-      try {
-        tasks = await listTasks(teamName, cwd);
-      } catch { /* best-effort */ }
-
-      const newlyDone = tasks
-        .filter(t => t.status === "completed" || t.status === "failed")
-        .map(t => `task-${t.id}(${t.status})`);
-      if (newlyDone.length > 0) {
-        parts.push(`Team ${teamName}: ${newlyDone.join(", ")}`);
-        pendingCount += newlyDone.length;
-      }
-
-      // ── workers ──────────────────────────────────────────────
-      const workersDir = join(teamPath, "workers");
-      let workerEntries: string[] = [];
-      try { workerEntries = await readdir(workersDir); } catch { /* empty */ }
-
-      for (const workerName of workerEntries) {
-        try {
-          const ws = await readWorkerStatus(teamName, workerName, cwd);
-          if (ws.state === "done" || ws.state === "failed") {
-            parts.push(`Team ${teamName}: worker ${workerName} ${ws.state}`);
-            pendingCount++;
-          }
-        } catch { /* best-effort */ }
-      }
-    }
-
-    if (pendingCount === 0) return null;
-
-    const signature = parts.sort().join("|");
-    const dedupePath = join(stateDir, "team-attention-last.json");
-    let lastSignature = "";
-    try {
-      if (existsSync(dedupePath)) {
-        lastSignature = safeString(JSON.parse(await readFile(dedupePath, "utf-8")).s || "").trim();
-      }
-    } catch { /* best-effort */ }
-
-    // Avoid re-injecting the same set of completed items on every turn.
-    if (signature === lastSignature) return null;
-
-    try {
-      await writeFile(dedupePath, JSON.stringify({ s: signature, at: new Date().toISOString() }));
-    } catch { /* best-effort */ }
-
-    const summary = parts.join("; ") + ". ";
-    const guidance =
-      pendingCount === 1
-        ? "Check with `omx team status` and handle the result at the next natural pause."
-        : `Check with \`omx team status\` and handle ${pendingCount} completed items at the next natural pause.`;
-
-    return {
-      hookSpecificOutput: {
-        hookEventName: "PreToolUse",
-        additionalContext: `[OMX team] ${summary}${guidance}`,
-      },
-    } as unknown as Record<string, unknown>;
-  } catch {
-    return null;
-  }
 }
 
 function buildMalformedStdinHookOutput(

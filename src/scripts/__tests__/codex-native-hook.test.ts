@@ -10,10 +10,13 @@ import { buildManagedCodexHooksConfig } from "../../config/codex-hooks.js";
 import { DOCUMENT_REFRESH_EXEMPTION_PREFIX } from "../../document-refresh/enforcer.js";
 import {
   initTeamState,
+  listMailboxMessages,
+  markMessageDelivered,
   readTeamLeaderAttention,
   readTeamPhase,
   writeTeamLeaderAttention,
 } from "../../team/state.js";
+import { executeTeamApiOperation } from "../../team/api-interop.js";
 import {
   dispatchCodexNativeHook,
   isCodexNativeHookMainModule,
@@ -17166,6 +17169,150 @@ describe.skip('native Stop autopilot deep-interview wait', () => {
       }, { cwd });
 
       assert.equal(result.outputJson, null);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("leader mailbox handoff", () => {
+  async function setupLeaderMailboxFixture() {
+    const cwd = await mkdtemp(join(tmpdir(), "omx-native-hook-leader-mailbox-"));
+    const sessionId = "leader-mailbox-session-1";
+    const teamName = "mailbox-team";
+    const threadId = "leader-mailbox-thread";
+    try {
+      await initTeamState(teamName, "leader mailbox handoff", "executor", 1, cwd);
+      await writeJson(join(cwd, ".omx", "state", "sessions", sessionId, "team-state.json"), {
+        active: true,
+        mode: "team",
+        current_phase: "running",
+        team_name: teamName,
+        session_id: sessionId,
+      });
+
+      const sendResult = await executeTeamApiOperation("send-message", {
+        team_name: teamName,
+        from_worker: "worker-1",
+        to_worker: "leader-fixed",
+        body: "Need review of task output before continuing",
+      }, cwd);
+      if (!sendResult.ok) throw new Error(`send-message failed: ${sendResult.error?.message ?? "unknown"}`);
+
+      return { cwd, sessionId, teamName, threadId };
+    } catch (error) {
+      await rm(cwd, { recursive: true, force: true });
+      throw error;
+    }
+  }
+
+  it("surfaces unread leader mailbox messages on UserPromptSubmit", async () => {
+    const { cwd, sessionId, teamName, threadId } = await setupLeaderMailboxFixture();
+    try {
+      const turn1 = await dispatchCodexNativeHook(
+        {
+          hook_event_name: "UserPromptSubmit",
+          cwd,
+          session_id: sessionId,
+          thread_id: threadId,
+          turn_id: "leader-mailbox-turn-1",
+          prompt: "continue",
+        },
+        { cwd },
+      );
+      const turn1Context = String(
+        (turn1.outputJson as { hookSpecificOutput?: { additionalContext?: string } })?.hookSpecificOutput?.additionalContext ?? "",
+      );
+      assert.match(turn1Context, /\[OMX team leader mailbox\]/);
+      assert.match(turn1Context, new RegExp(`team: ${teamName}`));
+      assert.match(turn1Context, /unread worker messages: 1/);
+      assert.match(turn1Context, /dispatch status counts: pending=1/);
+      assert.match(turn1Context, /request intents: pending-mailbox-review/);
+      assert.match(turn1Context, /message .* from worker-1 @ .*: review mailbox; dispatch=pending; body: Need review of task output before continuing/);
+      assert.match(turn1Context, /Next boundary action: review these worker messages first/);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+
+  it("dedupes the same unread batch within the same turn boundary", async () => {
+    const { cwd, sessionId, threadId } = await setupLeaderMailboxFixture();
+    try {
+      const first = await dispatchCodexNativeHook(
+        {
+          hook_event_name: "UserPromptSubmit",
+          cwd,
+          session_id: sessionId,
+          thread_id: threadId,
+          turn_id: "leader-mailbox-turn-1",
+          prompt: "continue",
+        },
+        { cwd },
+      );
+      const firstContext = String(
+        (first.outputJson as { hookSpecificOutput?: { additionalContext?: string } })?.hookSpecificOutput?.additionalContext ?? "",
+      );
+      assert.match(firstContext, /\[OMX team leader mailbox\]/);
+
+      const second = await dispatchCodexNativeHook(
+        {
+          hook_event_name: "UserPromptSubmit",
+          cwd,
+          session_id: sessionId,
+          thread_id: threadId,
+          turn_id: "leader-mailbox-turn-1",
+          prompt: "continue",
+        },
+        { cwd },
+      );
+      const secondContext = String(
+        (second.outputJson as { hookSpecificOutput?: { additionalContext?: string } })?.hookSpecificOutput?.additionalContext ?? "",
+      );
+      assert.doesNotMatch(secondContext, /\[OMX team leader mailbox\]/);
+
+      const nextTurn = await dispatchCodexNativeHook(
+        {
+          hook_event_name: "UserPromptSubmit",
+          cwd,
+          session_id: sessionId,
+          thread_id: threadId,
+          turn_id: "leader-mailbox-turn-2",
+          prompt: "continue",
+        },
+        { cwd },
+      );
+      const nextTurnContext = String(
+        (nextTurn.outputJson as { hookSpecificOutput?: { additionalContext?: string } })?.hookSpecificOutput?.additionalContext ?? "",
+      );
+      assert.match(nextTurnContext, /\[OMX team leader mailbox\]/);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+
+  it("ignores delivered leader mailbox messages", async () => {
+    const { cwd, sessionId, teamName, threadId } = await setupLeaderMailboxFixture();
+    try {
+      const mailbox = await listMailboxMessages(teamName, "leader-fixed", cwd);
+      const messageId = String(mailbox[0]?.message_id ?? "");
+      assert.ok(messageId);
+      await markMessageDelivered(teamName, "leader-fixed", messageId, cwd);
+
+      const turn = await dispatchCodexNativeHook(
+        {
+          hook_event_name: "UserPromptSubmit",
+          cwd,
+          session_id: sessionId,
+          thread_id: threadId,
+          turn_id: "leader-mailbox-turn-2",
+          prompt: "continue",
+        },
+        { cwd },
+      );
+      const context = String(
+        (turn.outputJson as { hookSpecificOutput?: { additionalContext?: string } })?.hookSpecificOutput?.additionalContext ?? "",
+      );
+      assert.doesNotMatch(context, /\[OMX team leader mailbox\]/);
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }

@@ -5328,15 +5328,10 @@ async function finalizeHookPreferredMailboxDispatch(params: {
   return outcome;
 }
 
-async function notifyLeaderAsync(config: TeamConfig, message: string, cwd: string): Promise<DispatchOutcome> {
+async function notifyLeaderAsync(config: TeamConfig): Promise<DispatchOutcome> {
   // Canonical leader delivery is durable mailbox persistence plus HUD-owned
   // authority processing. Team runtime must not directly inject into the
   // leader pane from this fallback path.
-  const { notifyLeaderMailboxAsync } = await import('./tmux-session.js');
-  const persisted = await notifyLeaderMailboxAsync(config.name, 'system', message, cwd);
-  if (!persisted) {
-    return { ok: false, transport: 'mailbox', reason: 'leader_mailbox_notify_failed' };
-  }
   if (!config.leader_pane_id) {
     return { ok: true, transport: 'mailbox', reason: 'leader_pane_missing_mailbox_persisted' };
   }
@@ -5586,14 +5581,14 @@ async function sendLeaderMailboxMessage(params: {
     cwd,
     transportPreference,
     fallbackAllowed: transportPreference === 'hook_preferred_with_fallback',
-    notify: async (_target, message) => {
+    notify: async () => {
       if (transportPreference === 'hook_preferred_with_fallback') {
         return { ok: true, transport: 'hook', reason: 'queued_for_hook_dispatch' };
       }
       if (!config.leader_pane_id) {
         return { ok: false, transport: 'mailbox', reason: 'leader_pane_missing_transport_direct_failed' };
       }
-      return await notifyLeaderAsync(config, message, cwd);
+      return await notifyLeaderAsync(config);
     },
   });
 
@@ -5664,7 +5659,7 @@ async function sendLeaderMailboxMessage(params: {
     config,
     dispatchPolicy,
     cwd,
-    fallbackNotify: async () => await notifyLeaderAsync(config, triggerDirective.text, cwd),
+    fallbackNotify: async () => await notifyLeaderAsync(config),
   });
 }
 

@@ -32,3 +32,27 @@
 - **Pages:** omx-team-lifecycle-restart-smoke-failures-2026-06-24.md, omx-tmux-inject-marker-multisource-analysis-2026-06-26.md
 - **Summary:** Refreshed wiki index and derived metadata surfaces
 
+## [2026-06-28T02:51:34.689Z] ingest
+- **Pages:** omx-team-smoke-findings-2026-06-28.md
+- **Summary:** Created new page "OMX team smoke findings 2026-06-28"
+
+## [2026-06-28T02:51:34.691Z] add
+- **Pages:** omx-team-smoke-findings-2026-06-28.md
+- **Summary:** Created wiki page omx-team-smoke-findings-2026-06-28.md
+
+## [2026-06-28T02:51:34.852Z] add
+- **Pages:** omx-team-lifecycle-restart-smoke-failures-2026-06-24.md, omx-team-smoke-findings-2026-06-28.md, omx-tmux-inject-marker-multisource-analysis-2026-06-26.md
+- **Summary:** Refreshed wiki index and derived metadata surfaces
+
+## [2026-06-28T02:53:49.113Z] ingest
+- **Pages:** omx-leader-mailbox-notification-chain-analysis-2026-06-28.md
+- **Summary:** Created new page "OMX leader mailbox notification chain analysis 2026-06-28"
+
+## [2026-06-28T02:53:49.115Z] add
+- **Pages:** omx-leader-mailbox-notification-chain-analysis-2026-06-28.md
+- **Summary:** Created wiki page omx-leader-mailbox-notification-chain-analysis-2026-06-28.md
+
+## [2026-06-28T02:53:49.282Z] add
+- **Pages:** omx-leader-mailbox-notification-chain-analysis-2026-06-28.md, omx-team-lifecycle-restart-smoke-failures-2026-06-24.md, omx-team-smoke-findings-2026-06-28.md, omx-tmux-inject-marker-multisource-analysis-2026-06-26.md
+- **Summary:** Refreshed wiki index and derived metadata surfaces
+
