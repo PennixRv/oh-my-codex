@@ -19,6 +19,7 @@ export interface TeamConfig {
   team_state_root?: string;
   workspace_mode?: 'single' | 'worktree';
   worktree_mode?: WorktreeMode;
+  tmux_socket_path?: string | null;
   leader_pane_id: string | null;
   hud_pane_id: string | null;
   resize_hook_name: string | null;
@@ -230,6 +231,7 @@ export interface TeamManifestV2 {
   team_state_root?: string;
   workspace_mode?: 'single' | 'worktree';
   worktree_mode?: WorktreeMode;
+  tmux_socket_path?: string | null;
   leader_pane_id: string | null;
   hud_pane_id: string | null;
   resize_hook_name: string | null;

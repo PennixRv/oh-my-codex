@@ -93,6 +93,27 @@ import {
 const OMX_TEAM_SCALING_ENABLED_ENV = 'OMX_TEAM_SCALING_ENABLED';
 const WORKTREE_TRIGGER_STATE_ROOT = '$OMX_TEAM_STATE_ROOT';
 
+function withPersistedTmuxSocket<T>(
+  config: Pick<TeamConfig, 'tmux_socket_path'> | null | undefined,
+  run: () => T,
+): T {
+  const socketPath = config?.tmux_socket_path?.trim();
+  if (!socketPath) return run();
+
+  const previousTmux = process.env.TMUX;
+  const previousPane = process.env.TMUX_PANE;
+  process.env.TMUX = `${socketPath},${process.pid},0`;
+  delete process.env.TMUX_PANE;
+  try {
+    return run();
+  } finally {
+    if (typeof previousTmux === 'string') process.env.TMUX = previousTmux;
+    else delete process.env.TMUX;
+    if (typeof previousPane === 'string') process.env.TMUX_PANE = previousPane;
+    else delete process.env.TMUX_PANE;
+  }
+}
+
 export function isScalingEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
   const raw = env[OMX_TEAM_SCALING_ENABLED_ENV];
   if (!raw) return false;
@@ -822,7 +843,7 @@ export async function scaleDown(
           targetWorkers.map(async (w) => {
             const status = await readWorkerStatus(sanitized, w.name, leaderCwd);
             return status.state === 'idle' || status.state === 'done' ||
-                   status.state === 'draining' || !isWorkerAlive(sessionName, w.index, w.pane_id);
+                   status.state === 'draining' || !withPersistedTmuxSocket(config, () => isWorkerAlive(sessionName, w.index, w.pane_id));
           }),
         );
         if (allDrained.every(Boolean)) break;
@@ -836,10 +857,10 @@ export async function scaleDown(
     const targetPaneIds = targetWorkers
       .map((w) => w.pane_id)
       .filter((paneId): paneId is string => typeof paneId === 'string' && paneId.trim().length > 0);
-    await teardownWorkerPanes(targetPaneIds, {
+    await withPersistedTmuxSocket(config, () => teardownWorkerPanes(targetPaneIds, {
       leaderPaneId,
       hudPaneId,
-    });
+    }));
     const detachedWorktreesToRollback: EnsureWorktreeResult[] = targetWorkers
       .filter((worker) =>
         worker.worktree_created === true

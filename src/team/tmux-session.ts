@@ -46,6 +46,7 @@ export interface TeamSession {
   name: string; // tmux target in "session:window" form
   workerCount: number;
   cwd: string;
+  tmuxSocketPath: string | null;
   workerPaneIds: string[];
   /** Leader's own pane ID — must never be targeted by worker cleanup routines. */
   leaderPaneId: string;
@@ -1360,14 +1361,14 @@ export function createTeamSession(
   try {
     const tmuxPaneTarget = process.env.TMUX_PANE;
     const displayArgs = tmuxPaneTarget
-      ? ['display-message', '-p', '-t', tmuxPaneTarget, '#{session_name}:#{window_index} #{pane_id}']
-      : ['display-message', '-p', '#{session_name}:#{window_index} #{pane_id}'];
+      ? ['display-message', '-p', '-t', tmuxPaneTarget, '#{session_name}:#{window_index} #{pane_id} #{socket_path}']
+      : ['display-message', '-p', '#{session_name}:#{window_index} #{pane_id} #{socket_path}'];
     const context = runTmux(displayArgs);
     if (!context.ok) {
       const paneHint = tmuxPaneTarget ? ` (TMUX_PANE=${tmuxPaneTarget})` : '';
       throw new Error(`failed to detect current tmux target${paneHint}: ${context.stderr}`);
     }
-    const [sessionAndWindow = '', detectedLeaderPaneId = ''] = context.stdout.split(' ');
+    const [sessionAndWindow = '', detectedLeaderPaneId = '', detectedSocketPath = ''] = context.stdout.split(' ');
     const [sessionName, windowIndex] = (sessionAndWindow || '').split(':');
     if (!sessionName || !windowIndex || !detectedLeaderPaneId || !detectedLeaderPaneId.startsWith('%')) {
       throw new Error(`failed to parse current tmux target: ${context.stdout}`);
@@ -1552,6 +1553,7 @@ export function createTeamSession(
       name: teamTarget,
       workerCount,
       cwd,
+      tmuxSocketPath: detectedSocketPath.trim() || null,
       workerPaneIds,
       leaderPaneId,
       hudPaneId,

@@ -376,6 +376,7 @@ export function applyCreatedInteractiveSessionToConfig(
   workerPaneIds: Array<string | undefined>,
 ): void {
   config.tmux_session = createdSession.name;
+  config.tmux_socket_path = createdSession.tmuxSocketPath;
   config.leader_pane_id = createdSession.leaderPaneId;
   config.hud_pane_id = createdSession.hudPaneId;
   config.resize_hook_name = createdSession.resizeHookName;
@@ -386,6 +387,27 @@ export function applyCreatedInteractiveSessionToConfig(
     if (config.workers[i]) {
       config.workers[i].pane_id = paneId;
     }
+  }
+}
+
+function withPersistedTmuxSocket<T>(
+  config: Pick<TeamConfig, 'tmux_socket_path'> | null | undefined,
+  run: () => T,
+): T {
+  const socketPath = config?.tmux_socket_path?.trim();
+  if (!socketPath) return run();
+
+  const previousTmux = process.env.TMUX;
+  const previousPane = process.env.TMUX_PANE;
+  process.env.TMUX = `${socketPath},${process.pid},0`;
+  delete process.env.TMUX_PANE;
+  try {
+    return run();
+  } finally {
+    if (typeof previousTmux === 'string') process.env.TMUX = previousTmux;
+    else delete process.env.TMUX;
+    if (typeof previousPane === 'string') process.env.TMUX_PANE = previousPane;
+    else delete process.env.TMUX_PANE;
   }
 }
 
@@ -1688,7 +1710,10 @@ async function readTeamActivitySnapshot(teamName: string, cwd: string): Promise<
   const workers = config?.workers ?? [];
   const activeWorkers = workerLaunchMode === 'prompt'
     ? (config ? workers.filter((worker) => isPromptWorkerAlive(config, worker)).map((worker) => worker.name) : [])
-    : workers.filter((worker) => isWorkerAlive(config?.tmux_session ?? tmuxSession, worker.index, worker.pane_id)).map((worker) => worker.name);
+    : withPersistedTmuxSocket(
+      config ?? manifest ?? null,
+      () => workers.filter((worker) => isWorkerAlive(config?.tmux_session ?? tmuxSession, worker.index, worker.pane_id)).map((worker) => worker.name),
+    );
 
   return {
     phase: phaseState?.current_phase ?? null,
@@ -1705,7 +1730,11 @@ async function isTeamStateStale(teamName: string, cwd: string): Promise<boolean>
   if (snapshot.phase && isTerminalPhase(snapshot.phase)) return false;
   if (snapshot.workerLaunchMode === 'prompt') return snapshot.activeWorkers.length === 0;
   if (!snapshot.tmuxSession) return true;
-  const sessions = new Set(listTeamSessions());
+  const [config, manifest] = await Promise.all([
+    readTeamConfig(teamName, cwd),
+    readTeamManifestV2(teamName, cwd),
+  ]);
+  const sessions = withPersistedTmuxSocket(config ?? manifest ?? null, () => new Set(listTeamSessions()));
   if (!sessions.has(snapshot.tmuxSession)) return true;
   return snapshot.activeWorkers.length === 0;
 }
@@ -3474,19 +3503,20 @@ export async function startTeam(
       // In split-pane topology, we must not kill the entire tmux session; kill only created panes.
       if (sessionName.includes(':')) {
         for (const [index, paneId] of createdWorkerPaneIds.entries()) {
-          const panePid = getWorkerPanePid(sessionName, index + 1, paneId);
+          const panePid = withPersistedTmuxSocket(config, () => getWorkerPanePid(sessionName, index + 1, paneId));
           if (panePid) {
             await terminateTrackedProcessTree(panePid);
           }
           try {
-            await killWorkerByPaneIdAsync(paneId, createdLeaderPaneId);
+            await withPersistedTmuxSocket(config, () => killWorkerByPaneIdAsync(paneId, createdLeaderPaneId));
           } catch (err) {
             process.stderr.write(`[team/runtime] operation failed: ${err}\n`);
           }
         }
         if (config?.hud_pane_id) {
           try {
-            await killWorkerByPaneIdAsync(config.hud_pane_id, createdLeaderPaneId);
+            const hudPaneId = config.hud_pane_id;
+            await withPersistedTmuxSocket(config, () => killWorkerByPaneIdAsync(hudPaneId, createdLeaderPaneId));
           } catch (err) {
             process.stderr.write(`[team/runtime] operation failed: ${err}\n`);
           }
@@ -4123,7 +4153,7 @@ export async function shutdownTeam(teamName: string, cwd: string, options: Shutd
       const anyAlive = config.workers.some((w) => (
         config.worker_launch_mode === 'prompt'
           ? isPromptWorkerAlive(config, w)
-          : isWorkerAlive(sessionName, w.index, w.pane_id)
+          : withPersistedTmuxSocket(config, () => isWorkerAlive(sessionName, w.index, w.pane_id))
       ));
       if (!anyAlive) break;
       // Sleep 2s
@@ -4133,7 +4163,7 @@ export async function shutdownTeam(teamName: string, cwd: string, options: Shutd
     const anyAliveAfterWait = config.workers.some((w) => (
       config.worker_launch_mode === 'prompt'
         ? isPromptWorkerAlive(config, w)
-        : isWorkerAlive(sessionName, w.index, w.pane_id)
+        : withPersistedTmuxSocket(config, () => isWorkerAlive(sessionName, w.index, w.pane_id))
     ));
     if (anyAliveAfterWait && !force) {
       // Workers may have accepted shutdown but not exited (Codex TUI requires explicit exit).
@@ -4146,13 +4176,13 @@ export async function shutdownTeam(teamName: string, cwd: string, options: Shutd
   const hudPaneId = config.hud_pane_id;
   if (config.worker_launch_mode === 'interactive') {
     const sharedSessionTopology = sessionName.includes(':')
-      ? resolveSharedSessionShutdownTopology(sessionName, leaderPaneId)
+      ? withPersistedTmuxSocket(config, () => resolveSharedSessionShutdownTopology(sessionName, leaderPaneId))
       : null;
     const effectiveLeaderPaneId = sharedSessionTopology?.leaderPaneId ?? leaderPaneId;
     const effectiveHudPaneId = sharedSessionTopology?.hudPaneIds.find((paneId) => paneId === hudPaneId)
       ?? sharedSessionTopology?.hudPaneIds[0]
       ?? hudPaneId;
-    const livePaneIds = sharedSessionTopology?.livePaneIds ?? listPaneIds(sessionName);
+    const livePaneIds = sharedSessionTopology?.livePaneIds ?? withPersistedTmuxSocket(config, () => listPaneIds(sessionName));
     let shutdownPaneIds = collectShutdownPaneIds({
       config,
       livePaneIds,
@@ -4161,7 +4191,7 @@ export async function shutdownTeam(teamName: string, cwd: string, options: Shutd
     });
     if (shouldPrekillInteractiveShutdownProcessTrees(sessionName)) {
       const workerPanePids = shutdownPaneIds
-        .map((paneId) => getWorkerPanePid(sessionName, 1, paneId))
+        .map((paneId) => withPersistedTmuxSocket(config, () => getWorkerPanePid(sessionName, 1, paneId)))
         .filter((pid): pid is number => typeof pid === 'number' && Number.isFinite(pid) && pid > 0);
       for (const panePid of workerPanePids) {
         await terminateTrackedProcessTree(panePid);
@@ -4174,7 +4204,7 @@ export async function shutdownTeam(teamName: string, cwd: string, options: Shutd
       const unregistered = unregisterResizeHook(config.resize_hook_target, resizeHookName);
       if (!unregistered && isTmuxAvailable()) {
         const baseSession = sessionName.split(':')[0];
-        const sessionStillActive = listTeamSessions().includes(baseSession);
+        const sessionStillActive = withPersistedTmuxSocket(config, () => listTeamSessions().includes(baseSession));
         if (sessionStillActive) {
           resizeHookWarning = `failed to unregister resize hook ${resizeHookName}`;
         }
@@ -4188,9 +4218,9 @@ export async function shutdownTeam(teamName: string, cwd: string, options: Shutd
     }
     let restoredHudPaneId: string | null = null;
     if (effectiveHudPaneId) {
-      await killWorkerByPaneIdAsync(effectiveHudPaneId, effectiveLeaderPaneId ?? undefined);
+      await withPersistedTmuxSocket(config, () => killWorkerByPaneIdAsync(effectiveHudPaneId, effectiveLeaderPaneId ?? undefined));
       if (sessionName.includes(':')) {
-        restoredHudPaneId = restoreStandaloneHudPane(effectiveLeaderPaneId, cwd);
+        restoredHudPaneId = withPersistedTmuxSocket(config, () => restoreStandaloneHudPane(effectiveLeaderPaneId, cwd));
         if (!restoredHudPaneId) {
           config.hud_pane_id = null;
         }
@@ -4198,15 +4228,18 @@ export async function shutdownTeam(teamName: string, cwd: string, options: Shutd
     }
     shutdownPaneIds = collectShutdownPaneIds({
       config,
-      livePaneIds: listPaneIds(sessionName),
+      livePaneIds: withPersistedTmuxSocket(config, () => listPaneIds(sessionName)),
       restoredStandaloneHudPaneId: restoredHudPaneId,
       leaderPaneId: effectiveLeaderPaneId,
       hudPaneId: effectiveHudPaneId,
     });
-    const teardownSummary = await teardownWorkerPanes(shutdownPaneIds, {
-      leaderPaneId: effectiveLeaderPaneId,
-      hudPaneId: restoredHudPaneId ?? effectiveHudPaneId,
-    });
+    const teardownSummary = await withPersistedTmuxSocket(
+      config,
+      () => teardownWorkerPanes(shutdownPaneIds, {
+        leaderPaneId: effectiveLeaderPaneId,
+        hudPaneId: restoredHudPaneId ?? effectiveHudPaneId,
+      }),
+    );
     if (teardownSummary.kill.fatalFailed > 0) {
       cleanupErrors.push(`teardownWorkerPanes:failed=${teardownSummary.kill.fatalFailed}`);
     }
@@ -4400,12 +4433,12 @@ export async function resumeTeam(teamName: string, cwd: string): Promise<TeamRun
   } else {
     // Check if tmux session still exists
     const baseSession = config.tmux_session.split(':')[0];
-    const teamSessions = getTeamTmuxSessions(sanitized);
+    const teamSessions = withPersistedTmuxSocket(config, () => getTeamTmuxSessions(sanitized));
     const hasMatchingTeamSession = teamSessions.includes(baseSession);
-    const hasLiveWorker = config.workers.some((worker) => (
+    const hasLiveWorker = withPersistedTmuxSocket(config, () => config.workers.some((worker) => (
       isWorkerAlive(config.tmux_session, worker.index, worker.pane_id)
       || isWorkerPaneOpen(config.tmux_session, worker.index, worker.pane_id)
-    ));
+    )));
     if (!hasMatchingTeamSession && !hasLiveWorker) return null;
   }
 
@@ -4450,8 +4483,8 @@ async function findActiveTeams(cwd: string, leaderSessionId: string): Promise<st
       active.push(teamName);
       continue;
     }
-    const hasSession = new Set(listTeamSessions()).has(tmuxSession);
-    const hasLiveWorker = (cfg?.workers ?? []).some((worker) => isWorkerAlive(cfg?.tmux_session ?? tmuxSession, worker.index, worker.pane_id));
+    const hasSession = withPersistedTmuxSocket(cfg ?? manifest ?? null, () => new Set(listTeamSessions()).has(tmuxSession));
+    const hasLiveWorker = withPersistedTmuxSocket(cfg ?? manifest ?? null, () => (cfg?.workers ?? []).some((worker) => isWorkerAlive(cfg?.tmux_session ?? tmuxSession, worker.index, worker.pane_id)));
     if (hasSession || hasLiveWorker) active.push(teamName);
   }
   return active;

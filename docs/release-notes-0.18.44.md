@@ -1,22 +1,19 @@
 # oh-my-codex-pennix v0.18.44
 
-> Release notes template for the Pennix fork. The tag workflow regenerates this file into the final GitHub release body.
-
-## Summary
-
-This release ships a targeted team lifecycle fix for non-ambient tmux servers: interactive teams now persist the owning tmux socket identity, so later shutdown, resume, activity detection, and scale-down cleanup stay bound to the server that actually owns the team panes.
+`0.18.44` is a targeted team lifecycle patch for non-ambient tmux servers. It ships the persisted tmux socket identity fix so shutdown, resume, active-team discovery, and scale-down cleanup keep talking to the tmux server that actually owns the team panes, even when the ambient `TMUX` environment is missing or points elsewhere.
 
 ## Highlights
 
-- Team state now preserves tmux server identity - interactive team startup records `tmux_socket_path` together with the saved tmux target, so later lifecycle commands do not depend on ambient `TMUX` inheritance.
-- Shutdown, resume, and activity checks are deterministic across synthetic tmux servers - worker liveness checks, pane listings, PID lookup, teardown, shared-session shutdown topology, and active-team detection now run against the persisted tmux socket when one is available.
-- Synthetic-server cleanup is covered by a real regression test - runtime coverage now proves that forced shutdown on a synthetic tmux server kills only the worker pane and preserves the leader pane.
+- **Team state now preserves tmux server identity** - interactive team startup records `tmux_socket_path` together with the saved tmux target, so later lifecycle commands do not rely on ambient `TMUX` inheritance.
+- **Shutdown, resume, and activity checks are deterministic across synthetic tmux servers** - worker liveness checks, pane listings, PID lookup, teardown, shared-session shutdown topology, and active-team detection now run against the persisted tmux socket when one is available.
+- **Synthetic-server cleanup is covered by a real regression test** - runtime coverage now proves that forced shutdown on a synthetic tmux server kills only the worker pane and preserves the leader pane.
 
 ## Fixes / compatibility
 
 - `src/team/state.ts` and `src/team/state/types.ts` now persist `tmux_socket_path` in config/manifest defaults and round-tripping.
 - `src/team/tmux-session.ts` captures `#{socket_path}` during interactive session creation, and `src/team/runtime.ts` stores it on the team config.
 - `src/team/runtime.ts` and `src/team/scaling.ts` temporarily bind tmux-dependent lifecycle operations to the persisted socket when present; ambient-session behavior is unchanged when no socket is persisted.
+- `src/team/__tests__/runtime.test.ts` and `src/team/__tests__/state.test.ts` add regression coverage for the new persisted-socket contract.
 
 ## Merged PR inventory
 

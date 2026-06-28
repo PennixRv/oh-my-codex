@@ -51,6 +51,7 @@ import { readTeamEvents } from '../state/events.js';
 import { sanitizeTeamName } from '../tmux-session.js';
 import { buildInternalTeamName, resolveTeamIdentityScope } from '../team-identity.js';
 import { writePersistedApprovedTeamExecutionBinding } from '../approved-execution.js';
+import { isRealTmuxAvailable, withTempTmuxSession } from './tmux-test-fixture.js';
 
 const coverageRun = process.env.NODE_V8_COVERAGE ? true : false;
 const skipSlowLifecycleUnderCoverage = coverageRun
@@ -1934,6 +1935,7 @@ esac
         name: 'leader:0',
         workerCount: 2,
         cwd,
+        tmuxSocketPath: null,
         workerPaneIds: ['%2', '%3'],
         leaderPaneId: '%1',
         hudPaneId: '%4',
@@ -6823,6 +6825,58 @@ esac
           assert.match(tmuxLog, /kill-pane -t %13/);
         },
       );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+
+  it('shutdownTeam uses persisted tmux socket identity for synthetic-server cleanup', async () => {
+    if (!isRealTmuxAvailable()) return;
+
+    const cwd = await mkdtemp(join(tmpdir(), 'omx-runtime-shutdown-socket-identity-'));
+    try {
+      await withTempTmuxSession(async (fixture) => {
+        await initTeamState('team-shutdown-socket-identity', 'shutdown socket identity test', 'executor', 1, cwd);
+        const config = await readTeamConfig('team-shutdown-socket-identity', cwd);
+        assert.ok(config);
+        if (!config) return;
+
+        const workerPaneId = execFileSync(
+          'tmux',
+          ['-S', fixture.socketPath, 'split-window', '-h', '-d', '-P', '-F', '#{pane_id}', '-t', fixture.windowTarget, 'sleep 300'],
+          { encoding: 'utf-8', stdio: ['ignore', 'pipe', 'pipe'] },
+        ).trim();
+
+        config.tmux_session = fixture.windowTarget;
+        config.tmux_socket_path = fixture.socketPath;
+        config.leader_pane_id = fixture.leaderPaneId;
+        config.hud_pane_id = null;
+        config.workers[0]!.pane_id = workerPaneId;
+        await saveTeamConfig(config, cwd);
+
+        const previousTmux = process.env.TMUX;
+        const previousPane = process.env.TMUX_PANE;
+        delete process.env.TMUX;
+        delete process.env.TMUX_PANE;
+        try {
+          await shutdownTeam('team-shutdown-socket-identity', cwd, { force: true });
+        } finally {
+          if (typeof previousTmux === 'string') process.env.TMUX = previousTmux;
+          else delete process.env.TMUX;
+          if (typeof previousPane === 'string') process.env.TMUX_PANE = previousPane;
+          else delete process.env.TMUX_PANE;
+        }
+
+        const teamRoot = join(cwd, '.omx', 'state', 'team', 'team-shutdown-socket-identity');
+        assert.equal(existsSync(teamRoot), false);
+
+        const panesAfter = execFileSync(
+          'tmux',
+          ['-S', fixture.socketPath, 'list-panes', '-t', fixture.windowTarget, '-F', '#{pane_id}'],
+          { encoding: 'utf-8', stdio: ['ignore', 'pipe', 'pipe'] },
+        ).trim().split('\n').filter(Boolean);
+        assert.deepEqual(panesAfter, [fixture.leaderPaneId]);
+      });
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }

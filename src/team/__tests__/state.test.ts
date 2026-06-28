@@ -246,6 +246,7 @@ describe('team state', () => {
       assert.equal(diskCfg.max_workers, DEFAULT_MAX_WORKERS);
       assert.equal(diskCfg.tmux_session, 'omx-team-team-1');
       assert.equal(diskCfg.lifecycle_profile, 'default');
+      assert.equal(diskCfg.tmux_socket_path, null);
       assert.equal(diskCfg.leader_pane_id, null);
       assert.equal(diskCfg.hud_pane_id, null);
       assert.equal(diskCfg.resize_hook_name, null);
@@ -278,6 +279,8 @@ describe('team state', () => {
       const manifest = await readTeamManifestV2('team-linked', cwd);
       assert.equal(readCfg?.lifecycle_profile, 'default');
       assert.equal(manifest?.lifecycle_profile, 'default');
+      assert.equal(readCfg?.tmux_socket_path, null);
+      assert.equal(manifest?.tmux_socket_path, null);
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -579,6 +582,7 @@ exit 1
       assert.equal(manifest?.workspace_mode, 'worktree');
       assert.deepEqual(manifest?.worktree_mode, { enabled: true, detached: false, name: 'feature/team-meta' });
       assert.equal(manifest?.lifecycle_profile, 'default');
+      assert.equal(manifest?.tmux_socket_path, null);
       assert.equal(manifest?.leader_pane_id, null);
       assert.equal(manifest?.hud_pane_id, null);
       assert.equal(manifest?.resize_hook_name, null);

@@ -4,6 +4,46 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+## [0.18.44] - 2026-06-28
+
+Patch release for the Pennix fork team lifecycle line: interactive teams now persist the owning tmux socket identity, so shutdown, resume, activity discovery, and scale-down cleanup stay bound to the tmux server that actually owns the team panes.
+
+### Fixed
+
+- **Team state now records the owning tmux socket** - interactive team startup persists `tmux_socket_path` next to the saved tmux target, so later lifecycle commands do not depend on whatever `TMUX` environment happens to be ambient.
+- **Lifecycle tmux operations no longer drift to the wrong server** - shutdown, resume, active-team discovery, pane PID lookup, pane teardown, shared-session topology checks, and scale-down worker cleanup temporarily bind to the persisted socket before issuing tmux operations.
+- **Synthetic-server cleanup is regression-covered** - runtime coverage now proves that forced shutdown against a synthetic tmux server kills only the worker pane and preserves the leader pane.
+
+### Verification
+
+- Release readiness evidence is tracked in `docs/qa/release-readiness-0.18.44.md`.
+
+## [0.18.43] - 2026-06-28
+
+Patch release that fixes the detached tmux launch regression discovered while preparing `0.18.42` for publication.
+
+### Fixed
+
+- **Detached tmux launch works again with HUD disabled by default** - detached tmux launches no longer skip the finalize/attach path just because no HUD pane was created.
+- **HUD-only launch tests explicitly opt in** - CLI regression cases that are specifically validating HUD behavior now write explicit HUD config instead of depending on an obsolete default.
+
+### Verification
+
+- Release readiness evidence is tracked in `docs/qa/release-readiness-0.18.43.md`.
+
+## [0.18.42] - 2026-06-28
+
+Patch release for the Pennix fork HUD-disabled team lifecycle contract.
+
+### Fixed
+
+- **Team HUD now respects fork defaults** - `omx team` no longer auto-creates a HUD pane when repo HUD config is absent or explicitly sets `"enabled": false`.
+- **Shutdown no longer resurrects HUD** - shared-session shutdown no longer restores a standalone HUD pane when HUD is disabled for the repo.
+
+### Verification
+
+- Release readiness evidence is tracked in `docs/qa/release-readiness-0.18.42.md`.
+
 ## [0.18.41] - 2026-06-28
 
 Patch release that finishes the `0.18.40` hook-review line by repairing the tmux scrollback regression fixture used during release validation.
