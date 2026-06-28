@@ -95,6 +95,8 @@ This file is generated for a live OMX team worker run and is disposable.
 
    \`omx team api send-message --input '{"team_name":"${options.teamName}","from_worker":"${options.workerName}","to_worker":"leader-fixed","body":"ACK: ${options.workerName} initialized"}' --json\`
 
+   The leader reviews unread \`leader-fixed\` mailbox messages asynchronously from the real mailbox on the next \`UserPromptSubmit\` or \`PreToolUse\` native-hook boundary. Do not wait for visible tmux injection or an immediate typed reply before continuing.
+
 4. Resolve canonical team state root in this order: \`OMX_TEAM_STATE_ROOT\` env -> worker identity \`team_state_root\` -> config/manifest \`team_state_root\` -> local cwd fallback.
 5. Read task files from \`${options.teamStateRoot}/team/${options.teamName}/tasks/task-<id>.json\` using bare \`task_id\` values in APIs.
 6. Start with the first non-blocked assigned task and use claim-safe lifecycle APIs only:
@@ -103,7 +105,7 @@ ${buildTransitionLifecycleFileGuidance(options.teamName, "<id>")}
 7. Use mailbox delivery flow:
    - \`omx team api mailbox-list --input '{"team_name":"${options.teamName}","worker":"${options.workerName}"}' --json\`
    - \`omx team api mailbox-mark-delivered --input '{"team_name":"${options.teamName}","worker":"${options.workerName}","message_id":"<MESSAGE_ID>"}' --json\`
-8. Preserve leader steering via inbox/mailbox nudges; task payload stays in inbox/task JSON, not this file.
+8. Preserve leader steering via inbox plus mailbox-boundary context; task payload stays in inbox/task JSON, not this file.
 9. Do not pass \`workingDirectory\` to legacy team_* MCP tools; use \`omx team api\` CLI interop.
 
 ## Message Protocol
@@ -400,6 +402,7 @@ You are a team worker in team "${teamName}". Your identity and assigned tasks ar
 1. Read your inbox file at the path provided in your first instruction
 2. Treat your current runtime worker instructions plus inbox as authoritative for this live run. After startup ACK, continue directly to the first non-blocked assigned task; do not stop for another bootstrap document.
 3. Send an ACK to the lead using CLI interop \`omx team api send-message --input <json> --json\` (to_worker="leader-fixed") once initialized
+   - Leader review is asynchronous: unread \`leader-fixed\` mailbox messages surface from the real mailbox on the leader's next \`UserPromptSubmit\` or \`PreToolUse\` boundary. Do not wait for visible tmux injection or an immediate typed reply.
 4. Resolve canonical team state root in this order:
    - OMX_TEAM_STATE_ROOT env
    - worker identity team_state_root
@@ -938,6 +941,8 @@ ${approvedContextSection}${workerGoalSection}
 
    \`omx team api send-message --input '{"team_name":"${teamName}","from_worker":"${workerName}","to_worker":"leader-fixed","body":"ACK: ${workerName} initialized"}' --json\`
 
+   The leader reads unread \`leader-fixed\` mailbox messages asynchronously from the real mailbox on the next \`UserPromptSubmit\` or \`PreToolUse\` native-hook boundary. Do not wait for a visible tmux nudge or immediate typed response before continuing.
+
 3. Start with the first non-blocked task
 4. Resolve canonical team state root in this order: \`OMX_TEAM_STATE_ROOT\` env -> worker identity \`team_state_root\` -> config/manifest \`team_state_root\` -> local cwd fallback.
 5. Read the task file for your selected task id at \`${teamStateRoot}/team/${teamName}/tasks/task-<id>.json\` (example: \`task-1.json\`)
@@ -1240,14 +1245,8 @@ export function buildLeaderMailboxTriggerDirective(
     "mailbox",
     "leader-fixed.json",
   );
-  if (teamStateRoot !== ".omx/state") {
-    return {
-      intent: "pending-mailbox-review",
-      text: `Read ${mailboxPath}; new msg from ${fromWorker}. Review it; decide next step.`,
-    };
-  }
   return {
     intent: "pending-mailbox-review",
-    text: `Read ${mailboxPath}; ${fromWorker} sent a new message. Review it and decide the next concrete step.`,
+    text: `Leader mailbox update from ${fromWorker}: unread context is sourced from ${mailboxPath} on the next UserPromptSubmit or PreToolUse boundary.`,
   };
 }

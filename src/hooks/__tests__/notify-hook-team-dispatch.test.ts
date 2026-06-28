@@ -611,7 +611,7 @@ exit 0
         kind: 'mailbox',
         to_worker: 'leader-fixed',
         message_id: msg.message_id,
-        trigger_message: 'Read .omx/state/team/alpha/mailbox/leader-fixed.json; worker-1 sent a new message. Review it and decide the next concrete step.',
+        trigger_message: 'Leader mailbox update from worker-1: unread context is sourced from .omx/state/team/alpha/mailbox/leader-fixed.json on the next UserPromptSubmit or PreToolUse boundary.',
       }, cwd);
 
       const modulePath = new URL('../../../dist/scripts/notify-hook/team-dispatch.js', import.meta.url).pathname;
@@ -621,7 +621,8 @@ exit 0
 
       const tmuxLog = await readFile(tmuxLogPath, 'utf8');
       assert.match(tmuxLog, /send-keys -t %99/);
-      assert.match(tmuxLog, /mailbox\/leader-fixed\.json; worker-1 sent a new message/);
+      assert.match(tmuxLog, /Leader mailbox update from worker-1/);
+      assert.match(tmuxLog, /mailbox\/leader-fixed\.json on the next UserPromptSubmit or PreToolUse boundary/);
       assert.doesNotMatch(tmuxLog, /send-keys -t .*devsess/);
     } finally {
       if (typeof prevPath === 'string') process.env.PATH = prevPath;
@@ -726,7 +727,7 @@ exit 0
         kind: 'mailbox',
         to_worker: 'leader-fixed',
         message_id: msg.message_id,
-        trigger_message: 'Read .omx/state/team/alpha/mailbox/leader-fixed.json; worker-1 sent a new message. Review it and decide the next concrete step.',
+        trigger_message: 'Leader mailbox update from worker-1: unread context is sourced from .omx/state/team/alpha/mailbox/leader-fixed.json on the next UserPromptSubmit or PreToolUse boundary.',
       }, cwd);
 
       const modulePath = new URL('../../../dist/scripts/notify-hook/team-dispatch.js', import.meta.url).pathname;
@@ -822,7 +823,7 @@ exit 0
         kind: 'mailbox',
         to_worker: 'leader-fixed',
         message_id: msg.message_id,
-        trigger_message: 'Read .omx/state/team/alpha/mailbox/leader-fixed.json; worker-1 sent a new message. Review it and decide the next concrete step.',
+        trigger_message: 'Leader mailbox update from worker-1: unread context is sourced from .omx/state/team/alpha/mailbox/leader-fixed.json on the next UserPromptSubmit or PreToolUse boundary.',
       }, cwd);
 
       const modulePath = new URL('../../../dist/scripts/notify-hook/team-dispatch.js', import.meta.url).pathname;

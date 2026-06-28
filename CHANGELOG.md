@@ -4,6 +4,21 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+## [0.18.46] - 2026-06-28
+
+Patch release for the Pennix fork team communication contract: the currently injected/runtime-visible team guidance now consistently describes the real leader/worker mailbox handoff model instead of older reminder-oriented wording.
+
+### Fixed
+
+- **Leader/worker communication wording is now aligned across active injection surfaces** - the installable `team` and `worker` skills, plugin-mirrored skills, and runtime-generated worker instructions now consistently describe worker -> leader communication as real `leader-fixed` mailbox delivery plus leader-side native-hook boundary review.
+- **Leader review boundaries are stated correctly** - current guidance now says unread leader mailbox messages surface as native-hook `additionalContext` on the next `UserPromptSubmit` or `PreToolUse` boundary, instead of implying a `PreToolUse`-only system-reminder path.
+- **Worker runtime instructions no longer imply visible prompt nudges** - worker-facing guidance now explicitly says not to wait for immediate visible tmux injection or typed leader replies after sending mailbox updates.
+- **Root worker `AGENTS.md` and internal leader-mailbox trigger text now match the same contract** - disposable worktree-root runtime instructions and `leader-fixed` dispatch trigger records now describe mailbox-boundary review instead of older nudge/review-immediately wording.
+
+### Verification
+
+- Release readiness evidence is tracked in `docs/qa/release-readiness-0.18.46.md`.
+
 ## [0.18.45] - 2026-06-28
 
 Patch release for the Pennix fork native-hook line: internal OMX `PostToolUse` observation and remediation failures no longer surface as fatal Codex hook errors across every session that shares the globally installed user hook.

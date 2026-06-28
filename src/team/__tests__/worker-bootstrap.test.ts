@@ -1178,17 +1178,18 @@ describe("worker bootstrap", () => {
     );
     assert.match(
       message,
-      /Read .*\.omx\/state\/team\/team-mail\/mailbox\/leader-fixed\.json/,
+      /Leader mailbox update from worker-2:/,
     );
-    assert.match(message, /worker-2 sent a new message/);
-    assert.match(message, /Review it and decide the next concrete step/);
+    assert.match(message, /unread context is sourced from .*\.omx\/state\/team\/team-mail\/mailbox\/leader-fixed\.json/);
+    assert.match(message, /next UserPromptSubmit or PreToolUse boundary/);
     assert.doesNotMatch(message, /\bReply\b/i);
   });
 
   it("buildLeaderMailboxTriggerDirective records leader mailbox-review intent separately", () => {
     const directive = buildLeaderMailboxTriggerDirective("team-mail", "worker-2");
     assert.equal(directive.intent, "pending-mailbox-review");
-    assert.match(directive.text, /worker-2 sent a new message/);
+    assert.match(directive.text, /Leader mailbox update from worker-2:/);
+    assert.match(directive.text, /next UserPromptSubmit or PreToolUse boundary/);
     assert.doesNotMatch(directive.text, /OMX_INTENT/);
   });
 
@@ -1200,10 +1201,13 @@ describe("worker bootstrap", () => {
     );
     assert.match(
       message,
-      /read .*\$OMX_TEAM_STATE_ROOT\/team\/team-mail\/mailbox\/leader-fixed\.json/i,
+      /Leader mailbox update from worker-2:/,
     );
-    assert.match(message, /new msg from worker-2/i);
-    assert.match(message, /review it; decide next step/i);
+    assert.match(
+      message,
+      /unread context is sourced from .*\$OMX_TEAM_STATE_ROOT\/team\/team-mail\/mailbox\/leader-fixed\.json/i,
+    );
+    assert.match(message, /next UserPromptSubmit or PreToolUse boundary/);
     assert.doesNotMatch(message, /\breply\b/i);
     assert.ok(message.length < 200);
   });
@@ -1313,6 +1317,9 @@ describe("worker bootstrap", () => {
     assert.match(content, /Inbox path: \/tmp\/state\/team\/root-team\/workers\/worker-3\/inbox\.md/);
     assert.match(content, /mailbox\/worker-3\.json/);
     assert.match(content, /runtime file plus your inbox as the authoritative instructions/i);
+    assert.match(content, /leader reviews unread `leader-fixed` mailbox messages asynchronously/i);
+    assert.match(content, /next `UserPromptSubmit` or `PreToolUse` native-hook boundary/i);
+    assert.match(content, /Do not wait for visible tmux injection or an immediate typed reply/i);
     assert.match(content, /omx team api claim-task --input/);
     assert.match(content, /omx team api transition-task-status --input/);
     assert.match(content, /--result-file "\$RESULT_FILE"/);
@@ -1405,6 +1412,10 @@ describe("worker bootstrap", () => {
     assert.match(content, /Inbox path: \/tmp\/project\/.omx\/state\/team\/root-team\/workers\/worker-2\/inbox\.md/);
     assert.match(content, /Mailbox path: \/tmp\/project\/.omx\/state\/team\/root-team\/mailbox\/worker-2\.json/);
     assert.match(content, /Leader mailbox path: \/tmp\/project\/.omx\/state\/team\/root-team\/mailbox\/leader-fixed\.json/);
+    assert.match(content, /leader reviews unread `leader-fixed` mailbox messages asynchronously/i);
+    assert.match(content, /next `UserPromptSubmit` or `PreToolUse` native-hook boundary/i);
+    assert.match(content, /inbox plus mailbox-boundary context/i);
+    assert.doesNotMatch(content, /inbox\/mailbox nudges/i);
     assert.match(content, /You are operating as the \*\*writer\*\* role/);
     assert.match(content, /omx team api claim-task --input/);
     assert.match(content, /omx team api transition-task-status --input/);

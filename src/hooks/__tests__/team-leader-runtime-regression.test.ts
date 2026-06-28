@@ -260,7 +260,7 @@ describe('team leader runtime regressions', () => {
           to_worker: 'leader-fixed',
           worker_index: 0,
           pane_id: '%42',
-          trigger_message: 'Read .omx/state/team/leader-mailbox-dispatch/mailbox/leader-fixed.json; worker-1 sent a new message. Review it and decide the next concrete step.',
+          trigger_message: 'Leader mailbox update from worker-1: unread context is sourced from .omx/state/team/leader-mailbox-dispatch/mailbox/leader-fixed.json on the next UserPromptSubmit or PreToolUse boundary.',
           message_id: 'msg-1',
           inbox_correlation_key: 'msg-1',
           transport_preference: 'hook_preferred_with_fallback',

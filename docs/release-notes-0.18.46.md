@@ -1,17 +1,13 @@
 # oh-my-codex-pennix v0.18.46
 
-> Release notes template for the Pennix fork. The tag workflow regenerates this file into the final GitHub release body.
-
-## Summary
-
-This release ships a narrow team communication contract alignment for the Pennix fork: currently injected/runtime-visible team guidance now consistently describes the real leader/worker mailbox handoff model already implemented in OMX.
+`0.18.46` is a narrow team communication contract patch for the Pennix fork. It does not change the core mailbox handoff logic; it aligns the currently injected/runtime-visible text surfaces so leader and worker sessions are told the same thing about how team communication really works.
 
 ## Highlights
 
-- Current injected team guidance now matches the real mailbox model - installable `team` / `worker` skills, plugin-mirrored skills, and runtime-generated worker instructions now consistently describe worker -> leader updates as real `leader-fixed` mailbox messages, not visible tmux nudges.
-- Leader boundary behavior is described accurately - current guidance now says unread leader mailbox messages surface as native-hook `additionalContext` on the next `UserPromptSubmit` or `PreToolUse` boundary.
-- Worker expectations are clearer - worker-facing runtime text now explicitly says not to wait for immediate visible tmux injection or typed leader replies after sending mailbox updates.
-- Worktree-root runtime instructions and leader-mailbox dispatch trigger text now follow the same contract - disposable root `AGENTS.md` guidance and `leader-fixed` dispatch records no longer use older nudge/review-immediately wording.
+- **Current injected team guidance now matches the real mailbox model** - installable `team` / `worker` skills, plugin-mirrored skills, and runtime-generated worker instructions now consistently describe worker -> leader updates as real `leader-fixed` mailbox messages, not visible tmux nudges.
+- **Leader boundary behavior is described accurately** - current guidance now says unread leader mailbox messages surface as native-hook `additionalContext` on the next `UserPromptSubmit` or `PreToolUse` boundary.
+- **Worker expectations are clearer** - worker-facing runtime text now explicitly says not to wait for immediate visible tmux injection or typed leader replies after sending mailbox updates.
+- **Worktree-root runtime instructions and leader trigger records are aligned too** - disposable root `AGENTS.md` guidance and internal `leader-fixed` dispatch trigger text now use the same mailbox-boundary contract instead of older nudge/review-immediately wording.
 
 ## Fixes / compatibility
 

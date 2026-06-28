@@ -8411,7 +8411,7 @@ esac
           assert.equal(latest?.last_reason, 'fallback_confirmed:leader_mailbox_notified');
           assert.match(
             latest?.trigger_message ?? '',
-            /Read \/tmp\/custom-team-state-root\/team\/team-leader-inject\/mailbox\/leader-fixed\.json; new msg from worker-1\./,
+            /Leader mailbox update from worker-1: unread context is sourced from \/tmp\/custom-team-state-root\/team\/team-leader-inject\/mailbox\/leader-fixed\.json on the next UserPromptSubmit or PreToolUse boundary\./,
           );
 
           const deliveryLog = await readTeamDeliveryLog(cwd);

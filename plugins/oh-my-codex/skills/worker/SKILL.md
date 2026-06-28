@@ -34,6 +34,8 @@ The lead will see your message in:
 
 `<team_state_root>/team/<teamName>/mailbox/leader-fixed.json`
 
+Leader review is asynchronous and boundary-based: the leader consumes unread `leader-fixed` mailbox messages from the real mailbox on the next `UserPromptSubmit` or `PreToolUse` native-hook boundary. Do not wait for an immediate visible reply or any tmux injection.
+
 Use CLI interop:
 - `omx team api send-message --input <json> --json` with `{team_name, from_worker, to_worker:"leader-fixed", body}`
 

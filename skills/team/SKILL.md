@@ -178,7 +178,7 @@ Important:
 - Worker panes are independent full Codex/Claude CLI sessions
 - Workers may run in separate git worktrees (`omx team --worktree[=<name>]`) while sharing one team state root
 - Worker ACKs go to `mailbox/leader-fixed.json`
-- Leader receives async task-completion context via hook-specific output (non-blocking system reminders); no tmux send-keys injection is used.
+- Leader receives async worker-mailbox context from the native hook boundary reader. Unread `leader-fixed` mailbox messages surface as hook `additionalContext` on the next `UserPromptSubmit` or `PreToolUse` boundary; no tmux send-keys injection is used.
 - Submit routing uses this CLI resolution order per worker trigger:
   1) explicit worker CLI provided by runtime state (persisted on worker identity/config),
   2) `OMX_TEAM_WORKER_CLI_MAP` entry for that worker index,
@@ -245,7 +245,7 @@ sleep 30 && omx team status <team-name>
 
 Repeat that check while the team stays active, or use `omx team await <team-name> --timeout-ms 30000 --json` when event-driven waiting is a better fit.
 
-Leader notification is async and non-blocking: completed tasks and worker state changes appear as system-reminder context on the next PreToolUse hook. If you see an `[OMX team]` context block, run `omx team status <team-name>` and handle the result at the next natural pause.
+Leader notification is async and non-blocking: unread worker messages for `leader-fixed` are surfaced from the real mailbox as native-hook `additionalContext` on the next `UserPromptSubmit` or `PreToolUse` boundary. Treat that boundary context as a prompt to review worker mailbox state first, then decide whether to continue the mainline, reconcile results, or take an explicit team action such as `omx team status <team-name>` or `omx team shutdown <team-name>` when the team is actually complete.
 
 ## Message Dispatch Policy (CLI-first, state-first)
 
