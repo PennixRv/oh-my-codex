@@ -1,4 +1,4 @@
-# oh-my-codex-pennix v0.18.50
+# oh-my-codex-pennix v0.18.51
 
 > Release notes template for the Pennix fork. The tag workflow regenerates this file into the final GitHub release body.
 

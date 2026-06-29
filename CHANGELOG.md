@@ -4,6 +4,15 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+## [0.18.51] - 2026-06-29
+
+Patch release for the Pennix fork install and plugin initialization contract:
+
+- global postinstall now best-effort auto-runs plugin setup after an install bump
+- plugin-mode setup stops prompting for OMX-owned AGENTS and developer instruction defaults
+- developer instructions now append the OMX-managed plugin fragment instead of replacing user content
+- uninstall now strips only OMX-managed developer-instruction content and preserves user-authored text
+
 ## [0.18.50] - 2026-06-29
 
 Patch release for the Pennix fork team CLI help surface: startup-shaped `omx team ... --help` invocations now short-circuit to top-level help output instead of attempting a real team launch.
