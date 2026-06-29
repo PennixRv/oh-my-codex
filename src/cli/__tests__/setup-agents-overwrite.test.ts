@@ -6,6 +6,10 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { setup } from '../setup.js';
 import {
+  OMX_DEVELOPER_INSTRUCTIONS,
+  OMX_PLUGIN_DEVELOPER_INSTRUCTIONS,
+} from '../../config/generator.js';
+import {
   addGeneratedAgentsMarker,
   OMX_AGENTS_CONTRACT_HEADING,
   OMX_MANAGED_AGENTS_END_MARKER,
@@ -331,7 +335,7 @@ describe('omx setup AGENTS refresh behavior', () => {
         force: true,
       });
 
-      assert.match(output, /Plugin-mode AGENTS\.md defaults not selected; existing AGENTS\.md left untouched\./);
+      assert.match(output, /Plugin-mode AGENTS\.md defaults skipped; existing AGENTS\.md left untouched\./);
       assert.equal(await readlink(codexAgentsPath), dotfilesAgentsPath);
       assert.match(await readFile(codexAgentsPath, 'utf-8'), /Dotfiles-owned guidance\./);
       assert.match(output, /agents_md: updated=0, unchanged=0, backed_up=0, skipped=1, removed=0/);
@@ -534,7 +538,7 @@ describe('omx setup AGENTS refresh behavior', () => {
       });
 
       assert.equal(promptCalls, 0);
-      assert.match(output, /Plugin-mode AGENTS\.md defaults not selected; existing AGENTS\.md left untouched\./);
+      assert.match(output, /Plugin-mode AGENTS\.md defaults skipped; existing AGENTS\.md left untouched\./);
       assert.equal(await readlink(codexAgentsPath), dotfilesAgentsPath);
       assert.equal(await readFile(dotfilesAgentsPath, 'utf-8'), dotfilesContent);
       assert.match(output, /agents_md: updated=0, unchanged=0, backed_up=0, skipped=1, removed=0/);
@@ -564,7 +568,7 @@ describe('omx setup AGENTS refresh behavior', () => {
         pluginDeveloperInstructionsPrompt: async () => false,
       });
 
-      assert.match(output, /Plugin-mode AGENTS\.md defaults not selected; existing AGENTS\.md left untouched\./);
+      assert.match(output, /Plugin-mode AGENTS\.md defaults skipped; existing AGENTS\.md left untouched\./);
       assert.equal(await readlink(codexAgentsPath), missingAgentsPath);
       assert.equal(existsSync(missingAgentsPath), false);
       assert.match(output, /agents_md: updated=0, unchanged=0, backed_up=0, skipped=1, removed=0/);
@@ -868,6 +872,95 @@ describe('omx setup AGENTS refresh behavior', () => {
       assert.match(output, /agents_md: updated=0, unchanged=0, backed_up=0, skipped=1, removed=0/);
       assert.equal(await readFile(join(wd, 'AGENTS.md'), 'utf-8'), existing);
       assert.equal(existsSync(join(wd, '.omx', 'backups', 'setup')), false);
+    } finally {
+      restoreHome();
+      restoreTty();
+      await rm(wd, { recursive: true, force: true });
+    }
+  });
+});
+
+describe('omx setup plugin developer_instructions behavior', () => {
+  it('appends the OMX plugin fragment to existing custom developer_instructions', async () => {
+    const wd = await mkdtemp(join(tmpdir(), 'omx-setup-plugin-devinst-'));
+    const restoreTty = setMockTty(false);
+    const home = join(wd, 'home');
+    const restoreHome = setMockHome(home);
+    try {
+      await mkdir(join(wd, '.omx', 'state'), { recursive: true });
+      await mkdir(join(home, '.codex'), { recursive: true });
+      await writeFile(
+        join(home, '.codex', 'config.toml'),
+        'developer_instructions = "custom leader rule"\n',
+      );
+
+      const output = await runSetupWithCapturedLogs(wd, {
+        scope: 'user',
+        installMode: 'plugin',
+      });
+      const config = await readFile(join(home, '.codex', 'config.toml'), 'utf-8');
+
+      assert.match(output, /plugin-mode developer_instructions default/i);
+      assert.match(config, /custom leader rule/);
+      assert.match(config, /<omx version=\\"1\\">You have Pennix OMX installed through Codex plugin mode/);
+      assert.equal(countOccurrences(config, '<omx version=\\"1\\">'), 1);
+    } finally {
+      restoreHome();
+      restoreTty();
+      await rm(wd, { recursive: true, force: true });
+    }
+  });
+
+  it('migrates historical managed developer_instructions to the plugin fragment automatically', async () => {
+    const wd = await mkdtemp(join(tmpdir(), 'omx-setup-plugin-devinst-'));
+    const restoreTty = setMockTty(false);
+    const home = join(wd, 'home');
+    const restoreHome = setMockHome(home);
+    try {
+      await mkdir(join(wd, '.omx', 'state'), { recursive: true });
+      await mkdir(join(home, '.codex'), { recursive: true });
+      await writeFile(
+        join(home, '.codex', 'config.toml'),
+        `developer_instructions = ${JSON.stringify(OMX_DEVELOPER_INSTRUCTIONS)}\n`,
+      );
+
+      await runSetupWithCapturedLogs(wd, {
+        scope: 'user',
+        installMode: 'plugin',
+      });
+      const config = await readFile(join(home, '.codex', 'config.toml'), 'utf-8');
+
+      assert.match(config, /<omx version=\\"1\\">You have Pennix OMX installed through Codex plugin mode/);
+      assert.doesNotMatch(config, /Native subagents live in \.codex\/agents/);
+      assert.equal(countOccurrences(config, '<omx version=\\"1\\">'), 1);
+    } finally {
+      restoreHome();
+      restoreTty();
+      await rm(wd, { recursive: true, force: true });
+    }
+  });
+
+  it('keeps the plugin fragment deduped on repeated plugin setup runs', async () => {
+    const wd = await mkdtemp(join(tmpdir(), 'omx-setup-plugin-devinst-'));
+    const restoreTty = setMockTty(false);
+    const home = join(wd, 'home');
+    const restoreHome = setMockHome(home);
+    try {
+      await mkdir(join(wd, '.omx', 'state'), { recursive: true });
+      await mkdir(join(home, '.codex'), { recursive: true });
+      await writeFile(
+        join(home, '.codex', 'config.toml'),
+        `developer_instructions = ${JSON.stringify(`custom header\n\n${OMX_PLUGIN_DEVELOPER_INSTRUCTIONS}`)}\n`,
+      );
+
+      await runSetupWithCapturedLogs(wd, {
+        scope: 'user',
+        installMode: 'plugin',
+      });
+      const config = await readFile(join(home, '.codex', 'config.toml'), 'utf-8');
+
+      assert.match(config, /custom header/);
+      assert.equal(countOccurrences(config, '<omx version=\\"1\\">'), 1);
     } finally {
       restoreHome();
       restoreTty();

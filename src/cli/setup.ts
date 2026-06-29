@@ -36,9 +36,13 @@ import {
 	buildMergedConfig,
 	getRootModelName,
 	hasLegacyOmxTeamRunTable,
+	appendManagedOmxDeveloperInstructions,
+	hasCurrentOmxPluginDeveloperInstructionsFragment,
+	isCurrentOmxPluginDeveloperInstructionsFragment,
 	LEGACY_OMX_PLUGIN_DEVELOPER_INSTRUCTIONS,
 	stripExistingOmxBlocks,
 	stripExistingSharedMcpRegistryBlock,
+	stripManagedOmxDeveloperInstructions,
 	mergeSharedMcpRegistryBlock,
 	stripOmxEnvSettings,
 	stripOmxFeatureFlags,
@@ -152,7 +156,13 @@ type PluginDeveloperInstructionsDecisionAction = "add" | "update" | "preserve";
 
 interface PluginDeveloperInstructionsDecision {
 	action: PluginDeveloperInstructionsDecisionAction;
-	state: "missing" | "current" | "historical" | "custom";
+	state:
+		| "missing"
+		| "current"
+		| "historical"
+		| "custom"
+		| "custom-with-fragment"
+		| "invalid";
 	reason: string;
 }
 
@@ -897,24 +907,18 @@ function normalizeDeveloperInstructionsText(value: string): string {
 function classifyPluginDeveloperInstructions(
 	value: unknown,
 ): PluginDeveloperInstructionsDecision["state"] {
-	if (typeof value !== "string") return "custom";
+	if (typeof value !== "string") return "invalid";
 	const normalized = normalizeDeveloperInstructionsText(value);
-	if (
-		normalized ===
-		normalizeDeveloperInstructionsText(OMX_PLUGIN_DEVELOPER_INSTRUCTIONS)
-	) {
-		return "current";
-	}
-	if (
-		normalized ===
-		normalizeDeveloperInstructionsText(LEGACY_OMX_PLUGIN_DEVELOPER_INSTRUCTIONS)
-	) {
+	if (isCurrentOmxPluginDeveloperInstructionsFragment(normalized)) {
 		return "current";
 	}
 	if (
 		normalized === normalizeDeveloperInstructionsText(OMX_DEVELOPER_INSTRUCTIONS)
 	) {
 		return "historical";
+	}
+	if (hasCurrentOmxPluginDeveloperInstructionsFragment(normalized)) {
+		return "custom-with-fragment";
 	}
 	return "custom";
 }
@@ -926,22 +930,6 @@ function readRootDeveloperInstructions(config: string): unknown | undefined {
 		return parsed.developer_instructions;
 	} catch {
 		return Symbol.for("omx.invalid-developer-instructions");
-	}
-}
-
-async function askYesNoDefaultYes(question: string): Promise<boolean> {
-	if (!process.stdin.isTTY || !process.stdout.isTTY) {
-		return false;
-	}
-	const rl = createInterface({
-		input: process.stdin,
-		output: process.stdout,
-	});
-	try {
-		const answer = (await rl.question(question)).trim().toLowerCase();
-		return answer === "" || answer === "y" || answer === "yes";
-	} finally {
-		rl.close();
 	}
 }
 
@@ -982,74 +970,45 @@ async function resolvePluginDeveloperInstructionsDecision(
 		: "";
 	const value = readRootDeveloperInstructions(existing);
 	if (value === undefined) {
-		if (options.pluginDeveloperInstructionsPrompt) {
-			return legacyPluginDeveloperInstructionsDecision(
-				await options.pluginDeveloperInstructionsPrompt(configPath),
-				"missing",
-			);
-		}
-		const install = await askYesNoDefaultYes(
-			`Plugin mode: add OMX developer_instructions bootstrap to "${configPath}"? [Y/n]: `,
-		);
-		return install
-			? {
-					action: "add",
-					state: "missing",
-					reason: "missing developer_instructions",
-				}
-			: {
-					action: "preserve",
-					state: "missing",
-					reason: "missing developer_instructions skipped",
-				};
+		return {
+			action: "add",
+			state: "missing",
+			reason: "missing developer_instructions",
+		};
 	}
 
 	const state = classifyPluginDeveloperInstructions(value);
-	if (state === "current") {
+	if (state === "current" || state === "custom-with-fragment") {
 		return {
 			action: "preserve",
 			state,
-			reason: "current OMX developer_instructions already installed",
+			reason:
+				state === "current"
+					? "current OMX developer_instructions already installed"
+					: "custom developer_instructions already include OMX fragment",
 		};
 	}
 
 	if (state === "historical") {
-		const updateDecision = options.pluginDeveloperInstructionsPrompt
-			? legacyPluginDeveloperInstructionsDecision(
-					await options.pluginDeveloperInstructionsPrompt(configPath),
-					state,
-				)
-			: await askYesNoDefaultYes(
-					`Plugin mode: update OMX developer_instructions bootstrap at "${configPath}"? [Y/n]: `,
-				)
-				? {
-						action: "update",
-						state,
-						reason: "recognized historical OMX developer_instructions",
-					} satisfies PluginDeveloperInstructionsDecision
-				: {
-						action: "preserve",
-						state,
-						reason: "historical OMX developer_instructions preserved",
-					} satisfies PluginDeveloperInstructionsDecision;
-		const update = updateDecision.action === "update";
-		return update
-			? {
-					action: "update",
-					state,
-					reason: "recognized historical OMX developer_instructions",
-				}
-			: {
-					action: "preserve",
-					state,
-					reason: "historical OMX developer_instructions preserved",
-				};
+		return {
+			action: "update",
+			state,
+			reason: "recognized historical OMX developer_instructions",
+		};
+	}
+
+	if (state === "custom") {
+		return {
+			action: "update",
+			state,
+			reason: "append OMX developer_instructions fragment to custom instructions",
+		};
 	}
 
 	return {
 		action: "preserve",
-		state: "custom",
-		reason: "custom or unknown developer_instructions preserved",
+		state,
+		reason: "invalid or non-string developer_instructions preserved",
 	};
 }
 
@@ -1562,12 +1521,11 @@ function stripPluginModeLegacyRootDefaults(
 	}
 
 	let nextConfig = result.join("\n").replace(/\n{3,}/g, "\n\n");
+	const currentDeveloperInstructions = readRootDeveloperInstructions(nextConfig);
 	if (
-		developerInstructionsDecision.action === "update" &&
-		developerInstructionsDecision.state === "historical" &&
-		classifyPluginDeveloperInstructions(
-			readRootDeveloperInstructions(nextConfig),
-		) === "historical"
+		typeof currentDeveloperInstructions === "string" &&
+		stripManagedOmxDeveloperInstructions(currentDeveloperInstructions).cleaned
+			.length === 0
 	) {
 		nextConfig = removeRootTomlKey(nextConfig, "developer_instructions");
 	}
@@ -1865,24 +1823,19 @@ async function applyPluginDeveloperInstructionsDefault(
 		return options.decision.state === "missing" ? "skipped" : "exists";
 	}
 
-	const line = `developer_instructions = ${JSON.stringify(OMX_PLUGIN_DEVELOPER_INSTRUCTIONS)}`;
-	const hasExistingDeveloperInstructions = rootHasTomlKey(
-		existing,
-		"developer_instructions",
-	);
-	if (hasExistingDeveloperInstructions && options.decision.action === "add") {
-		summary.skipped += 1;
-		if (options.verbose) {
-			console.log(
-				"  skipped plugin developer_instructions default: root developer_instructions already exists",
-			);
-		}
-		return "exists";
-	}
-
-	const nextConfig = hasExistingDeveloperInstructions
+	const currentValue = readRootDeveloperInstructions(existing);
+	const nextValue =
+		typeof currentValue === "string"
+			? appendManagedOmxDeveloperInstructions(currentValue)
+			: OMX_PLUGIN_DEVELOPER_INSTRUCTIONS;
+	const line = `developer_instructions = ${JSON.stringify(nextValue)}`;
+	const nextConfig = rootHasTomlKey(existing, "developer_instructions")
 		? replaceRootTomlKey(existing, "developer_instructions", line)
 		: insertRootTomlKey(existing, line);
+	if (nextConfig === existing) {
+		summary.unchanged += 1;
+		return "exists";
+	}
 	const destinationExists = existsSync(configPath);
 	if (
 		await ensureBackup(configPath, destinationExists, backupContext, options)
@@ -1896,7 +1849,7 @@ async function applyPluginDeveloperInstructionsDefault(
 	summary.updated += 1;
 	if (options.verbose) {
 		console.log(
-			`  ${options.dryRun ? "would add" : "added"} plugin developer_instructions default to ${configPath}`,
+			`  ${options.dryRun ? "would apply" : "applied"} plugin developer_instructions default to ${configPath}`,
 		);
 	}
 	return "updated";
@@ -2103,13 +2056,7 @@ export async function setup(options: SetupOptions = {}): Promise<void> {
 		pluginAgentsMdIsSymlink = false;
 	}
 	const usePluginAgentsMdDefault = isPluginInstallMode
-		? options.mergeAgents || pluginAgentsMdIsSymlink
-			? false
-			: force
-				? true
-				: pluginAgentsMdPrompt
-					? await pluginAgentsMdPrompt(pluginAgentsMdDst)
-					: await promptForPluginAgentsMdDefault(pluginAgentsMdDst)
+		? !(options.mergeAgents || pluginAgentsMdIsSymlink)
 		: false;
 
 	console.log(`${OMX_DISPLAY_NAME} setup`);
@@ -2754,8 +2701,8 @@ export async function setup(options: SetupOptions = {}): Promise<void> {
 				summary.agentsMd.skipped += 1;
 				console.log(
 					pluginAgentsMdExists
-						? "  Plugin-mode AGENTS.md defaults not selected; existing AGENTS.md left untouched.\n"
-						: "  Plugin-mode AGENTS.md defaults not selected; no AGENTS.md was generated.\n",
+						? "  Plugin-mode AGENTS.md defaults skipped; existing AGENTS.md left untouched.\n"
+						: "  Plugin-mode AGENTS.md defaults skipped; no AGENTS.md was generated.\n",
 				);
 			}
 		} else {

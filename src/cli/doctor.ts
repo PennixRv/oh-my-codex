@@ -32,6 +32,7 @@ import { getPackageRoot } from "../utils/package.js";
 import {
 	hasLegacyOmxTeamRunTable,
 	getModelContextRecommendation,
+	hasCurrentOmxPluginDeveloperInstructionsFragment,
 } from "../config/generator.js";
 import {
 	MANAGED_HOOK_EVENTS,
@@ -87,6 +88,7 @@ import {
 	OMX_PACKAGE_NAME,
 	isOmxPackageName,
 } from "../utils/package.js";
+import { readUserInstallStamp } from "./update.js";
 
 interface DoctorOptions {
 	verbose?: boolean;
@@ -124,6 +126,30 @@ interface DoctorPaths {
 	skillsDir: string;
 	agentsDir: string;
 	stateDir: string;
+}
+
+async function checkInstallStamp(
+	codexHomeDir: string,
+): Promise<Check | null> {
+	const stamp = await readUserInstallStamp(join(codexHomeDir, ".omx", "install-state.json"));
+	if (!stamp?.installed_version) return null;
+	if (
+		typeof stamp.setup_completed_version === "string" &&
+		stamp.setup_completed_version === stamp.installed_version
+	) {
+		return {
+			name: "Install stamp",
+			status: "pass",
+			message: `installed_version ${stamp.installed_version} matches setup_completed_version`,
+		};
+	}
+	return {
+		name: "Install stamp",
+		status: "warn",
+		message:
+			`OMX appears installed (${stamp.installed_version}) but automatic setup is incomplete` +
+			`; package-manager lifecycle scripts may have been blocked. Run "omx setup" to finish setup.`,
+	};
 }
 
 const OMX_PLUGIN_CACHE_PATH_HINT = `${OMX_LOCAL_MARKETPLACE_NAME}/oh-my-codex`;
@@ -273,6 +299,8 @@ export async function doctor(options: DoctorOptions = {}): Promise<void> {
 
 	// Check 4: Config file
 	checks.push(await checkConfig(paths.configPath));
+	const installStampCheck = await checkInstallStamp(paths.codexHomeDir);
+	if (installStampCheck) checks.push(installStampCheck);
 
 	// Check 4.1: Model context recommendation
 	const contextRecommendationCheck = await checkModelContextRecommendation(

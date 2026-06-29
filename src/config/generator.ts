@@ -174,6 +174,12 @@ export const OMX_PLUGIN_DEVELOPER_INSTRUCTIONS =
   `<omx version="1">You have ${OMX_FORK_USER_FACING_NAME} installed through Codex plugin mode. AGENTS.md is the orchestration brain and main control surface. Follow AGENTS.md for skill/keyword routing and $name workflow invocation. When spawning native subagents, set \`agent_type\` to an installed role and never omit it for OMX work. Registered Codex plugin marketplace surfaces supply ${OMX_FORK_USER_FACING_NAME} workflows and plugin-scoped companion resources when the plugin is installed. Setup still installs native agent role TOML files under the active Codex home so agent_type routing works. Do not assume bundled prompt/skill files are copied into local .codex prompts/skills directories in plugin mode. User-installed skills may still live under ~/.codex/skills. Use outcome-first, concise progress updates: state the target result, constraints, validation evidence, and stop condition before adding process detail.</omx>`;
 export const LEGACY_OMX_PLUGIN_DEVELOPER_INSTRUCTIONS =
   `<omx version="1">You have ${OMX_LEGACY_DISPLAY_NAME} installed through Codex plugin mode. AGENTS.md is the orchestration brain and main control surface. Follow AGENTS.md for skill/keyword routing and $name workflow invocation. When spawning native subagents, set \`agent_type\` to an installed role and never omit it for OMX work. Registered Codex plugin marketplace surfaces supply OMX workflows and plugin-scoped companion resources when the plugin is installed. Setup still installs native agent role TOML files under the active Codex home so agent_type routing works. Do not assume bundled prompt/skill files are copied into local .codex prompts/skills directories in plugin mode. User-installed skills may still live under ~/.codex/skills. Use outcome-first, concise progress updates: state the target result, constraints, validation evidence, and stop condition before adding process detail.</omx>`;
+const OMX_PLUGIN_DEVELOPER_INSTRUCTION_FRAGMENTS = [
+  OMX_PLUGIN_DEVELOPER_INSTRUCTIONS,
+  LEGACY_OMX_PLUGIN_DEVELOPER_INSTRUCTIONS,
+] as const;
+const OMX_PLUGIN_DEVELOPER_INSTRUCTION_FRAGMENT_PATTERN =
+  /<omx version="1">[\s\S]*?<\/omx>/g;
 const SHARED_MCP_REGISTRY_MARKER =
   `${OMX_DISPLAY_NAME} (OMX) Shared MCP Registry Sync`;
 const LEGACY_SHARED_MCP_REGISTRY_MARKER =
@@ -308,6 +314,90 @@ export function hasLegacyOmxTeamRunTable(config: string): boolean {
 
 function unwrapTomlString(value: string | undefined): string | undefined {
   return value?.match(/^"(.*)"$/)?.[1];
+}
+
+function normalizeDeveloperInstructionsText(value: string): string {
+  return value.replace(/\r\n/g, "\n").trim();
+}
+
+export function isCurrentOmxPluginDeveloperInstructionsFragment(
+  value: string,
+): boolean {
+  const normalized = normalizeDeveloperInstructionsText(value);
+  return OMX_PLUGIN_DEVELOPER_INSTRUCTION_FRAGMENTS.some(
+    (fragment) => normalizeDeveloperInstructionsText(fragment) === normalized,
+  );
+}
+
+export function hasCurrentOmxPluginDeveloperInstructionsFragment(
+  value: string,
+): boolean {
+  const normalized = normalizeDeveloperInstructionsText(value);
+  return Array.from(
+    normalized.matchAll(OMX_PLUGIN_DEVELOPER_INSTRUCTION_FRAGMENT_PATTERN),
+  ).some((match) => isCurrentOmxPluginDeveloperInstructionsFragment(match[0]));
+}
+
+export function stripManagedOmxDeveloperInstructions(
+  value: string,
+): { cleaned: string; removed: boolean; removedHistorical: boolean } {
+  let removed = false;
+  let removedHistorical = false;
+  let cleaned = value.replace(
+    OMX_PLUGIN_DEVELOPER_INSTRUCTION_FRAGMENT_PATTERN,
+    (fragment) => {
+      if (!isCurrentOmxPluginDeveloperInstructionsFragment(fragment)) {
+        return fragment;
+      }
+      removed = true;
+      return "";
+    },
+  );
+
+  const normalizedCleaned = normalizeDeveloperInstructionsText(cleaned);
+  if (
+    normalizedCleaned === normalizeDeveloperInstructionsText(OMX_DEVELOPER_INSTRUCTIONS)
+    || normalizedCleaned === normalizeDeveloperInstructionsText(LEGACY_OMX_DEVELOPER_INSTRUCTIONS)
+  ) {
+    removed = true;
+    removedHistorical = true;
+    cleaned = "";
+  } else {
+    const next = cleaned
+      .replace(OMX_DEVELOPER_INSTRUCTIONS, () => {
+        removed = true;
+        removedHistorical = true;
+        return "";
+      })
+      .replace(LEGACY_OMX_DEVELOPER_INSTRUCTIONS, () => {
+        removed = true;
+        removedHistorical = true;
+        return "";
+      });
+    cleaned = next;
+  }
+
+  cleaned = cleaned
+    .replace(/\n{3,}/g, "\n\n")
+    .replace(/[ \t]+\n/g, "\n")
+    .trim();
+
+  return { cleaned, removed, removedHistorical };
+}
+
+export function appendManagedOmxDeveloperInstructions(
+  value: string,
+  fragment = OMX_PLUGIN_DEVELOPER_INSTRUCTIONS,
+): string {
+  const stripped = stripManagedOmxDeveloperInstructions(value);
+  if (hasCurrentOmxPluginDeveloperInstructionsFragment(value)) {
+    return stripped.cleaned.length > 0
+      ? `${stripped.cleaned}\n\n${fragment}`
+      : fragment;
+  }
+  return stripped.cleaned.length > 0
+    ? `${stripped.cleaned}\n\n${fragment}`
+    : fragment;
 }
 
 export function getRootModelName(config: string): string | undefined {

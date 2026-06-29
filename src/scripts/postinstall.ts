@@ -7,13 +7,15 @@ import {
   type UserInstallStamp,
   writeUserInstallStamp,
 } from "../cli/update.js";
+import { setup } from "../cli/setup.js";
 import { getPackageRoot, OMX_DISPLAY_NAME } from "../utils/package.js";
 
 type PostinstallStatus =
   | "noop-local"
   | "noop-same-version"
   | "noop-missing-version"
-  | "hinted";
+  | "setup-completed"
+  | "setup-failed";
 
 export interface PostinstallResult {
   status: PostinstallStatus;
@@ -25,6 +27,7 @@ interface PostinstallDependencies {
   getCurrentVersion: () => Promise<string | null>;
   log: (message: string) => void;
   readStamp: () => Promise<UserInstallStamp | null>;
+  runSetup: () => Promise<void>;
   writeStamp: (stamp: UserInstallStamp) => Promise<void>;
 }
 
@@ -56,6 +59,7 @@ const defaultDependencies: PostinstallDependencies = {
   getCurrentVersion,
   log: (message) => console.log(message),
   readStamp: () => readUserInstallStamp(),
+  runSetup: () => setup({ scope: "user", installMode: "plugin" }),
   writeStamp: (stamp) => writeUserInstallStamp(stamp),
 };
 
@@ -80,18 +84,54 @@ export async function runPostinstall(
     return { status: "noop-same-version", version: currentStampVersion };
   }
 
-  await resolved.writeStamp({
-    installed_version: currentStampVersion,
-    ...(typeof existingStamp?.setup_completed_version === "string"
-      ? { setup_completed_version: existingStamp.setup_completed_version }
-      : {}),
-    updated_at: new Date().toISOString(),
-  });
-
-  resolved.log(
-    `[omx] Installed ${OMX_DISPLAY_NAME} v${currentStampVersion}. OMX setup is explicit opt-in; run \`omx setup\` or \`omx update\` when you're ready.`,
-  );
-  return { status: "hinted", version: currentStampVersion };
+  try {
+    await resolved.runSetup();
+    await resolved.writeStamp({
+      installed_version: currentStampVersion,
+      setup_completed_version: currentStampVersion,
+      ...(typeof existingStamp?.install_channel === "string"
+        ? { install_channel: existingStamp.install_channel }
+        : {}),
+      ...(typeof existingStamp?.install_source === "string"
+        ? { install_source: existingStamp.install_source }
+        : {}),
+      ...(typeof existingStamp?.install_revision === "string"
+        ? { install_revision: existingStamp.install_revision }
+        : {}),
+      ...(typeof existingStamp?.dev_base_version === "string"
+        ? { dev_base_version: existingStamp.dev_base_version }
+        : {}),
+      updated_at: new Date().toISOString(),
+    });
+    resolved.log(
+      `[omx] Installed ${OMX_DISPLAY_NAME} v${currentStampVersion} and completed automatic plugin setup.`,
+    );
+    return { status: "setup-completed", version: currentStampVersion };
+  } catch (error) {
+    await resolved.writeStamp({
+      installed_version: currentStampVersion,
+      ...(typeof existingStamp?.setup_completed_version === "string"
+        ? { setup_completed_version: existingStamp.setup_completed_version }
+        : {}),
+      ...(typeof existingStamp?.install_channel === "string"
+        ? { install_channel: existingStamp.install_channel }
+        : {}),
+      ...(typeof existingStamp?.install_source === "string"
+        ? { install_source: existingStamp.install_source }
+        : {}),
+      ...(typeof existingStamp?.install_revision === "string"
+        ? { install_revision: existingStamp.install_revision }
+        : {}),
+      ...(typeof existingStamp?.dev_base_version === "string"
+        ? { dev_base_version: existingStamp.dev_base_version }
+        : {}),
+      updated_at: new Date().toISOString(),
+    });
+    resolved.log(
+      `[omx] Installed ${OMX_DISPLAY_NAME} v${currentStampVersion}, but automatic plugin setup did not complete. Run \`omx setup\` or \`omx doctor\` to finish setup. Cause: ${error instanceof Error ? error.message : String(error)}`,
+    );
+    return { status: "setup-failed", version: currentStampVersion };
+  }
 }
 
 export async function main(): Promise<void> {

@@ -24,10 +24,11 @@ describe("isGlobalInstallLifecycle", () => {
 });
 
 describe("runPostinstall", () => {
-  it("records the installed version and prints an explicit opt-in setup hint for bumped global installs", async () => {
+  it("runs automatic plugin setup and marks setup completed for bumped global installs", async () => {
     const root = await mkdtemp(join(tmpdir(), "omx-postinstall-"));
     const stampPath = join(root, ".codex", ".omx", "install-state.json");
     const logs: string[] = [];
+    let setupCalls = 0;
 
     try {
       const result = await runPostinstall({
@@ -39,24 +40,28 @@ describe("runPostinstall", () => {
           setup_completed_version: "0.14.0",
           updated_at: "2026-04-20T00:00:00.000Z",
         }),
+        runSetup: async () => {
+          setupCalls += 1;
+        },
         writeStamp: async (stamp) => writeUserInstallStamp(stamp, stampPath),
       });
 
-      assert.equal(result.status, "hinted");
-      assert.match(logs.join("\n"), /OMX setup is explicit opt-in; run `omx setup` or `omx update` when you're ready/);
+      assert.equal(result.status, "setup-completed");
+      assert.equal(setupCalls, 1);
+      assert.match(logs.join("\n"), /completed automatic plugin setup/);
 
       const stamp = JSON.parse(await readFile(stampPath, "utf-8")) as {
         installed_version: string;
         setup_completed_version: string;
       };
       assert.equal(stamp.installed_version, "0.14.1");
-      assert.equal(stamp.setup_completed_version, "0.14.0");
+      assert.equal(stamp.setup_completed_version, "0.14.1");
     } finally {
       await rm(root, { recursive: true, force: true });
     }
   });
 
-  it("records the installed version and preserves prior setup state when printing the postinstall hint", async () => {
+  it("preserves prior setup state when automatic setup fails", async () => {
     const root = await mkdtemp(join(tmpdir(), "omx-postinstall-"));
     const stampPath = join(root, ".codex", ".omx", "install-state.json");
     const logs: string[] = [];
@@ -71,11 +76,15 @@ describe("runPostinstall", () => {
           setup_completed_version: "0.14.0",
           updated_at: "2026-04-20T00:00:00.000Z",
         }),
+        runSetup: async () => {
+          throw new Error("boom");
+        },
         writeStamp: async (stamp) => writeUserInstallStamp(stamp, stampPath),
       });
 
-      assert.equal(result.status, "hinted");
-      assert.match(logs.join("\n"), /run `omx setup` or `omx update` when you're ready/i);
+      assert.equal(result.status, "setup-failed");
+      assert.match(logs.join("\n"), /automatic plugin setup did not complete/i);
+      assert.match(logs.join("\n"), /Run `omx setup` or `omx doctor`/i);
 
       const stamp = JSON.parse(await readFile(stampPath, "utf-8")) as {
         installed_version: string;

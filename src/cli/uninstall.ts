@@ -11,6 +11,7 @@ import {
   isOmxManagedNotifyCommand,
   sanitizePreviousNotifyCommand,
   stripExistingOmxBlocks,
+  stripManagedOmxDeveloperInstructions,
   stripOmxEnvSettings,
   stripOmxTopLevelKeys,
   stripOmxFeatureFlags,
@@ -88,7 +89,7 @@ function detectOmxConfigArtifacts(config: string): {
   const hasTopLevelKeys =
     /^\s*notify\s*=.*node/m.test(config) ||
     /^\s*model_reasoning_effort\s*=/m.test(config) ||
-    /^\s*developer_instructions\s*=.*oh-my-codex(?:-pennix)?/m.test(config);
+    /^\s*developer_instructions\s*=/m.test(config);
 
   const hasFeatureFlags =
     /^\s*multi_agent\s*=\s*true/m.test(config) ||
@@ -107,6 +108,108 @@ function detectOmxConfigArtifacts(config: string): {
     hasFeatureFlags,
     hasExploreRoutingEnv,
   };
+}
+
+function cleanupDeveloperInstructionsRootKey(config: string): string {
+  const parsed = parseRootDeveloperInstructions(config);
+  if (!parsed) return config;
+  const { cleaned, removed, removedHistorical } = stripManagedOmxDeveloperInstructions(
+    parsed.value,
+  );
+  if (!removed && !removedHistorical) return config;
+  if (cleaned.length === 0) {
+    return removeRootTomlKeyCompat(config, "developer_instructions");
+  }
+  return replaceRootTomlKeyCompat(
+    config,
+    "developer_instructions",
+    `developer_instructions = ${JSON.stringify(cleaned)}`,
+  );
+}
+
+function parseRootDeveloperInstructions(
+  config: string,
+): { value: string } | null {
+  const match = config.match(/^\s*developer_instructions\s*=\s*(.+)$/m);
+  if (!match) return null;
+  try {
+    const parsed = JSON.parse(match[1]) as unknown;
+    return typeof parsed === "string" ? { value: parsed } : null;
+  } catch {
+    return null;
+  }
+}
+
+function findRootTomlKeyRangeCompat(
+  config: string,
+  key: string,
+): { start: number; end: number } | null {
+  const escapedKey = key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const keyPattern = new RegExp(`^\\s*${escapedKey}\\s*=`);
+  const nextRootKeyPattern = /^\s*[A-Za-z0-9_-]+\s*=/;
+  const tablePattern = /^\s*\[/;
+  const linePattern = /.*(?:\r?\n|$)/g;
+  let match: RegExpExecArray | null;
+  let found: { start: number; end: number } | null = null;
+  let inMultiline = false;
+  let multilineDelimiter: '"""' | "'''" | null = null;
+
+  while ((match = linePattern.exec(config)) && match[0] !== "") {
+    const line = match[0];
+    const lineStart = match.index;
+    const lineEnd = lineStart + line.length;
+    const trimmedLine = line.replace(/\r?\n$/, "");
+
+    if (!found) {
+      if (tablePattern.test(trimmedLine)) return null;
+      if (keyPattern.test(trimmedLine)) {
+        found = { start: lineStart, end: lineEnd };
+        const valuePart = trimmedLine.slice(trimmedLine.indexOf("=") + 1);
+        const delimiter = valuePart.includes('"""')
+          ? '"""'
+          : valuePart.includes("'''")
+            ? "'''"
+            : null;
+        if (delimiter && valuePart.split(delimiter).length - 1 === 1) {
+          inMultiline = true;
+          multilineDelimiter = delimiter;
+        } else {
+          return found;
+        }
+      }
+      continue;
+    }
+
+    found.end = lineEnd;
+    if (inMultiline && multilineDelimiter) {
+      if (trimmedLine.includes(multilineDelimiter)) {
+        return found;
+      }
+      continue;
+    }
+    if (tablePattern.test(trimmedLine) || nextRootKeyPattern.test(trimmedLine)) {
+      found.end = lineStart;
+      return found;
+    }
+  }
+
+  return found;
+}
+
+function removeRootTomlKeyCompat(config: string, key: string): string {
+  const range = findRootTomlKeyRangeCompat(config, key);
+  if (!range) return config;
+  const before = config.slice(0, range.start);
+  const after = config.slice(range.end).replace(/^\r?\n?/, "\n");
+  return `${before}${after}`;
+}
+
+function replaceRootTomlKeyCompat(config: string, key: string, line: string): string {
+  const range = findRootTomlKeyRangeCompat(config, key);
+  if (!range) return config;
+  const before = config.slice(0, range.start);
+  const after = config.slice(range.end).replace(/^\r?\n?/, "\n");
+  return `${before}${line}${after}`.replace(/\n?$/, "\n");
 }
 
 function hasNativeHooksFeatureFlag(config: string): boolean {
@@ -246,6 +349,7 @@ async function cleanConfig(
   // Strip OMX top-level keys, then restore a pre-existing user notify when
   // setup had wrapped it in the OMX dispatcher.
   config = stripOmxTopLevelKeys(config);
+  config = cleanupDeveloperInstructionsRootKey(config);
   config = await restorePreviousNotifyIfDispatcher(configPath, config, original);
 
   // Strip OMX-seeded behavioral defaults only when the seeded pair is unchanged.
