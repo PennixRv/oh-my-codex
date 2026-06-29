@@ -1795,6 +1795,34 @@ describe('teamCommand api', () => {
     }
   });
 
+  it('prints team help instead of launching a team when startup-shaped args include --help', async () => {
+    const logs: string[] = [];
+    const originalLog = console.log;
+    try {
+      console.log = (...args: unknown[]) => logs.push(args.map(String).join(' '));
+      await teamCommand(['1:executor', 'ship', 'it', '--help']);
+      assert.equal(logs.length, 1);
+      assert.match(logs[0] ?? '', /Usage: omx team \[N:agent-type\]/);
+      assert.match(logs[0] ?? '', /omx team status <team-name>/);
+    } finally {
+      console.log = originalLog;
+    }
+  });
+
+  it('prints team help when startup-shaped args include --help after deprecated worktree flags', async () => {
+    const logs: string[] = [];
+    const originalLog = console.log;
+    try {
+      console.log = (...args: unknown[]) => logs.push(args.map(String).join(' '));
+      await teamCommand(['--worktree', '1:executor', 'ship', 'it', '--help']);
+      assert.equal(logs.length, 1);
+      assert.match(logs[0] ?? '', /Usage: omx team \[N:agent-type\]/);
+      assert.match(logs[0] ?? '', /--worktree is deprecated/);
+    } finally {
+      console.log = originalLog;
+    }
+  });
+
   it('prints team-api-specific help for omx team api --help', async () => {
     const logs: string[] = [];
     const originalLog = console.log;

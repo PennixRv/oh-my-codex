@@ -4,6 +4,19 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+## [0.18.50] - 2026-06-29
+
+Patch release for the Pennix fork team CLI help surface: startup-shaped `omx team ... --help` invocations now short-circuit to top-level help output instead of attempting a real team launch.
+
+### Fixed
+
+- **Trailing help flags now win over startup-shaped team args** - invocations such as `omx team 1:executor "ship it" --help` and the deprecated-worktree equivalent now print team help instead of falling through to team startup/worktree guards.
+- **Top-level team help behavior is regression-covered** - CLI tests now lock the startup-shaped `--help` and `--worktree ... --help` cases alongside the existing top-level `omx team --help` contract.
+
+### Verification
+
+- Release readiness evidence is tracked in `docs/qa/release-readiness-0.18.50.md`.
+
 ## [0.18.49] - 2026-06-29
 
 Patch release for the Pennix fork team orchestration contract line: leader-facing runtime, prompt, skill, and AGENTS surfaces now consistently describe the intended boundary-driven working model instead of nudging leaders toward periodic status polling.

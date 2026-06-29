@@ -1,16 +1,12 @@
 # oh-my-codex-pennix v0.18.50
 
-> Release notes template for the Pennix fork. The tag workflow regenerates this file into the final GitHub release body.
-
-## Summary
-
-This release ships a narrow team CLI help fix for the Pennix fork: startup-shaped `omx team ... --help` invocations now short-circuit to top-level team help output instead of trying to launch a real team first.
+`0.18.50` is a narrow team CLI help fix for the Pennix fork. It does not change team runtime or orchestration behavior; it makes startup-shaped `omx team ... --help` invocations resolve to top-level help output instead of attempting a real team launch first.
 
 ## Highlights
 
-- Startup-shaped help requests now behave like help requests - `omx team 1:executor "ship it" --help` prints the top-level team usage surface instead of attempting team startup.
-- Deprecated worktree-prefixed help requests behave the same way - `omx team --worktree 1:executor "ship it" --help` now also short-circuits to help output.
-- The fix is narrow and regression-covered - only top-level help parsing changed, and new team CLI tests lock both startup-shaped help cases.
+- **Startup-shaped help requests now print help instead of launching a team** - `omx team 1:executor "ship it" --help` now short-circuits to the top-level team help surface.
+- **Deprecated worktree-prefixed help requests behave the same way** - `omx team --worktree 1:executor "ship it" --help` now also resolves to help output instead of falling into startup/worktree guards.
+- **The fix is locked with new CLI regression coverage** - team CLI tests now cover both startup-shaped help paths alongside the existing `omx team --help` contract.
 
 ## Fixes / compatibility
 

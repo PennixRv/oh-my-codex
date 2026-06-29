@@ -319,6 +319,7 @@ Safety:
 `;
 
 const HELP_TOKENS = new Set(['--help', '-h', 'help']);
+const HELP_FLAGS = new Set(['--help', '-h']);
 
 const TEAM_API_OPERATION_REQUIRED_FIELDS: Record<TeamApiOperation, string[]> = {
   'send-message': ['team_name', 'from_worker', 'to_worker', 'body'],
@@ -1447,6 +1448,9 @@ export async function teamCommand(args: string[], _options: TeamCliOptions = {})
   const teamArgs = parsedWorktree.remainingArgs;
   const [subcommandRaw] = teamArgs;
   const subcommand = (subcommandRaw || '').toLowerCase();
+  const trailingHelpFlag = teamArgs
+    .slice(1)
+    .some((token) => HELP_FLAGS.has((token || '').toLowerCase()));
 
   if (HELP_TOKENS.has(subcommand)) {
     console.log(TEAM_HELP.trim());
@@ -1511,6 +1515,11 @@ export async function teamCommand(args: string[], _options: TeamCliOptions = {})
     }
     console.error(`error operation=${envelope.operation} code=${envelope.error.code}: ${envelope.error.message}`);
     process.exitCode = 1;
+    return;
+  }
+
+  if (trailingHelpFlag) {
+    console.log(TEAM_HELP.trim());
     return;
   }
 
