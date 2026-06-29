@@ -131,6 +131,7 @@ Use explicit team orchestration for feature development, bug investigation, code
 
 <team_pipeline>
 Team mode is the structured multi-agent surface. Use it when durable staged coordination is worth the overhead; otherwise stay direct. Terminal states: `complete`, `failed`, `cancelled`.
+Leader default in team mode: delegate bounded work, continue the mainline, and consume worker results at natural prompt/tool boundaries. Treat `omx team status` as an explicit snapshot tool for startup verification, blocker diagnosis, reconciliation, checkpoints, or pre-shutdown review, not as a periodic polling loop.
 </team_pipeline>
 
 <team_model_resolution>

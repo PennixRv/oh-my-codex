@@ -1435,7 +1435,7 @@ export function buildLeaderMonitoringHints(teamName: string): string[] {
   const sanitized = sanitizeTeamName(teamName);
   return [
     `leader_check: omx team status ${sanitized}`,
-    `leader_loop_hint: while ON, keep checking state (example: sleep 30 && omx team status ${sanitized})`,
+    `leader_loop_hint: continue the mainline; review worker mailbox/additionalContext at prompt/tool boundaries; use omx team status ${sanitized} only for explicit snapshots (startup, blockers, reconciliation, shutdown)`,
   ];
 }
 

@@ -4,6 +4,21 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+## [0.18.49] - 2026-06-29
+
+Patch release for the Pennix fork team orchestration contract line: leader-facing runtime, prompt, skill, and AGENTS surfaces now consistently describe the intended boundary-driven working model instead of nudging leaders toward periodic status polling.
+
+### Fixed
+
+- **Leader startup hints now preserve focus on the mainline** - `omx team` startup output still exposes `omx team status`, but now frames it as an explicit snapshot tool for startup verification, blocker diagnosis, reconciliation, checkpoints, and shutdown rather than a blind loop hint.
+- **Leader-facing idle and nudge wording now prefers mailbox review first** - all-workers-idle and stale-leader guidance now tells the leader to review worker messages and continue the mainline unless an explicit snapshot or reconciliation step is needed.
+- **Prompt, AGENTS, and skill surfaces now agree on the same mental model** - the installed `team` skill, plugin mirror, `team-orchestrator` prompt, root `AGENTS.md`, and coordination docs now describe the same boundary-driven leader/worker posture.
+- **Compaction resume text now matches the same contract** - resuming a team after compaction now points the leader back to mailbox/task evidence first instead of implying status-loop monitoring before follow-up work.
+
+### Verification
+
+- Release readiness evidence is tracked in `docs/qa/release-readiness-0.18.49.md`.
+
 ## [0.18.47] - 2026-06-28
 
 Patch release for the Pennix fork installation/injection contract line: the installed AGENTS and developer-instruction surfaces now accurately describe where OMX workflows, skills, prompts, and native agent roles come from in legacy versus plugin setup modes.

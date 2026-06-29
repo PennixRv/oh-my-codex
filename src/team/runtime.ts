@@ -1485,7 +1485,7 @@ async function writeTeamPreflightContextPacket(params: {
     resume_instructions: [
       `After compaction, reload ${packetPath}`,
       'Verify the active Ultragoal goal still matches this packet before checkpointing.',
-      'Resume Team monitoring with omx team status before dispatching follow-up work.',
+      'Resume Team work from mailbox/task evidence before dispatching follow-up work; use omx team status only if you need a fresh snapshot.',
     ],
   };
   await mkdir(dirname(packetPath), { recursive: true });

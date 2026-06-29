@@ -220,7 +220,7 @@ Normalization requirements:
 Follow this exact lifecycle when running `$team`:
 
 1. Start team and verify startup evidence (team line, tmux target, panes, ACK mailbox)
-2. Monitor task and worker progress with runtime/state tools first (`omx team status <team>`, `omx team resume <team>`, mailbox/state files)
+2. Continue the leader mainline after startup; consume worker results from mailbox/additionalContext boundaries first, and use runtime/state tools (`omx team status <team>`, `omx team resume <team>`, mailbox/state files) when you need an explicit snapshot
 3. Wait for terminal task state before shutdown:
    - `pending=0`
    - `in_progress=0`
@@ -231,19 +231,19 @@ Follow this exact lifecycle when running `$team`:
 Do not run `shutdown` while workers are actively writing updates unless user explicitly requested abort/cancel.
 Do not treat ad-hoc pane typing as primary control flow when runtime/state evidence is available.
 
-### Active leader monitoring rule
+### Active leader attention rule
 
-While a team is **ON/running**, the leader must not go blind. Keep checking live team state until terminal completion.
+While a team is **ON/running**, the leader must stay reachable without drifting into a status-polling loop.
 
-Minimum acceptable loop:
+Default posture:
 
-```bash
-sleep 30 && omx team status <team-name>
-```
+- Start the team and verify startup evidence once.
+- Continue the mainline task in the leader pane.
+- When native-hook `additionalContext` surfaces unread `leader-fixed` mailbox messages on the next `UserPromptSubmit` or `PreToolUse` boundary, review those messages first.
+- Use `omx team status <team-name>` only when you need an explicit snapshot: startup verification, blocker diagnosis, reconciliation, checkpointing, or pre-shutdown review.
+- Use `omx team await <team-name> --timeout-ms 30000 --json` when event-driven waiting is the point of the step.
 
-## Team State Polling
-
-Repeat that check while the team stays active, or use `omx team await <team-name> --timeout-ms 30000 --json` when event-driven waiting is a better fit.
+Do **not** make blind periodic loops such as `sleep 30 && omx team status <team-name>` your default control flow.
 
 Leader notification is async and non-blocking: unread worker messages for `leader-fixed` are surfaced from the real mailbox as native-hook `additionalContext` on the next `UserPromptSubmit` or `PreToolUse` boundary. Treat that boundary context as a prompt to review worker mailbox state first, then decide whether to continue the mainline, reconcile results, or take an explicit team action such as `omx team status <team-name>` or `omx team shutdown <team-name>` when the team is actually complete.
 
@@ -518,9 +518,10 @@ Two cleanup paths exist and must not be confused:
 
 ```
 1. omx team 1:executor "fix bugs"
-2. omx team status <team-name>
-3. omx team shutdown <team-name>
-4. Clean up the finished team state for <team-name>
+2. Continue the leader mainline and consume worker results at prompt/tool boundaries
+3. omx team status <team-name>    # only when an explicit snapshot is needed
+4. omx team shutdown <team-name>
+5. Clean up the finished team state for <team-name>
 ```
 
 ## Limitations

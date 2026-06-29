@@ -76,11 +76,11 @@ export function resolveLeaderStalenessThresholdMs() {
 }
 
 function buildStatusCheckReminder(teamName) {
-  return `Next: check messages; keep orchestrating; if done, gracefully shut down: omx team shutdown ${teamName}.`;
+  return `Next: continue the mainline; at the next boundary review worker state, and use omx team status ${teamName} only if you need a fresh snapshot before reassigning, reconciling, or shutdown.`;
 }
 
 function buildMailboxCheckReminder(teamName) {
-  return `Next: read messages; keep orchestrating; if done, gracefully shut down: omx team shutdown ${teamName}.`;
+  return `Next: review worker messages first, then either continue the mainline or handle the worker request explicitly. Use omx team status ${teamName} only if you need a fresh snapshot before shutdown.`;
 }
 
 function buildWorkerStartEvidenceReminder(teamName, workerName) {
@@ -104,10 +104,10 @@ function buildLeaderActionGuidance(teamName, {
       : 'Next: launch a new team for the next task set.';
   }
   if (leaderActionState === 'done_waiting_on_leader') {
-    return `Next: decide whether to reconcile/merge results or gracefully shut down: omx team shutdown ${teamName}.`;
+    return `Next: reconcile/merge results, then gracefully shut down when complete: omx team shutdown ${teamName}.`;
   }
   if (leaderActionState === 'stuck_waiting_on_leader') {
-    return `Next: omx team status ${teamName}; read worker messages; unblock/reassign or shutdown.`;
+    return `Next: review worker messages/state, unblock or reassign work, and use omx team status ${teamName} only if you need a fresh snapshot before shutdown.`;
   }
   return buildStatusCheckReminder(teamName);
 }

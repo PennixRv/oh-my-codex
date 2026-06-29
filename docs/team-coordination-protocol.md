@@ -8,6 +8,8 @@ Stay lightweight for independent fan-out: isolated per-file/per-doc work, typo/c
 
 Activate the coordinated protocol when task text or task state shows dependencies, shared files/surfaces/contracts, cross-boundary ownership, handoffs, integration/merge work, blocked lanes, or changed assumptions.
 
+Leader posture stays boundary-driven: delegate bounded work, continue the mainline, and consume worker mailbox results at natural prompt/tool boundaries. Use `omx team status` only when you need an explicit snapshot for startup verification, blocker diagnosis, reconciliation, or shutdown.
+
 ## Coordinated protocol
 
 When active, workers apply a concise boundary checklist:

@@ -1187,7 +1187,8 @@ exit 0
       const tmuxLog = await readFile(tmuxLogPath, 'utf-8');
       assert.doesNotMatch(tmuxLog, /no start evidence/);
       assert.match(tmuxLog, /Team ack-with-start: 1 msg\(s\) for leader\./);
-      assert.match(tmuxLog, /Next: read messages; keep orchestrating; if done, gracefully shut down: omx team shutdown ack-with-start\./);
+      assert.match(tmuxLog, /Next: review worker messages first, then either continue the mainline or handle the worker request explicitly\./);
+      assert.match(tmuxLog, /Use omx team status ack-with-start only if you need a fresh snapshot before shutdown\./);
 
       const eventsPath = join(teamDir, 'events', 'events.ndjson');
       const events = (await readFile(eventsPath, 'utf-8')).trim().split('\n').map(line => JSON.parse(line));
@@ -1603,7 +1604,7 @@ if [[ "$cmd" == "display-message" ]]; then
 fi
 if [[ "$cmd" == "capture-pane" ]]; then
   cat <<'EOF'
-Team same-classified-state: 1 msg(s) for leader. Next: read messages; keep orchestrating; if done, gracefully shut down: omx team shutdown same-classified-state.
+Team same-classified-state: 1 msg(s) for leader. Next: review worker messages first, then either continue the mainline or handle the worker request explicitly. Use omx team status same-classified-state only if you need a fresh snapshot before shutdown.
 EOF
   exit 0
 fi
@@ -1975,7 +1976,7 @@ exit 0
       assert.doesNotMatch(tmuxLog, /send-keys/, 'stale-leader follow-up should not visibly inject');
       assert.match(tmuxLog, /Team beta:/);
       assert.match(tmuxLog, /leader stale, \d+ worker pane\(s\) still active\./);
-      assert.match(tmuxLog, /Next: check messages; keep orchestrating; if done, gracefully shut down: omx team shutdown beta\./);
+      assert.match(tmuxLog, /Next: continue the mainline; at the next boundary review worker state, and use omx team status beta only if you need a fresh snapshot before reassigning, reconciling, or shutdown\./);
       assert.doesNotMatch(tmuxLog, /keep polling/);
     });
   });
@@ -3125,7 +3126,8 @@ exit 0
 
       const tmuxLog = await readFile(tmuxLogPath, 'utf-8');
       assert.match(tmuxLog, /Team delta: leader stale, \d+ pane\(s\) active, 1 msg\(s\) pending\./);
-      assert.match(tmuxLog, /Next: read messages; keep orchestrating; if done, gracefully shut down: omx team shutdown delta\./);
+      assert.match(tmuxLog, /Next: review worker messages first, then either continue the mainline or handle the worker request explicitly\./);
+      assert.match(tmuxLog, /Use omx team status delta only if you need a fresh snapshot before shutdown\./);
       assert.doesNotMatch(tmuxLog, /keep polling/);
       assert.doesNotMatch(tmuxLog, /\[OMX_TMUX_INJECT\]/, 'suppressed leader nudge should not show injection marker');
 

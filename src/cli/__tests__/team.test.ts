@@ -1750,11 +1750,12 @@ esac
 });
 
 describe('teamCommand api', () => {
-  it('builds leader monitoring hints that keep team status visible while ON', () => {
+  it('builds leader monitoring hints that keep team status as an explicit snapshot tool', () => {
     const hints = buildLeaderMonitoringHints('My Team');
     assert.equal(hints[0], 'leader_check: omx team status my-team');
-    assert.match(hints[1] ?? '', /while ON, keep checking state/);
-    assert.match(hints[1] ?? '', /sleep 30 && omx team status my-team/);
+    assert.match(hints[1] ?? '', /continue the mainline/);
+    assert.match(hints[1] ?? '', /worker mailbox\/additionalContext at prompt\/tool boundaries/);
+    assert.match(hints[1] ?? '', /use omx team status my-team only for explicit snapshots/);
   });
 
   it('prints team-specific help for omx team --help', async () => {

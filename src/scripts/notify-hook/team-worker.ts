@@ -422,7 +422,7 @@ export async function maybeNotifyLeaderAllWorkersIdle({ cwd, stateDir, logsDir, 
   }
 
   const N = workers.length;
-  const nextAction = `Run \`omx team status ${teamName}\` now, read unread worker messages, then assign the next concrete task, reconcile results, or shut the team down.`;
+  const nextAction = `Review unread worker messages first, then either continue the mainline, assign the next concrete task, reconcile results, or shut the team down if the team is complete. Use \`omx team status ${teamName}\` only when you need a fresh snapshot.`;
   const tmuxTarget = canonicalLeaderPaneId;
   const paneGuard = await checkLeaderPaneReadyForWorkerStateReminder(tmuxTarget);
   if (!paneGuard.ok) {
