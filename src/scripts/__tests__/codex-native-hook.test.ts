@@ -5370,6 +5370,36 @@ exit 0
     }
   });
 
+  it("does not block Bash omx question help invocations", async () => {
+    const cwd = await mkdtemp(join(tmpdir(), "omx-native-hook-pretool-question-help-"));
+    try {
+      const commands = [
+        "omx question --help",
+        "omx question -h",
+        "omx question help",
+        "node ./dist/cli/omx.js question --help",
+      ];
+
+      for (const [index, command] of commands.entries()) {
+        const result = await dispatchCodexNativeHook(
+          {
+            hook_event_name: "PreToolUse",
+            cwd,
+            tool_name: "Bash",
+            tool_use_id: `tool-question-help-${index}`,
+            tool_input: { command },
+          },
+          { cwd },
+        );
+
+        assert.equal(result.omxEventName, "pre-tool-use");
+        assert.equal(result.outputJson, null);
+      }
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+
   it("does not block Bash commands that only mention omx question in quoted arguments", async () => {
     const cwd = await mkdtemp(join(tmpdir(), "omx-native-hook-pretool-question-quoted-mention-"));
     try {

@@ -1070,12 +1070,24 @@ function commandInvokesOmxQuestion(command: string): boolean {
 
     const rawToken = tokens[index]?.value || "";
     const token = rawToken.replace(/\\/g, "/").split("/").pop() || "";
-    if ((token === "omx" || token === "omx.js") && tokens[index + 1]?.value === "question") return true;
+    if ((token === "omx" || token === "omx.js") && tokens[index + 1]?.value === "question") {
+      // Help invocations are safe to pass through because the CLI exits before
+      // any blocking question flow starts.
+      if (tokens.slice(index + 2, commandEnd).some((entry) => entry.value === "--help" || entry.value === "-h" || entry.value === "help")) {
+        continue;
+      }
+      return true;
+    }
     if (
       (token === "node" || token === "node.exe")
       && /(?:^|\/)omx\.js$/.test(tokens[index + 1]?.value || "")
       && tokens[index + 2]?.value === "question"
-    ) return true;
+    ) {
+      if (tokens.slice(index + 3, commandEnd).some((entry) => entry.value === "--help" || entry.value === "-h" || entry.value === "help")) {
+        continue;
+      }
+      return true;
+    }
   }
 
   return false;
