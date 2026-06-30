@@ -910,6 +910,44 @@ describe.skip("codex native hook dispatch", () => {
     }
   });
 
+  it("keeps PostToolUse dispatch failures non-fatal at the CLI boundary", async () => {
+    const cwd = await mkdtemp(join(tmpdir(), "omx-native-hook-cli-posttool-dispatch-nonfatal-"));
+    try {
+      const result = spawnSync(process.execPath, [nativeHookScriptPath()], {
+        cwd,
+        input: JSON.stringify({
+          hook_event_name: "PostToolUse",
+          cwd,
+          session_id: "sess-cli-posttool-dispatch-nonfatal",
+          thread_id: "thread-cli-posttool-dispatch-nonfatal",
+          turn_id: "turn-cli-posttool-dispatch-nonfatal",
+          tool_name: "Bash",
+          tool_input: { command: "pwd" },
+          tool_response: "{\"exit_code\":0,\"stdout\":\"/repo\",\"stderr\":\"\"}",
+        }),
+        encoding: "utf-8",
+        stdio: ["pipe", "pipe", "pipe"],
+        env: {
+          ...process.env,
+          NODE_ENV: "test",
+          OMX_NATIVE_HOOK_TEST_THROW_DISPATCH: "1",
+        },
+      });
+
+      assert.equal(result.status, 0, result.stderr || result.stdout);
+      assert.equal(result.stderr, "");
+      assert.equal(result.stdout.trim(), "");
+
+      const logPath = join(cwd, ".omx", "logs", `native-hook-${new Date().toISOString().split("T")[0]}.jsonl`);
+      const log = await readFile(logPath, "utf-8");
+      assert.match(log, /native_hook_posttooluse_nonfatal_error/);
+      assert.match(log, /native_hook_posttooluse_fail_open/);
+      assert.match(log, /top_level_dispatch/);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+
   it("maps Codex events onto OMX logical surfaces", () => {
     assert.equal(mapCodexHookEventToOmxEvent("SessionStart"), "session-start");
     assert.equal(mapCodexHookEventToOmxEvent("UserPromptSubmit"), "keyword-detector");

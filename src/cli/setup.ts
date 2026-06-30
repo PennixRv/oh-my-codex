@@ -1153,6 +1153,22 @@ async function discoverOmxPluginCacheDir(
 	return (await discoverOmxPluginCacheDirs(cacheRoot))[0] ?? null;
 }
 
+function isVersionScopedOmxPluginCacheDir(
+	cacheDir: string,
+	codexHomeDir: string,
+): boolean {
+	const pluginBaseDir = join(
+		codexHomeDir,
+		"plugins",
+		"cache",
+		OMX_LOCAL_MARKETPLACE_NAME,
+		OMX_PLUGIN_NAME,
+	);
+	const relativePath = relative(pluginBaseDir, cacheDir);
+	if (!relativePath || relativePath.startsWith("..")) return false;
+	return !relativePath.includes("/") && !relativePath.includes("\\");
+}
+
 interface PluginDiscoveryCacheRefreshResult {
 	status: "unavailable" | "unchanged" | "refreshed";
 	staleDirs: string[];
@@ -1183,6 +1199,11 @@ async function refreshOmxPluginDiscoveryCache(
 			join(cacheDir, ".codex-plugin", "plugin.json"),
 		);
 		if (manifest?.name !== OMX_PLUGIN_NAME) continue;
+		const isHistoricalVersionScopedCache =
+			typeof expectedVersion === "string" &&
+			manifest.version !== expectedVersion &&
+			isVersionScopedOmxPluginCacheDir(cacheDir, codexHomeDir);
+		if (isHistoricalVersionScopedCache) continue;
 
 		const cachedSkillNames = await listChildDirectoryNames(join(cacheDir, "skills"));
 		const versionChanged =

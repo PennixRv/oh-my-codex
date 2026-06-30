@@ -4,14 +4,14 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
-## [0.18.52] - 2026-06-30
+## [0.18.53] - 2026-06-30
 
-Patch release for the Pennix fork role-routing line: Team auto-route now respects disabled team mode, avoids over-eager review classification, keeps reviewer launch roles consistent, and no longer preempts prose workflow-selection prompts with Team guidance.
+Patch release for the Pennix fork native-hook and plugin-cache lifecycle line: `PostToolUse` dispatch failures now fail open at the CLI boundary, and plugin-cache refresh no longer deletes version-scoped hook paths that active Codex sessions may still be executing from.
 
-- Team auto-route now short-circuits to solo when Team mode is disabled, even for strong review-shaped prompts.
-- Review-specialist routing now has a single launch-role source of truth, so staffing summaries, preferred launch roles, and suggested `omx team ...` commands stay aligned.
-- Exploration-shaped prompts such as local SDK usage checks are no longer misclassified as Team review work.
-- Native `UserPromptSubmit` guidance now suppresses Team auto-route context for prose workflow-selection prompts like `use autopilot to ...`, preserving the user’s intended workflow choice.
+- `PostToolUse` top-level dispatch failures are now logged as non-fatal OMX errors and no longer return exit code `1` from the global hook process.
+- Plugin-mode cache refresh now preserves historical version-scoped plugin cache directories instead of deleting them during setup refresh.
+- Same-version plugin cache repair now refreshes the packaged cache in place instead of removing the cache directory first, reducing the chance of transient `MODULE_NOT_FOUND` failures for hook entrypoints.
+- The CLI smoke path now covers the forced-dispatch-failure boundary, and plugin cache tests now cover both historical-version preservation and in-place packaged-cache refresh.
 
 ## [0.18.51] - 2026-06-29
 

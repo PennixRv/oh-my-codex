@@ -1,6 +1,6 @@
 import { existsSync } from "fs";
-import { cp, readdir, readFile, rm, writeFile } from "fs/promises";
-import { join, resolve } from "path";
+import { copyFile, cp, lstat, mkdir, readdir, readFile, rename, rm, writeFile } from "fs/promises";
+import { dirname, join, resolve } from "path";
 import { OMX_FIRST_PARTY_MCP_SERVER_NAMES } from "../config/omx-first-party-mcp.js";
 import { teamModeEnabled, type SetupTeamMode } from "../config/team-mode.js";
 
@@ -338,12 +338,77 @@ export async function materializePackagedOmxPluginCache(
 		return { status: "unchanged", cacheDir, version };
 	}
 	if (!options.dryRun) {
-		await rm(cacheDir, { recursive: true, force: true });
-		await cp(packagedMarketplace.pluginRoot, cacheDir, { recursive: true });
-		await applyTeamModeToPluginCache(cacheDir, options.teamMode);
-		await writePinnedHookLauncher(cacheDir, packagedMarketplace);
+		await materializePackagedOmxPluginCacheInPlace(
+			cacheDir,
+			packagedMarketplace,
+			options,
+		);
 	}
 	return { status: "materialized", cacheDir, version };
+}
+
+async function materializePackagedOmxPluginCacheInPlace(
+	cacheDir: string,
+	packagedMarketplace: PackagedOmxMarketplace,
+	options: { teamMode?: SetupTeamMode } = {},
+): Promise<void> {
+	const stagingDir = `${cacheDir}.staging-${process.pid}-${Date.now()}`;
+	await rm(stagingDir, { recursive: true, force: true });
+	await mkdir(dirname(cacheDir), { recursive: true });
+	try {
+		await cp(packagedMarketplace.pluginRoot, stagingDir, { recursive: true });
+		await applyTeamModeToPluginCache(stagingDir, options.teamMode);
+		await writePinnedHookLauncher(stagingDir, packagedMarketplace);
+		await mergePluginCacheIntoExistingDir(stagingDir, cacheDir);
+	} finally {
+		await rm(stagingDir, { recursive: true, force: true });
+	}
+}
+
+async function mergePluginCacheIntoExistingDir(
+	stagingDir: string,
+	cacheDir: string,
+): Promise<void> {
+	if (!existsSync(cacheDir)) {
+		await rename(stagingDir, cacheDir);
+		return;
+	}
+
+	await syncPluginCacheTree(stagingDir, cacheDir);
+}
+
+async function syncPluginCacheTree(
+	sourceDir: string,
+	destinationDir: string,
+): Promise<void> {
+	await mkdir(destinationDir, { recursive: true });
+	const sourceEntries = await readdir(sourceDir, { withFileTypes: true });
+	const sourceEntryNames = new Set(sourceEntries.map((entry) => entry.name));
+	const destinationEntries = await readdir(destinationDir, { withFileTypes: true }).catch(() => []);
+
+	for (const destinationEntry of destinationEntries) {
+		if (sourceEntryNames.has(destinationEntry.name)) continue;
+		await rm(join(destinationDir, destinationEntry.name), {
+			recursive: true,
+			force: true,
+		});
+	}
+
+	for (const sourceEntry of sourceEntries) {
+		const sourcePath = join(sourceDir, sourceEntry.name);
+		const destinationPath = join(destinationDir, sourceEntry.name);
+		if (sourceEntry.isDirectory()) {
+			await syncPluginCacheTree(sourcePath, destinationPath);
+			continue;
+		}
+
+		await mkdir(dirname(destinationPath), { recursive: true });
+		const destinationStat = await lstat(destinationPath).catch(() => null);
+		if (destinationStat?.isDirectory()) {
+			await rm(destinationPath, { recursive: true, force: true });
+		}
+		await copyFile(sourcePath, destinationPath);
+	}
 }
 
 function marketplaceTableHeaderPattern(): RegExp {

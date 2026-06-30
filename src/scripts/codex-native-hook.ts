@@ -5095,6 +5095,31 @@ async function recordNonFatalPostToolUseError(
   );
 }
 
+async function handleTopLevelPostToolUseCliError(
+  cwd: string,
+  payload: CodexHookPayload,
+  error: unknown,
+): Promise<void> {
+  const detail = error instanceof Error ? error.message : String(error);
+  await logNativeHookCliError(cwd, "native_hook_posttooluse_nonfatal_error", error, payload, {
+    stage: "top_level_dispatch",
+  });
+  await logNativeHookCliError(cwd, "native_hook_dispatch_error", error, payload, {
+    downgraded_to_nonfatal: true,
+    downgraded_reason: "posttooluse_fail_open",
+  });
+  await appendToLog(cwd, {
+    event: "native_hook_posttooluse_fail_open",
+    hook_event_name: "PostToolUse",
+    session_id: readPayloadSessionId(payload) || undefined,
+    thread_id: readPayloadThreadId(payload) || undefined,
+    turn_id: readPayloadTurnId(payload) || undefined,
+    stage: "top_level_dispatch",
+    error: detail,
+    timestamp: new Date().toISOString(),
+  }).catch(() => {});
+}
+
 function isStopDispatchFailureTestTrigger(payload: CodexHookPayload): boolean {
   return process.env.NODE_ENV === "test"
     && process.env.OMX_NATIVE_HOOK_TEST_THROW_STOP_DISPATCH === "1"
@@ -5152,10 +5177,14 @@ export async function runCodexNativeHookCli(): Promise<void> {
     }
   } catch (error) {
     const cwd = safeString(payload.cwd).trim() || process.cwd();
-    await logNativeHookCliError(cwd, "native_hook_dispatch_error", error, payload);
-    if (readHookEventName(payload) === "Stop") {
+    const hookEventName = readHookEventName(payload);
+    if (hookEventName === "Stop") {
+      await logNativeHookCliError(cwd, "native_hook_dispatch_error", error, payload);
       writeNativeHookJsonStdout(buildStopDispatchFailureOutput(error));
+    } else if (hookEventName === "PostToolUse") {
+      await handleTopLevelPostToolUseCliError(cwd, payload, error);
     } else {
+      await logNativeHookCliError(cwd, "native_hook_dispatch_error", error, payload);
       process.exitCode = 1;
     }
   }

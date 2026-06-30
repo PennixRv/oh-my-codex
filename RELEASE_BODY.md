@@ -1,34 +1,35 @@
-# oh-my-codex-pennix v0.18.52
+# oh-my-codex-pennix v0.18.53
 
 > Release notes template for the Pennix fork. The tag workflow regenerates this file into the final GitHub release body.
 
 ## Summary
 
-This release ships a narrow role-routing and native prompt-guidance fix for the Pennix fork: Team auto-route decisions are now more faithful to Team mode, role intent, and explicit workflow-selection prose.
+This release ships two narrow reliability fixes for the Pennix fork: `PostToolUse` dispatch failures are now fail-open at the CLI boundary instead of surfacing as `hook exited with code 1` noise across unrelated sessions, and plugin-cache refresh no longer deletes version-scoped hook paths that active Codex sessions may still be executing from.
 
 ## Highlights
 
-- Disabled Team mode is now respected by native Team auto-route guidance - review-shaped prompts no longer receive Team launch nudges when setup/project Team mode is disabled.
-- Review-specialist launch roles are now internally consistent - staffing summaries, preferred launch roles, and suggested `omx team ...` commands all agree on the same reviewer lane.
-- Exploration prompts stop falling into Team review by accident - prompts such as `check how we use this SDK today` now stay in solo/exploration guidance instead of being over-escalated to Team review.
-- Prose workflow-selection prompts keep their intended workflow choice - prompts like `use autopilot to review this authentication refactor` no longer get Team guidance prepended ahead of the chosen workflow.
+- `PostToolUse` hook dispatch failures are now downgraded to non-fatal OMX errors at the native CLI boundary, preserving the hook session instead of returning exit code `1`.
+- Plugin-mode setup now preserves historical version-scoped plugin cache directories, so upgrading OMX no longer pulls the hook entrypoint out from under older still-running Codex sessions.
+- Same-version plugin cache repair now refreshes the packaged cache in place instead of deleting the cache directory first, shrinking the transient missing-file window for plugin-scoped hook entrypoints.
+- The fail-open hook boundary and the plugin-cache lifecycle behavior are now both regression-covered.
 
 ## Fixes / compatibility
 
-- `src/team/auto-route.ts` now gates Team auto-route on effective Team enablement, narrows review-intent detection, and propagates the final review launch role consistently.
-- `src/team/followup-planner.ts` now exposes the chosen Team launch role directly so reviewer selection and generated launch hints stay aligned.
-- `src/scripts/codex-native-hook.ts` now suppresses Team auto-route prompt guidance for prose workflow-selection prompts and only emits Team guidance when the route decision actually resolves to Team.
-- Focused regression tests cover `roleModels` overrides, Team auto-route decisions, follow-up staffing alignment, and native hook prompt guidance behavior.
+- `src/scripts/codex-native-hook.ts` now keeps `PostToolUse` top-level dispatch failures non-fatal while recording a fail-open audit trail.
+- `src/scripts/__tests__/codex-native-hook.test.ts` now covers the CLI boundary so a forced `PostToolUse` dispatch failure exits cleanly instead of surfacing as hook failure noise.
+- `src/cli/setup.ts` now stops invalidating historical version-scoped plugin cache directories just because the packaged version changed.
+- `src/cli/plugin-marketplace.ts` now repairs the packaged plugin cache in place instead of deleting the version directory before copying the refreshed hook files back.
+- `src/cli/__tests__/plugin-marketplace.test.ts` now covers historical cache preservation and in-place packaged-cache refresh.
 
 ## Merged PR inventory
 
-- No merged PRs. `0.18.52` is a direct release-line commit on the Pennix fork.
+- No merged PRs. `0.18.53` is a direct release-line commit on the Pennix fork.
 
 ## Validation
 
 - `npm run build`
-- `node dist/scripts/run-test-files.js dist/agents/__tests__/native-config.test.js dist/config/__tests__/models.test.js dist/team/__tests__/model-contract.test.js dist/team/__tests__/auto-route.test.js dist/team/__tests__/followup-planner.test.js dist/scripts/__tests__/codex-native-hook.test.js`
-- `node dist/scripts/check-version-sync.js --tag v0.18.52`
+- `node dist/scripts/run-test-files.js dist/cli/__tests__/plugin-marketplace.test.js dist/scripts/__tests__/codex-native-hook.test.js dist/cli/__tests__/doctor-warning-copy.test.js`
+- `node dist/scripts/check-version-sync.js --tag v0.18.53`
 - `git diff --check`
 - `npm pack --dry-run`
 
@@ -36,4 +37,4 @@ This release ships a narrow role-routing and native prompt-guidance fix for the 
 
 Thanks to the contributors who made this release possible.
 
-**Full Changelog**: [`v0.18.51...v0.18.52`](https://github.com/PennixRv/oh-my-codex/compare/v0.18.51...v0.18.52)
+**Full Changelog**: [`v0.18.52...v0.18.53`](https://github.com/PennixRv/oh-my-codex/compare/v0.18.52...v0.18.53)
