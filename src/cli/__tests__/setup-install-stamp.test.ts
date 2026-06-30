@@ -76,7 +76,7 @@ describe("omx setup install stamp", () => {
             stampPath,
             JSON.stringify(
               {
-                installed_version: "0.18.56",
+                installed_version: "0.18.57",
                 install_channel: "stable",
                 install_source: "oh-my-codex-pennix@latest",
                 updated_at: "2026-06-30T00:00:00.000Z",

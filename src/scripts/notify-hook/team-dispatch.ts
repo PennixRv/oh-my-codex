@@ -933,10 +933,12 @@ async function appendDeliveryTelemetry(logsDir, event) {
 }
 
 function resolveDispatchTransport(request, result) {
+  const preference = safeString(request?.transport_preference).trim();
   const isLeaderMailboxNotify =
     safeString(request?.to_worker).trim() === 'leader-fixed'
     && safeString(result?.reason).trim() === 'leader_mailbox_boundary_delivery';
-  return isLeaderMailboxNotify ? 'mailbox' : 'send-keys';
+  if (isLeaderMailboxNotify || preference === 'mailbox_boundary') return 'mailbox';
+  return 'send-keys';
 }
 
 function buildDispatchAttemptEvidence(result, fallback = {}) {

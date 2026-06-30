@@ -8181,7 +8181,8 @@ esac
 
   it('monitorTeam only notifies once per new message even without notified_at (issue #116)', async () => {
     // Regression: messages delivered via team_send_message MCP have no notified_at.
-    // After the first successful poll that sets notified_at, subsequent polls must not re-notify.
+    // This fixture does not provide a live interactive worker, so the first poll cannot deliver.
+    // Once notified_at exists, subsequent polls must preserve the notified snapshot without re-notifying.
     const cwd = await mkdtemp(join(tmpdir(), 'omx-runtime-new-msg-'));
     try {
       await initTeamState('team-new-msg', 'new msg test', 'executor', 1, cwd);
@@ -8203,12 +8204,12 @@ esac
         ],
       }));
 
-      // First poll — unnotified=[msg-unnotified]. notifyWorker will fail (no tmux in tests)
-      // so markMessageNotified is not called and the snapshot has no entry for this message.
+      // First poll — unnotified=[msg-unnotified], but the worker is not live in this fixture,
+      // so no delivery attempt succeeds and the snapshot has no entry for this message.
       const result1 = await monitorTeam('team-new-msg', cwd);
       assert.ok(result1);
       const diskSnap1 = await readMonitorSnapshot('team-new-msg', cwd);
-      // Without tmux the notify fails, so no entry is expected in the first snapshot.
+      // Without a live worker, no notification is recorded in the first snapshot.
       assert.ok(diskSnap1);
 
       // Simulate a successful notification by manually setting notified_at on the message.
@@ -8503,6 +8504,50 @@ esac
         && entry.result === 'confirmed'
         && entry.reason === 'leader_mailbox_boundary_delivery');
       assert.equal(runtimeEntries.length, 1, 'leader direct missing-pane boundary delivery should emit exactly one runtime dispatch_result entry');
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+
+  it('sendWorkerMessage uses worker mailbox boundary delivery for interactive workers', async () => {
+    const cwd = await mkdtemp(join(tmpdir(), 'omx-runtime-worker-boundary-'));
+    try {
+      await initTeamState('team-worker-boundary', 'worker boundary transport test', 'executor', 1, cwd);
+
+      const outcome = await sendWorkerMessage('team-worker-boundary', 'leader-fixed', 'worker-1', 'boundary follow-up', cwd);
+      assert.equal(outcome.ok, true);
+      assert.equal(outcome.reason, 'worker_mailbox_boundary_delivery');
+      assert.equal(outcome.transport, 'mailbox');
+
+      const mailbox = await listMailboxMessages('team-worker-boundary', 'worker-1', cwd);
+      assert.equal(mailbox.length, 1);
+      assert.equal(mailbox[0]?.body, 'boundary follow-up');
+      assert.ok(mailbox[0]?.notified_at);
+
+      const requests = await listDispatchRequests('team-worker-boundary', cwd, { kind: 'mailbox', to_worker: 'worker-1' });
+      assert.equal(requests.length, 1);
+      assert.equal(requests[0]?.status, 'notified');
+      assert.equal(requests[0]?.last_reason, 'worker_mailbox_boundary_delivery');
+      assert.equal(requests[0]?.transport_preference, 'mailbox_boundary');
+      assert.equal(requests[0]?.failed_at, undefined);
+
+      const deliveryLog = await readTeamDeliveryLog(cwd);
+      const boundaryEntries = deliveryLog.filter((entry) =>
+        entry.event === 'dispatch_result'
+        && entry.source === 'team.runtime'
+        && entry.transport === 'mailbox'
+        && entry.reason === 'worker_mailbox_boundary_delivery');
+      if (boundaryEntries.length !== 1) {
+        assert.fail(`expected exactly one worker mailbox boundary runtime log entry, got ${JSON.stringify(boundaryEntries)}`);
+      }
+      const runtimeEntries = deliveryLog.filter((entry) =>
+        entry.event === 'dispatch_result'
+        && entry.source === 'team.runtime'
+        && entry.to_worker === 'worker-1'
+        && entry.transport === 'mailbox'
+        && entry.result === 'confirmed'
+        && entry.reason === 'worker_mailbox_boundary_delivery');
+      assert.equal(runtimeEntries.length, 1, 'worker mailbox boundary delivery should emit exactly one runtime dispatch_result entry');
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }

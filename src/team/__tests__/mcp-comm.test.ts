@@ -130,6 +130,41 @@ describe('mcp-comm', () => {
     }
   });
 
+  it('queueDirectMailboxMessage supports worker mailbox boundary delivery without tmux notification', async () => {
+    const cwd = await mkdtemp(join(tmpdir(), 'omx-mcp-comm-'));
+    try {
+      await initTeamState('alpha-worker-boundary', 't', 'executor', 1, cwd);
+
+      const outcome = await queueDirectMailboxMessage({
+        teamName: 'alpha-worker-boundary',
+        fromWorker: 'leader-fixed',
+        toWorker: 'worker-1',
+        toWorkerIndex: 1,
+        body: 'boundary mailbox',
+        triggerMessage: 'check worker mailbox later',
+        intent: 'pending-mailbox-review',
+        cwd,
+        transportPreference: 'mailbox_boundary',
+        fallbackAllowed: false,
+        notify: async () => ({ ok: true, transport: 'mailbox', reason: 'worker_mailbox_boundary_delivery' }),
+      });
+
+      assert.equal(outcome.ok, true);
+      assert.equal(outcome.reason, 'worker_mailbox_boundary_delivery');
+
+      const request = await readDispatchRequest('alpha-worker-boundary', outcome.request_id!, cwd);
+      assert.equal(request?.status, 'notified');
+      assert.equal(request?.last_reason, 'worker_mailbox_boundary_delivery');
+      assert.equal(request?.transport_preference, 'mailbox_boundary');
+
+      const mailbox = await listMailboxMessages('alpha-worker-boundary', 'worker-1', cwd);
+      assert.equal(mailbox.length, 1);
+      assert.ok(mailbox[0]?.notified_at);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+
   it('queueDirectMailboxMessage does not create a new dispatch for an already-notified identical message', async () => {
     const cwd = await mkdtemp(join(tmpdir(), 'omx-mcp-comm-'));
     try {

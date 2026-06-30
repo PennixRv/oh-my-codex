@@ -4,6 +4,15 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+## [0.18.57] - 2026-06-30
+
+Patch release for the Pennix fork mailbox-boundary handoff line: interactive team workers now consume unread leader mailbox context at native prompt/tool boundaries instead of relying on tmux injection fallback, while worker trigger guidance and dispatch telemetry align to the same boundary-driven contract.
+
+- Interactive worker steady-state mailbox delivery now resolves to a dedicated `mailbox_boundary` transport. Runtime dispatch persists `worker_mailbox_boundary_delivery`, marks mailbox messages notified immediately, and stops treating steady-state worker mailbox review as tmux injection work.
+- `codex-native-hook` now surfaces unread leader and worker mailbox messages as structured `additionalContext` on `UserPromptSubmit` and `PreToolUse`, deduped by unread batch signature within the same session/turn boundary and ignoring delivered messages.
+- Worker mailbox trigger text and surrounding worker bootstrap guidance now tell workers to finish the current step, read the real mailbox, mark messages delivered, and continue assigned or next-feasible work, matching the intended asynchronous boundary review model.
+- Focused regression coverage now locks leader/worker mailbox boundary handoff, same-batch dedupe, delivered-message ignore behavior, and interactive worker boundary dispatch behavior.
+
 ## [0.18.56] - 2026-06-30
 
 Patch release for the Pennix fork plugin-cache and install-stamp lifecycle line: plugin-mode local marketplace cache now converges on the official stable `local/` cache key, active setup/doctor checks stop treating historical version-scoped caches as the live plugin surface, and completed plugin-mode setup writes the missing install completion stamp.

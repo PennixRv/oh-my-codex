@@ -17512,6 +17512,214 @@ describe("leader mailbox handoff", () => {
   });
 });
 
+describe("worker mailbox handoff", () => {
+  async function setupWorkerMailboxFixture() {
+    const cwd = await mkdtemp(join(tmpdir(), "omx-native-hook-worker-mailbox-"));
+    const sessionId = "worker-mailbox-session-1";
+    const teamName = "worker-mailbox-team";
+    const threadId = "worker-mailbox-thread";
+    try {
+      await initTeamState(teamName, "worker mailbox handoff", "executor", 1, cwd);
+      await writeJson(join(cwd, ".omx", "state", "sessions", sessionId, "team-state.json"), {
+        active: true,
+        mode: "team",
+        current_phase: "running",
+        team_name: teamName,
+        session_id: sessionId,
+      });
+
+      const sendResult = await executeTeamApiOperation("send-message", {
+        team_name: teamName,
+        from_worker: "leader-fixed",
+        to_worker: "worker-1",
+        body: "Please check the latest integration result before changing direction",
+      }, cwd);
+      if (!sendResult.ok) throw new Error(`send-message failed: ${sendResult.error?.message ?? "unknown"}`);
+
+      return { cwd, sessionId, teamName, threadId };
+    } catch (error) {
+      await rm(cwd, { recursive: true, force: true });
+      throw error;
+    }
+  }
+
+  it("surfaces unread worker mailbox messages on UserPromptSubmit", async () => {
+    const { cwd, sessionId, teamName, threadId } = await setupWorkerMailboxFixture();
+    const prevTmux = process.env.TMUX;
+    const prevPane = process.env.TMUX_PANE;
+    const prevInternalWorker = process.env.OMX_TEAM_INTERNAL_WORKER;
+    const prevWorker = process.env.OMX_TEAM_WORKER;
+    try {
+      process.env.TMUX = "1";
+      process.env.TMUX_PANE = "%10";
+      process.env.OMX_TEAM_INTERNAL_WORKER = `${teamName}/worker-1`;
+      process.env.OMX_TEAM_WORKER = `${teamName}/worker-1`;
+      await setTeamPaneIds(cwd, teamName, {
+        leaderPaneId: "%42",
+        workerPaneIds: { "worker-1": "%10" },
+      });
+
+      const turn1 = await dispatchCodexNativeHook(
+        {
+          hook_event_name: "UserPromptSubmit",
+          cwd,
+          session_id: sessionId,
+          thread_id: threadId,
+          turn_id: "worker-mailbox-turn-1",
+          prompt: "continue",
+        },
+        { cwd },
+      );
+      const turn1Context = String(
+        (turn1.outputJson as { hookSpecificOutput?: { additionalContext?: string } })?.hookSpecificOutput?.additionalContext ?? "",
+      );
+      assert.match(turn1Context, /\[OMX team worker mailbox\]/);
+      assert.match(turn1Context, new RegExp(`team: ${teamName}`));
+      assert.match(turn1Context, /worker: worker-1/);
+      assert.match(turn1Context, /unread worker messages: 1/);
+      assert.match(turn1Context, /dispatch status counts: pending=1/);
+      assert.match(turn1Context, /request intents: pending-mailbox-review/);
+      assert.match(turn1Context, /finish the current atomic step, then review these worker messages/i);
+      assert.doesNotMatch(turn1Context, /\[OMX team leader mailbox\]/);
+    } finally {
+      if (typeof prevTmux === "string") process.env.TMUX = prevTmux;
+      else delete process.env.TMUX;
+      if (typeof prevPane === "string") process.env.TMUX_PANE = prevPane;
+      else delete process.env.TMUX_PANE;
+      if (typeof prevInternalWorker === "string") process.env.OMX_TEAM_INTERNAL_WORKER = prevInternalWorker;
+      else delete process.env.OMX_TEAM_INTERNAL_WORKER;
+      if (typeof prevWorker === "string") process.env.OMX_TEAM_WORKER = prevWorker;
+      else delete process.env.OMX_TEAM_WORKER;
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+
+  it("dedupes the same unread worker batch within the same turn boundary", async () => {
+    const { cwd, sessionId, teamName, threadId } = await setupWorkerMailboxFixture();
+    const prevTmux = process.env.TMUX;
+    const prevPane = process.env.TMUX_PANE;
+    const prevInternalWorker = process.env.OMX_TEAM_INTERNAL_WORKER;
+    const prevWorker = process.env.OMX_TEAM_WORKER;
+    try {
+      process.env.TMUX = "1";
+      process.env.TMUX_PANE = "%10";
+      process.env.OMX_TEAM_INTERNAL_WORKER = `${teamName}/worker-1`;
+      process.env.OMX_TEAM_WORKER = `${teamName}/worker-1`;
+      await setTeamPaneIds(cwd, teamName, {
+        leaderPaneId: "%42",
+        workerPaneIds: { "worker-1": "%10" },
+      });
+
+      const first = await dispatchCodexNativeHook(
+        {
+          hook_event_name: "UserPromptSubmit",
+          cwd,
+          session_id: sessionId,
+          thread_id: threadId,
+          turn_id: "worker-mailbox-turn-1",
+          prompt: "continue",
+        },
+        { cwd },
+      );
+      const firstContext = String(
+        (first.outputJson as { hookSpecificOutput?: { additionalContext?: string } })?.hookSpecificOutput?.additionalContext ?? "",
+      );
+      assert.match(firstContext, /\[OMX team worker mailbox\]/);
+
+      const second = await dispatchCodexNativeHook(
+        {
+          hook_event_name: "UserPromptSubmit",
+          cwd,
+          session_id: sessionId,
+          thread_id: threadId,
+          turn_id: "worker-mailbox-turn-1",
+          prompt: "continue",
+        },
+        { cwd },
+      );
+      const secondContext = String(
+        (second.outputJson as { hookSpecificOutput?: { additionalContext?: string } })?.hookSpecificOutput?.additionalContext ?? "",
+      );
+      assert.doesNotMatch(secondContext, /\[OMX team worker mailbox\]/);
+
+      const nextTurn = await dispatchCodexNativeHook(
+        {
+          hook_event_name: "UserPromptSubmit",
+          cwd,
+          session_id: sessionId,
+          thread_id: threadId,
+          turn_id: "worker-mailbox-turn-2",
+          prompt: "continue",
+        },
+        { cwd },
+      );
+      const nextTurnContext = String(
+        (nextTurn.outputJson as { hookSpecificOutput?: { additionalContext?: string } })?.hookSpecificOutput?.additionalContext ?? "",
+      );
+      assert.match(nextTurnContext, /\[OMX team worker mailbox\]/);
+    } finally {
+      if (typeof prevTmux === "string") process.env.TMUX = prevTmux;
+      else delete process.env.TMUX;
+      if (typeof prevPane === "string") process.env.TMUX_PANE = prevPane;
+      else delete process.env.TMUX_PANE;
+      if (typeof prevInternalWorker === "string") process.env.OMX_TEAM_INTERNAL_WORKER = prevInternalWorker;
+      else delete process.env.OMX_TEAM_INTERNAL_WORKER;
+      if (typeof prevWorker === "string") process.env.OMX_TEAM_WORKER = prevWorker;
+      else delete process.env.OMX_TEAM_WORKER;
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+
+  it("ignores delivered worker mailbox messages", async () => {
+    const { cwd, sessionId, teamName, threadId } = await setupWorkerMailboxFixture();
+    const prevTmux = process.env.TMUX;
+    const prevPane = process.env.TMUX_PANE;
+    const prevInternalWorker = process.env.OMX_TEAM_INTERNAL_WORKER;
+    const prevWorker = process.env.OMX_TEAM_WORKER;
+    try {
+      process.env.TMUX = "1";
+      process.env.TMUX_PANE = "%10";
+      process.env.OMX_TEAM_INTERNAL_WORKER = `${teamName}/worker-1`;
+      process.env.OMX_TEAM_WORKER = `${teamName}/worker-1`;
+      await setTeamPaneIds(cwd, teamName, {
+        leaderPaneId: "%42",
+        workerPaneIds: { "worker-1": "%10" },
+      });
+
+      const mailbox = await listMailboxMessages(teamName, "worker-1", cwd);
+      const messageId = String(mailbox[0]?.message_id ?? "");
+      assert.ok(messageId);
+      await markMessageDelivered(teamName, "worker-1", messageId, cwd);
+
+      const turn = await dispatchCodexNativeHook(
+        {
+          hook_event_name: "UserPromptSubmit",
+          cwd,
+          session_id: sessionId,
+          thread_id: threadId,
+          turn_id: "worker-mailbox-turn-2",
+          prompt: "continue",
+        },
+        { cwd },
+      );
+      const context = String(
+        (turn.outputJson as { hookSpecificOutput?: { additionalContext?: string } })?.hookSpecificOutput?.additionalContext ?? "",
+      );
+      assert.doesNotMatch(context, /\[OMX team worker mailbox\]/);
+    } finally {
+      if (typeof prevTmux === "string") process.env.TMUX = prevTmux;
+      else delete process.env.TMUX;
+      if (typeof prevPane === "string") process.env.TMUX_PANE = prevPane;
+      else delete process.env.TMUX_PANE;
+      if (typeof prevInternalWorker === "string") process.env.OMX_TEAM_INTERNAL_WORKER = prevInternalWorker;
+      else delete process.env.OMX_TEAM_INTERNAL_WORKER;
+      if (typeof prevWorker === "string") process.env.OMX_TEAM_WORKER = prevWorker;
+      else delete process.env.OMX_TEAM_WORKER;
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
 describe("native prompt auto-route guidance", () => {
   it("suggests a dual-lane Team review in attached tmux for ordinary review prompts", async () => {
     const cwd = await mkdtemp(join(tmpdir(), "omx-native-hook-auto-route-review-tmux-"));

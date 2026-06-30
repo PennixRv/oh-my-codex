@@ -1121,7 +1121,7 @@ describe("worker bootstrap", () => {
       "team-with-long-name",
       42,
     );
-    assert.ok(message.length < 200);
+    assert.ok(message.length < 260);
   });
 
   it("generateMailboxTriggerMessage contains mailbox path and count", () => {
@@ -1129,10 +1129,10 @@ describe("worker bootstrap", () => {
     assert.match(message, /3 new message/);
     assert.match(
       message,
-      /Read .*\.omx\/state\/team\/team-mail\/mailbox\/worker-2\.json/,
+      /read .*\.omx\/state\/team\/team-mail\/mailbox\/worker-2\.json/i,
     );
-    assert.match(message, /act now/i);
-    assert.match(message, /concrete progress/i);
+    assert.match(message, /finish current step/i);
+    assert.match(message, /mark delivered/i);
     assert.match(message, /continue assigned work/i);
     assert.match(message, /next feasible task/i);
   });
@@ -1156,11 +1156,11 @@ describe("worker bootstrap", () => {
       message,
       /read .*\$OMX_TEAM_STATE_ROOT\/team\/team-mail\/mailbox\/worker-2\.json/i,
     );
-    assert.match(message, /act/i);
-    assert.match(message, /report progress/i);
+    assert.match(message, /finish current step/i);
+    assert.match(message, /mark delivered/i);
     assert.match(message, /continue assigned work/i);
     assert.match(message, /next feasible task/i);
-    assert.ok(message.length < 200);
+    assert.ok(message.length < 260);
   });
 
   it("generateLeaderMailboxTriggerMessage is always < 200 characters", () => {

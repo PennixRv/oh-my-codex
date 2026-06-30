@@ -363,7 +363,7 @@ describe.skip('team message delivery end-to-end smoke tests', () => {
     }
   });
 
-  it('leader -> worker: leader send creates mailbox and hook notification for the target worker', async () => {
+  it('leader -> worker: leader send creates mailbox and boundary notification for the target worker', async () => {
     const { cwd, cleanup } = await setupTeam('leader-worker-send', 2);
     try {
       await withFakeTmux(cwd, async (tmuxLogPath) => {
@@ -378,9 +378,11 @@ describe.skip('team message delivery end-to-end smoke tests', () => {
         const requests = await listDispatchRequests('leader-worker-send', cwd, { kind: 'mailbox', to_worker: 'worker-1' });
         assert.equal(requests.length, 1);
         assert.equal(requests[0]?.status, 'notified');
+        assert.equal(requests[0]?.last_reason, 'worker_mailbox_boundary_delivery');
+        assert.equal(requests[0]?.transport_preference, 'mailbox_boundary');
 
         const tmuxLog = await readFile(tmuxLogPath, 'utf-8');
-        assert.match(tmuxLog, /send-keys -t %10/);
+        assert.doesNotMatch(tmuxLog, /send-keys -t %10/, 'interactive worker steady-state mailbox delivery should not inject tmux text');
       });
     } finally {
       await cleanup();
@@ -408,6 +410,8 @@ describe.skip('team message delivery end-to-end smoke tests', () => {
         const requests = await listDispatchRequests('leader-broadcast', cwd, { kind: 'mailbox' });
         assert.equal(requests.length, 3);
         assert.equal(requests.filter((request) => request.status === 'notified').length, 3);
+        assert.equal(requests.every((request) => request.last_reason === 'worker_mailbox_boundary_delivery'), true);
+        assert.equal(requests.every((request) => request.transport_preference === 'mailbox_boundary'), true);
       });
     } finally {
       await cleanup();
@@ -687,7 +691,7 @@ describe.skip('team message delivery end-to-end smoke tests', () => {
     }
   });
 
-  it('edge: delivery still completes through the pure TS fallback path when the bridge is disabled', async () => {
+  it('edge: delivery still completes through the pure TS runtime path when the bridge is disabled', async () => {
     const { cwd, cleanup } = await setupTeam('bridge-disabled-fallback', 1);
     const previousBridge = process.env.OMX_RUNTIME_BRIDGE;
     try {
@@ -704,9 +708,11 @@ describe.skip('team message delivery end-to-end smoke tests', () => {
         const requests = await listDispatchRequests('bridge-disabled-fallback', cwd, { kind: 'mailbox', to_worker: 'worker-1' });
         assert.equal(requests.length, 1);
         assert.equal(requests[0]?.status, 'notified');
+        assert.equal(requests[0]?.last_reason, 'worker_mailbox_boundary_delivery');
+        assert.equal(requests[0]?.transport_preference, 'mailbox_boundary');
 
         const tmuxLog = await readFile(tmuxLogPath, 'utf-8');
-        assert.match(tmuxLog, /send-keys -t %10/);
+        assert.doesNotMatch(tmuxLog, /send-keys -t %10/, 'bridge-disabled interactive mailbox delivery should stay boundary-based');
         assert.equal(existsSync(join(cwd, '.omx', 'state', 'mailbox.json')), false, 'bridge compat mailbox should not be created when bridge is disabled');
       });
     } finally {

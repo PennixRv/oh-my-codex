@@ -47,6 +47,7 @@ function fallbackTransportForPreference(
 ): DispatchTransport {
   if (preference === 'prompt_stdin') return 'prompt_stdin';
   if (preference === 'transport_direct') return 'tmux_send_keys';
+  if (preference === 'mailbox_boundary') return 'mailbox';
   return 'hook';
 }
 

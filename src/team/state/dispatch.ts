@@ -9,7 +9,11 @@ import {
 } from '../contracts.js';
 
 export type TeamDispatchRequestKind = 'inbox' | 'mailbox' | 'nudge';
-export type TeamDispatchTransportPreference = 'hook_preferred_with_fallback' | 'transport_direct' | 'prompt_stdin';
+export type TeamDispatchTransportPreference =
+  | 'hook_preferred_with_fallback'
+  | 'transport_direct'
+  | 'prompt_stdin'
+  | 'mailbox_boundary';
 
 export interface TeamDispatchRequest {
   request_id: string;
@@ -112,7 +116,9 @@ export function normalizeDispatchRequest(
     inbox_correlation_key:
       typeof raw.inbox_correlation_key === 'string' && raw.inbox_correlation_key !== '' ? raw.inbox_correlation_key : undefined,
     transport_preference:
-      raw.transport_preference === 'transport_direct' || raw.transport_preference === 'prompt_stdin'
+      raw.transport_preference === 'transport_direct'
+      || raw.transport_preference === 'prompt_stdin'
+      || raw.transport_preference === 'mailbox_boundary'
         ? raw.transport_preference
         : 'hook_preferred_with_fallback',
     fallback_allowed: raw.fallback_allowed !== false,
@@ -214,7 +220,10 @@ export function normalizeBridgeDispatchRecord(
       transport_preference: coerceMetadataValue(
         metadata.transport_preference,
         (candidate): candidate is TeamDispatchTransportPreference =>
-          candidate === 'hook_preferred_with_fallback' || candidate === 'transport_direct' || candidate === 'prompt_stdin',
+          candidate === 'hook_preferred_with_fallback'
+          || candidate === 'transport_direct'
+          || candidate === 'prompt_stdin'
+          || candidate === 'mailbox_boundary',
       ),
       fallback_allowed:
         typeof metadata.fallback_allowed === 'boolean'

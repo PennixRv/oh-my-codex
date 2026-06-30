@@ -181,6 +181,7 @@ const SHORT_FOLLOWUP_PRIORITY_PATTERNS = [
 const MAX_SESSION_META_LINE_BYTES = 256 * 1024;
 const MAX_LEADER_MAILBOX_CONTEXT_MESSAGES = 3;
 const LEADER_MAILBOX_HANDOFF_STATE_FILE = "team-leader-mailbox-handoff.json";
+const WORKER_MAILBOX_HANDOFF_STATE_FILE = "team-worker-mailbox-handoff.json";
 
 function safeString(value: unknown): string {
   return typeof value === "string" ? value : "";
@@ -231,6 +232,11 @@ interface LeaderMailboxHandoffState {
   last_boundary_key?: string;
   unread_message_ids?: string[];
   updated_at?: string;
+}
+
+interface TeamWorkerContext {
+  teamName: string;
+  workerName: string;
 }
 
 function buildLeaderMailboxBoundaryKey(
@@ -303,6 +309,47 @@ async function resolveActiveTeamNameForLeaderMailboxHandoff(
   return (await findCanonicalActiveTeamForSession(cwd, normalizedSessionId, threadId))?.teamName ?? "";
 }
 
+function readExplicitTeamWorkerContext(): TeamWorkerContext | null {
+  return (
+    parseTeamWorkerEnv(safeString(process.env.OMX_TEAM_INTERNAL_WORKER))
+    || parseTeamWorkerEnv(safeString(process.env.OMX_TEAM_WORKER))
+  );
+}
+
+async function resolveTeamWorkerContextForBoundary(
+  cwd: string,
+  sessionId: string,
+): Promise<TeamWorkerContext | null> {
+  const explicitContext = readExplicitTeamWorkerContext();
+  if (!explicitContext) return null;
+
+  const config = await readTeamConfig(explicitContext.teamName, cwd).catch(() => null);
+  if (!config) return explicitContext;
+
+  const currentPaneId = safeString(process.env.TMUX_PANE).trim();
+  const leaderPaneId = safeString(config.leader_pane_id).trim();
+  if (currentPaneId && leaderPaneId && currentPaneId === leaderPaneId) {
+    return null;
+  }
+
+  if (currentPaneId) {
+    const workerPaneId = safeString(
+      config.workers.find((worker) => worker.name === explicitContext.workerName)?.pane_id,
+    ).trim();
+    if (workerPaneId && workerPaneId !== currentPaneId) {
+      return null;
+    }
+  }
+
+  const normalizedSessionId = safeString(sessionId).trim();
+  if (!normalizedSessionId) return explicitContext;
+
+  const teamState = await readModeStateForSession("team", normalizedSessionId, cwd).catch(() => null);
+  if (teamState?.active === false) return null;
+
+  return explicitContext;
+}
+
 async function buildLeaderMailboxHandoffAdditionalContext(
   payload: CodexHookPayload,
   cwd: string,
@@ -310,6 +357,8 @@ async function buildLeaderMailboxHandoffAdditionalContext(
   hookEventName: "UserPromptSubmit" | "PreToolUse",
   threadId: string,
 ): Promise<string | null> {
+  if (await resolveTeamWorkerContextForBoundary(cwd, safeString(sessionId).trim()).catch(() => null)) return null;
+
   const normalizedSessionId = safeString(sessionId).trim();
   if (!normalizedSessionId) return null;
 
@@ -408,6 +457,115 @@ async function buildLeaderMailboxHandoffAdditionalContext(
     ...summaries,
     extraCount > 0 ? `- ${extraCount} additional unread message(s) not shown` : null,
     "- Next boundary action: review these worker messages first, then either continue the mainline or handle the worker request explicitly.",
+  ].filter(Boolean).join("\n");
+}
+
+async function buildWorkerMailboxHandoffAdditionalContext(
+  payload: CodexHookPayload,
+  cwd: string,
+  sessionId: string,
+  hookEventName: "UserPromptSubmit" | "PreToolUse",
+): Promise<string | null> {
+  const normalizedSessionId = safeString(sessionId).trim();
+  if (!normalizedSessionId) return null;
+
+  const workerContext = await resolveTeamWorkerContextForBoundary(cwd, normalizedSessionId);
+  if (!workerContext) return null;
+
+  const { teamName, workerName } = workerContext;
+  const unreadMessages = (await listMailboxMessages(teamName, workerName, cwd).catch(() => []))
+    .filter((message) => !safeString(message.delivered_at).trim());
+  if (unreadMessages.length === 0) return null;
+
+  const dispatchRequests = await listDispatchRequests(teamName, cwd, {
+    kind: "mailbox",
+    to_worker: workerName,
+    limit: 200,
+  }).catch(() => []);
+  const dispatchByMessageId = new Map<string, typeof dispatchRequests[number]>();
+  for (const request of dispatchRequests) {
+    const messageId = safeString(request.message_id).trim();
+    if (!messageId) continue;
+    const existing = dispatchByMessageId.get(messageId);
+    const existingTs = Math.max(
+      Date.parse(safeString(existing?.updated_at).trim()) || 0,
+      Date.parse(safeString(existing?.created_at).trim()) || 0,
+    );
+    const nextTs = Math.max(
+      Date.parse(safeString(request.updated_at).trim()) || 0,
+      Date.parse(safeString(request.created_at).trim()) || 0,
+    );
+    if (!existing || nextTs >= existingTs) {
+      dispatchByMessageId.set(messageId, request);
+    }
+  }
+
+  const unreadMessageIds = unreadMessages
+    .map((message) => safeString(message.message_id).trim())
+    .filter(Boolean)
+    .sort();
+  const signature = [teamName, workerName, ...unreadMessageIds].join("|");
+  if (!signature) return null;
+
+  const boundaryKey = buildLeaderMailboxBoundaryKey(hookEventName, payload);
+  const handoffPath = getStateFilePath(WORKER_MAILBOX_HANDOFF_STATE_FILE, cwd, normalizedSessionId || undefined);
+  const handoffState = await readJsonIfExists(handoffPath) as LeaderMailboxHandoffState | null;
+  const previousSignature = safeString(handoffState?.last_signature).trim();
+  const previousBoundaryKey = safeString(handoffState?.last_boundary_key).trim();
+  if (signature === previousSignature && previousBoundaryKey === boundaryKey) {
+    return null;
+  }
+
+  await mkdir(dirname(handoffPath), { recursive: true }).catch(() => {});
+  await writeFile(handoffPath, JSON.stringify({
+    team_name: teamName,
+    last_signature: signature,
+    last_boundary_key: boundaryKey,
+    unread_message_ids: unreadMessageIds,
+    updated_at: new Date().toISOString(),
+  }, null, 2)).catch(() => {});
+
+  const dispatchStatusCounts = new Map<string, number>();
+  const requestIntents = new Set<string>();
+  const summaries = unreadMessages
+    .slice(-MAX_LEADER_MAILBOX_CONTEXT_MESSAGES)
+    .reverse()
+    .map((message) => {
+      const messageId = safeString(message.message_id).trim();
+      const dispatch = dispatchByMessageId.get(messageId);
+      const status = safeString(dispatch?.status).trim() || "untracked";
+      const intent = safeString(dispatch?.intent).trim();
+      dispatchStatusCounts.set(status, (dispatchStatusCounts.get(status) ?? 0) + 1);
+      if (intent) requestIntents.add(intent);
+      return buildLeaderMailboxMessageSummary(message, intent, status);
+    });
+  for (const message of unreadMessages.slice(0, Math.max(0, unreadMessages.length - summaries.length))) {
+    const messageId = safeString(message.message_id).trim();
+    const dispatch = dispatchByMessageId.get(messageId);
+    const status = safeString(dispatch?.status).trim() || "untracked";
+    const intent = safeString(dispatch?.intent).trim();
+    dispatchStatusCounts.set(status, (dispatchStatusCounts.get(status) ?? 0) + 1);
+    if (intent) requestIntents.add(intent);
+  }
+  const extraCount = Math.max(0, unreadMessages.length - summaries.length);
+  const mailboxPath = join(resolveCanonicalTeamStateRoot(cwd), "team", teamName, "mailbox", `${workerName}.json`)
+    .replace(/\\/g, "/");
+  const dispatchSummary = [...dispatchStatusCounts.entries()]
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([status, count]) => `${status}=${count}`)
+    .join(", ");
+
+  return [
+    "[OMX team worker mailbox]",
+    `- team: ${teamName}`,
+    `- worker: ${workerName}`,
+    `- unread worker messages: ${unreadMessages.length}`,
+    `- source: ${mailboxPath}`,
+    dispatchSummary ? `- dispatch status counts: ${dispatchSummary}` : null,
+    requestIntents.size > 0 ? `- request intents: ${[...requestIntents].sort().join(", ")}` : null,
+    ...summaries,
+    extraCount > 0 ? `- ${extraCount} additional unread message(s) not shown` : null,
+    "- Next boundary action: finish the current atomic step, then review these worker messages before continuing the assigned task.",
   ].filter(Boolean).join("\n");
 }
 
@@ -4493,6 +4651,7 @@ export async function dispatchCodexNativeHook(
   let goalWorkflowAdditionalContext: string | null = null;
   let ultragoalSteeringAdditionalContext: string | null = null;
   let leaderMailboxHandoffAdditionalContext: string | null = null;
+  let workerMailboxHandoffAdditionalContext: string | null = null;
   let autoRouteAdditionalContext: string | null = null;
   const nonFatalErrors: Array<{ stage: string; error: string }> = [];
 
@@ -4607,6 +4766,12 @@ export async function dispatchCodexNativeHook(
       sessionIdForState,
       "UserPromptSubmit",
       threadId,
+    ).catch(() => null);
+    workerMailboxHandoffAdditionalContext = await buildWorkerMailboxHandoffAdditionalContext(
+      payload,
+      cwd,
+      sessionIdForState,
+      "UserPromptSubmit",
     ).catch(() => null);
     goalWorkflowAdditionalContext = await buildGoalWorkflowReconciliationPromptWarning(cwd, prompt).catch(() => null);
     ultragoalSteeringAdditionalContext = prompt && !isSubagentPromptSubmit
@@ -4781,6 +4946,7 @@ export async function dispatchCodexNativeHook(
           buildAdditionalContextMessage(readPromptText(payload), skillState, cwd, payload),
           autoRouteAdditionalContext,
           leaderMailboxHandoffAdditionalContext,
+          workerMailboxHandoffAdditionalContext,
           ultragoalSteeringAdditionalContext,
           goalWorkflowAdditionalContext,
           triageAdditionalContext,
@@ -4805,11 +4971,21 @@ export async function dispatchCodexNativeHook(
       outputJson,
       "PreToolUse",
       await buildLeaderMailboxHandoffAdditionalContext(
-      payload,
-      cwd,
-      preToolUseSessionId,
+        payload,
+        cwd,
+        preToolUseSessionId,
+        "PreToolUse",
+        threadId,
+      ).catch(() => null),
+    );
+    outputJson = appendHookAdditionalContext(
+      outputJson,
       "PreToolUse",
-      threadId,
+      await buildWorkerMailboxHandoffAdditionalContext(
+        payload,
+        cwd,
+        preToolUseSessionId,
+        "PreToolUse",
       ).catch(() => null),
     );
   } else if (hookEventName === "PostToolUse") {

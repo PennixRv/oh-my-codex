@@ -1216,12 +1216,12 @@ export function buildMailboxTriggerDirective(
   if (teamStateRoot !== ".omx/state") {
     return {
       intent: "pending-mailbox-review",
-      text: `${n} new msg(s): read ${mailboxPath}, act, report progress, continue assigned work or next feasible task.`,
+      text: `${n} new msg(s): finish current step, read ${mailboxPath}, mark delivered, then continue assigned work or the next feasible task.`,
     };
   }
   return {
     intent: "pending-mailbox-review",
-    text: `You have ${n} new message(s). Read ${mailboxPath}, act now, reply with concrete progress, then continue assigned work or next feasible task.`,
+    text: `You have ${n} new message(s). Finish current step, read ${mailboxPath}, mark delivered, then continue assigned work or the next feasible task.`,
   };
 }
 

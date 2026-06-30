@@ -5375,15 +5375,20 @@ async function deliverPendingMailboxMessages(
   return pruned;
 }
 
-type RuntimeMailboxTransportPreference = 'prompt_stdin' | 'transport_direct' | 'hook_preferred_with_fallback';
+type RuntimeMailboxTransportPreference =
+  | 'prompt_stdin'
+  | 'transport_direct'
+  | 'hook_preferred_with_fallback'
+  | 'mailbox_boundary';
 
 function resolveWorkerMailboxTransportPreference(
   config: TeamConfig,
   dispatchPolicy: TeamPolicy,
 ): RuntimeMailboxTransportPreference {
+  void dispatchPolicy;
   return config.worker_launch_mode === 'prompt'
     ? 'prompt_stdin'
-    : (dispatchPolicy.dispatch_mode === 'transport_direct' ? 'transport_direct' : 'hook_preferred_with_fallback');
+    : 'mailbox_boundary';
 }
 
 function resolveLeaderMailboxTransportPreference(
@@ -5428,6 +5433,33 @@ async function dispatchPendingMailboxMessage(params: {
     },
     cwd,
   );
+
+  if (transportPreference === 'mailbox_boundary') {
+    await markMessageNotified(teamName, workerName, messageId, cwd).catch(() => false);
+    await markDispatchRequestNotified(
+      teamName,
+      queued.request.request_id,
+      { message_id: messageId, last_reason: 'worker_mailbox_boundary_delivery' },
+      cwd,
+    ).catch(() => null);
+    const outcome: DispatchOutcome = {
+      ok: true,
+      transport: 'mailbox',
+      reason: 'worker_mailbox_boundary_delivery',
+      request_id: queued.request.request_id,
+      message_id: messageId,
+    };
+    await logRuntimeDispatchOutcome({
+      cwd,
+      teamName,
+      workerName,
+      requestId: queued.request.request_id,
+      messageId,
+      intent: triggerDirective.intent,
+      outcome,
+    });
+    return outcome;
+  }
 
   if (transportPreference === 'hook_preferred_with_fallback') {
     return await finalizeQueuedMailboxDispatch({
@@ -5608,11 +5640,13 @@ async function sendRecipientMailboxMessage(params: {
     notify: async (_target, message) => (
       transportPreference === 'hook_preferred_with_fallback'
         ? { ok: true, transport: 'hook', reason: 'queued_for_hook_dispatch' }
+        : transportPreference === 'mailbox_boundary'
+          ? { ok: true, transport: 'mailbox', reason: 'worker_mailbox_boundary_delivery' }
         : await notifyWorkerOutcome(config, recipient.index, message, recipient.pane_id)
     ),
   });
 
-  return await finalizeQueuedMailboxDispatch({
+  const finalOutcome = await finalizeQueuedMailboxDispatch({
     queuedOutcome,
     transportPreference,
     teamName,
@@ -5626,6 +5660,18 @@ async function sendRecipientMailboxMessage(params: {
     dispatchPolicy,
     cwd,
   });
+  if (finalOutcome.ok && finalOutcome.reason === 'worker_mailbox_boundary_delivery') {
+    await logRuntimeDispatchOutcome({
+      cwd,
+      teamName,
+      workerName: recipient.name,
+      requestId: finalOutcome.request_id,
+      messageId: finalOutcome.message_id,
+      intent: triggerDirective.intent,
+      outcome: finalOutcome,
+    });
+  }
+  return finalOutcome;
 }
 
 async function finalizeBroadcastMailboxOutcomes(params: {
@@ -5745,6 +5791,8 @@ export async function broadcastWorkerMessage(
     notify: async (target, message) =>
       transportPreference === 'hook_preferred_with_fallback'
         ? { ok: true, transport: 'hook', reason: 'queued_for_hook_dispatch' }
+        : transportPreference === 'mailbox_boundary'
+          ? { ok: true, transport: 'mailbox', reason: 'worker_mailbox_boundary_delivery' }
         : (typeof target.workerIndex === 'number'
         ? await notifyWorkerOutcome(config, target.workerIndex, message, target.paneId)
         : { ok: false, transport: 'none', reason: 'missing_worker_index' }),
@@ -5757,6 +5805,18 @@ export async function broadcastWorkerMessage(
     dispatchPolicy,
     cwd,
   });
+  for (const result of results) {
+    if (!result.ok || result.reason !== 'worker_mailbox_boundary_delivery') continue;
+    await logRuntimeDispatchOutcome({
+      cwd,
+      teamName: sanitized,
+      workerName: String(result.to_worker || '').trim() || 'unknown-worker',
+      requestId: result.request_id,
+      messageId: result.message_id,
+      intent: 'pending-mailbox-review',
+      outcome: result,
+    });
+  }
   if (results.some((result) => !result.ok)) {
     const firstFailure = results.find((result) => !result.ok);
     throw new Error(`mailbox_notify_failed:${firstFailure?.reason ?? 'unknown'}`);

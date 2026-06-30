@@ -1,35 +1,33 @@
-# oh-my-codex-pennix v0.18.56
+# oh-my-codex-pennix v0.18.57
 
 > Release notes template for the Pennix fork. The tag workflow regenerates this file into the final GitHub release body.
 
 ## Summary
 
-This release ships the Pennix fork plugin-cache lifecycle and install-stamp follow-up: plugin-mode local marketplace cache now converges on the official stable `local/` cache key, `doctor`/`setup` stop mistaking historical version-scoped caches for the live plugin surface, and explicit completed setup writes the missing install completion stamp.
+This release ships the Pennix fork mailbox-boundary handoff follow-up: interactive team workers now consume unread leader mailbox messages at native hook prompt/tool boundaries instead of relying on tmux injection fallback, while leader/worker guidance and dispatch telemetry are aligned to the same boundary-driven contract.
 
 ## Highlights
 
-- Plugin-mode packaged OMX cache now materializes to `~/.codex/plugins/cache/oh-my-codex-local/oh-my-codex/local/` and rewrites the cached plugin manifest to `version = "local"`, so live hook entrypoints stop churning with every package version bump.
-- `omx setup` now refreshes the active stable `local` cache in place, preserves historical version-scoped compatibility residue for still-running older sessions, and prefers the `local` cache when inferring plugin install mode.
-- `omx doctor` now validates the stable local cache path explicitly for both plugin skills and plugin-scoped hooks instead of accepting arbitrary version-scoped cache directories as healthy current state.
-- Successful explicit setup now writes `setup_completed_version` into the OMX install stamp, with a dedicated active regression test covering the contract.
+- Interactive worker steady-state mailbox delivery now resolves to durable `mailbox_boundary` dispatches, so unread leader messages surface through native-hook `additionalContext` on the next `UserPromptSubmit` or `PreToolUse` boundary instead of being re-injected into tmux panes.
+- Worker mailbox dispatch state is now marked notified immediately with explicit `worker_mailbox_boundary_delivery` telemetry, keeping runtime, dispatch logs, and boundary consumption aligned without synthetic reminder writes back into the leader mailbox.
+- Worker mailbox trigger copy now tells workers to finish the current step, read the real mailbox file, mark messages delivered, and continue feasible work, matching the intended boundary-driven leader/worker mental model.
+- Regression coverage now locks unread leader and worker mailbox context handoff, same-batch dedupe, delivered-message ignore behavior, and interactive worker boundary dispatch semantics.
 
 ## Fixes / compatibility
 
-- `src/cli/plugin-marketplace.ts`, `src/cli/setup.ts`, and `src/cli/doctor.ts` now align plugin-mode local marketplace cache semantics to the stable official `local` cache key while preserving historical version-scoped cache directories as compatibility residue.
-- `src/cli/update.ts` and `src/cli/setup.ts` now complete the OMX install stamp by writing `setup_completed_version` after a successful setup refresh.
-- The published regression surface now includes active coverage for stable local plugin cache materialization, doctor validation against the `local` cache, and explicit setup install-stamp completion.
+- `src/scripts/codex-native-hook.ts` now resolves unread worker/leader mailbox batches directly from the real mailbox state and attaches them as structured boundary context, deduped per unread-batch signature and session/turn boundary.
+- `src/team/runtime.ts`, `src/team/mcp-comm.ts`, and team dispatch state types now formalize `mailbox_boundary` as the interactive worker mailbox transport instead of treating steady-state worker messages as hook-preferred tmux injection work.
+- `src/team/worker-bootstrap.ts` and related guidance/tests now describe worker mailbox handling as boundary-delivered asynchronous review rather than visible injection or retry-driven prompting.
 
 ## Merged PR inventory
 
-- No merged PRs. `0.18.56` is a direct release-line commit on the Pennix fork.
+- No merged PRs. `0.18.57` is a direct release-line commit on the Pennix fork.
 
 ## Validation
 
 - `npm run build`
-- `node dist/scripts/run-test-files.js dist/cli/__tests__/plugin-marketplace.test.js`
-- `node dist/scripts/run-test-files.js dist/cli/__tests__/doctor-warning-copy.test.js`
-- `node dist/scripts/run-test-files.js dist/cli/__tests__/setup-install-stamp.test.js`
-- `node dist/scripts/check-version-sync.js --tag v0.18.56`
+- `node dist/scripts/run-test-files.js dist/team/__tests__/delivery-e2e-smoke.test.js dist/team/__tests__/runtime.test.js dist/scripts/__tests__/codex-native-hook.test.js dist/team/__tests__/mcp-comm.test.js dist/team/__tests__/worker-bootstrap.test.js`
+- `node dist/scripts/check-version-sync.js --tag v0.18.57`
 - `git diff --check`
 - `npm pack --dry-run`
 
@@ -37,4 +35,4 @@ This release ships the Pennix fork plugin-cache lifecycle and install-stamp foll
 
 Thanks to the contributors who made this release possible.
 
-**Full Changelog**: [`v0.18.55...v0.18.56`](https://github.com/PennixRv/oh-my-codex/compare/v0.18.55...v0.18.56)
+**Full Changelog**: [`v0.18.56...v0.18.57`](https://github.com/PennixRv/oh-my-codex/compare/v0.18.56...v0.18.57)

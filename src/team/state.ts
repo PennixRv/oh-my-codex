@@ -243,7 +243,11 @@ export interface TeamGovernance {
 }
 
 export type TeamDispatchRequestKind = 'inbox' | 'mailbox' | 'nudge';
-export type TeamDispatchTransportPreference = 'hook_preferred_with_fallback' | 'transport_direct' | 'prompt_stdin';
+export type TeamDispatchTransportPreference =
+  | 'hook_preferred_with_fallback'
+  | 'transport_direct'
+  | 'prompt_stdin'
+  | 'mailbox_boundary';
 
 export interface TeamDispatchRequest {
   request_id: string;
