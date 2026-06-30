@@ -2075,11 +2075,11 @@ function getInstallableSparkLaneAgentNames(): string[] {
 }
 
 /**
- * Surface effective Spark/model lane routing and flag the common reasons the
- * `gpt-5.3-codex-spark` quota stays unused even though resolution is wired
- * (issue #2757): a missing/stale installed Spark-lane agent toml, a model that
- * diverges from the resolved Spark default, or a non-default provider that does
- * not draw from native Spark quota.
+ * Surface effective Spark/model lane routing and flag common install drift:
+ * missing/stale Spark-lane native agent TOMLs, model divergence from the
+ * resolved Spark default, or provider divergence from the configured root
+ * provider. Non-default providers are allowed when they intentionally own the
+ * full model surface for this Codex installation.
  */
 export function checkSparkRouting(paths: DoctorPaths): Check {
 	const name = "Spark routing";
@@ -2135,9 +2135,9 @@ export function checkSparkRouting(paths: DoctorPaths): Check {
 			);
 			continue;
 		}
-		if (info.modelProvider && info.modelProvider !== "openai") {
+		if (info.modelProvider && !rootProvider && info.modelProvider !== "openai") {
 			problems.push(
-				`${agentName}.toml routes Spark via non-default model_provider \`${info.modelProvider}\`; native Codex Spark quota only moves when Spark is served by the default provider`,
+				`${agentName}.toml routes Spark via non-default model_provider \`${info.modelProvider}\`, but config.toml has no root model_provider to confirm that this is intentional`,
 			);
 			continue;
 		}

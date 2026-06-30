@@ -1,35 +1,35 @@
-# oh-my-codex-pennix v0.18.53
+# oh-my-codex-pennix v0.18.54
 
 > Release notes template for the Pennix fork. The tag workflow regenerates this file into the final GitHub release body.
 
 ## Summary
 
-This release ships two narrow reliability fixes for the Pennix fork: `PostToolUse` dispatch failures are now fail-open at the CLI boundary instead of surfacing as `hook exited with code 1` noise across unrelated sessions, and plugin-cache refresh no longer deletes version-scoped hook paths that active Codex sessions may still be executing from.
+This release ships a narrow diagnostics-and-provider-alignment fix for the Pennix fork: Spark-lane doctor checks now respect intentional non-default root providers such as `cch`, while setup continues preserving the configured provider on installed native-agent TOMLs.
 
 ## Highlights
 
-- `PostToolUse` hook dispatch failures are now downgraded to non-fatal OMX errors at the native CLI boundary, preserving the hook session instead of returning exit code `1`.
-- Plugin-mode setup now preserves historical version-scoped plugin cache directories, so upgrading OMX no longer pulls the hook entrypoint out from under older still-running Codex sessions.
-- Same-version plugin cache repair now refreshes the packaged cache in place instead of deleting the cache directory first, shrinking the transient missing-file window for plugin-scoped hook entrypoints.
-- The fail-open hook boundary and the plugin-cache lifecycle behavior are now both regression-covered.
+- `Spark routing` doctor checks now pass when the installed Spark-lane native agent intentionally matches the configured root `model_provider`, instead of warning only because the provider is not `openai`.
+- Setup continues preserving the configured root provider on native-agent TOMLs, including the Spark-lane `explore.toml`, so provider-routed installs such as `cch` stay executable after refresh.
+- Spark-lane diagnostics now distinguish intentional provider alignment from real provider drift or missing-root-provider ambiguity.
+- The Spark routing contract is regression-covered for both intentional non-default root-provider alignment and actual misconfiguration.
 
 ## Fixes / compatibility
 
-- `src/scripts/codex-native-hook.ts` now keeps `PostToolUse` top-level dispatch failures non-fatal while recording a fail-open audit trail.
-- `src/scripts/__tests__/codex-native-hook.test.ts` now covers the CLI boundary so a forced `PostToolUse` dispatch failure exits cleanly instead of surfacing as hook failure noise.
-- `src/cli/setup.ts` now stops invalidating historical version-scoped plugin cache directories just because the packaged version changed.
-- `src/cli/plugin-marketplace.ts` now repairs the packaged plugin cache in place instead of deleting the version directory before copying the refreshed hook files back.
-- `src/cli/__tests__/plugin-marketplace.test.ts` now covers historical cache preservation and in-place packaged-cache refresh.
+- `src/cli/doctor.ts` now treats Spark-lane agents as healthy when their `model_provider` matches the configured root provider, even when that provider is a non-default fork environment such as `cch`.
+- `src/cli/__tests__/doctor-spark-routing.test.ts` now covers both the intentional root-provider-alignment case and the real non-default-provider warning case when no matching root provider is configured.
+- `src/agents/native-config.ts` keeps preserving the configured root provider on generated native-agent TOMLs, including Spark-lane native agents.
 
 ## Merged PR inventory
 
-- No merged PRs. `0.18.53` is a direct release-line commit on the Pennix fork.
+- No merged PRs. `0.18.54` is a direct release-line commit on the Pennix fork.
 
 ## Validation
 
 - `npm run build`
-- `node dist/scripts/run-test-files.js dist/cli/__tests__/plugin-marketplace.test.js dist/scripts/__tests__/codex-native-hook.test.js dist/cli/__tests__/doctor-warning-copy.test.js`
-- `node dist/scripts/check-version-sync.js --tag v0.18.53`
+- `node dist/scripts/run-test-files.js dist/agents/__tests__/native-config.test.js dist/cli/__tests__/doctor-spark-routing.test.js`
+- `node dist/cli/omx.js setup --plugin --force --verbose`
+- `node dist/cli/omx.js doctor`
+- `node dist/scripts/check-version-sync.js --tag v0.18.54`
 - `git diff --check`
 - `npm pack --dry-run`
 
@@ -37,4 +37,4 @@ This release ships two narrow reliability fixes for the Pennix fork: `PostToolUs
 
 Thanks to the contributors who made this release possible.
 
-**Full Changelog**: [`v0.18.52...v0.18.53`](https://github.com/PennixRv/oh-my-codex/compare/v0.18.52...v0.18.53)
+**Full Changelog**: [`v0.18.53...v0.18.54`](https://github.com/PennixRv/oh-my-codex/compare/v0.18.53...v0.18.54)

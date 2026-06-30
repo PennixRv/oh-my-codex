@@ -90,4 +90,25 @@ describe('checkSparkRouting', () => {
     assert.match(result.message, /non-default model_provider/);
     assert.match(result.message, /my-proxy/);
   });
+
+  it('passes when the Spark-lane agent matches an intentional non-default root provider', () => {
+    writeFileSync(
+      join(workDir, 'config.toml'),
+      [
+        'model = "gpt-5.4"',
+        'model_provider = "cch"',
+        '',
+        '[model_providers.cch]',
+        'name = "CCH"',
+        'base_url = "https://cch.example/v1"',
+      ].join('\n'),
+    );
+    writeExploreToml(
+      `name = "explore"\nmodel = "${SPARK_DEFAULT}"\nmodel_provider = "cch"\n`,
+    );
+    const result = checkSparkRouting(makePaths(workDir));
+    assert.equal(result.status, 'pass');
+    assert.doesNotMatch(result.message, /issue\(s\)/);
+    assert.match(result.message, /explore -> `gpt-5\.3-codex-spark` \(provider: cch\)/);
+  });
 });

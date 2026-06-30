@@ -4,6 +4,14 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+## [0.18.54] - 2026-06-30
+
+Patch release for the Pennix fork Spark-lane diagnostics line: `doctor` no longer misclassifies intentional non-default root providers such as `cch` as broken Spark routing when the installed Spark-lane agent matches the configured root provider.
+
+- `Spark routing` doctor checks now treat a Spark-lane native agent as healthy when its `model_provider` matches the configured root `config.toml` provider, instead of warning purely because that provider is not `openai`.
+- Native agent generation continues to preserve the configured root provider on installed native-agent TOMLs, including the Spark-lane `explore.toml`, so provider-backed environments such as `cch` keep working after setup refresh.
+- Spark routing regression coverage now distinguishes between intentional root-provider alignment and true drift/misconfiguration.
+
 ## [0.18.53] - 2026-06-30
 
 Patch release for the Pennix fork native-hook and plugin-cache lifecycle line: `PostToolUse` dispatch failures now fail open at the CLI boundary, and plugin-cache refresh no longer deletes version-scoped hook paths that active Codex sessions may still be executing from.
