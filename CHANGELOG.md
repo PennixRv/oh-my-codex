@@ -4,6 +4,15 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+## [0.18.52] - 2026-06-30
+
+Patch release for the Pennix fork role-routing line: Team auto-route now respects disabled team mode, avoids over-eager review classification, keeps reviewer launch roles consistent, and no longer preempts prose workflow-selection prompts with Team guidance.
+
+- Team auto-route now short-circuits to solo when Team mode is disabled, even for strong review-shaped prompts.
+- Review-specialist routing now has a single launch-role source of truth, so staffing summaries, preferred launch roles, and suggested `omx team ...` commands stay aligned.
+- Exploration-shaped prompts such as local SDK usage checks are no longer misclassified as Team review work.
+- Native `UserPromptSubmit` guidance now suppresses Team auto-route context for prose workflow-selection prompts like `use autopilot to ...`, preserving the user’s intended workflow choice.
+
 ## [0.18.51] - 2026-06-29
 
 Patch release for the Pennix fork install and plugin initialization contract:
