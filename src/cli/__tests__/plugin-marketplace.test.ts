@@ -7,8 +7,10 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   materializePackagedOmxPluginCache,
+  OMX_LOCAL_PLUGIN_CACHE_KEY,
   OMX_LOCAL_MARKETPLACE_NAME,
   OMX_PLUGIN_NAME,
+  omxLocalPluginCacheDir,
   resolvePackagedOmxMarketplace,
 } from "../plugin-marketplace.js";
 
@@ -48,7 +50,7 @@ function versionScopedCacheDir(codexHomeDir: string, version: string): string {
 }
 
 describe("plugin marketplace cache lifecycle", () => {
-  it("preserves historical version-scoped plugin caches when materializing the packaged version", async () => {
+  it("preserves historical version-scoped plugin caches when materializing the stable local cache", async () => {
     const wd = await mkdtemp(join(tmpdir(), "omx-plugin-marketplace-"));
     try {
       const codexHomeDir = join(wd, "home", ".codex");
@@ -79,31 +81,43 @@ describe("plugin marketplace cache lifecycle", () => {
 
       assert.equal(result.status, "materialized");
       assert.equal(existsSync(join(historicalDir, "hooks", "codex-native-hook.mjs")), true);
+      const localCacheDir = omxLocalPluginCacheDir(codexHomeDir);
       assert.equal(
-        existsSync(
-          join(
-            versionScopedCacheDir(codexHomeDir, await packagedPluginVersion()),
-            "hooks",
-            "codex-native-hook.mjs",
-          ),
-        ),
+        existsSync(join(localCacheDir, "hooks", "codex-native-hook.mjs")),
         true,
       );
+      const manifest = JSON.parse(
+        await readFile(join(localCacheDir, ".codex-plugin", "plugin.json"), "utf-8"),
+      ) as { version?: unknown };
+      assert.equal(manifest.version, OMX_LOCAL_PLUGIN_CACHE_KEY);
     } finally {
       await rm(wd, { recursive: true, force: true });
     }
   });
 
-  it("refreshes the packaged version cache in place without dropping the hook entrypoint path", async () => {
+  it("refreshes the stable local cache in place without dropping the hook entrypoint path", async () => {
     const wd = await mkdtemp(join(tmpdir(), "omx-plugin-marketplace-"));
     try {
       const codexHomeDir = join(wd, "home", ".codex");
-      const version = await packagedPluginVersion();
-      const cacheDir = versionScopedCacheDir(codexHomeDir, version);
+      await packagedPluginVersion();
+      const cacheDir = omxLocalPluginCacheDir(codexHomeDir);
       await mkdir(dirname(cacheDir), { recursive: true });
       await cp(join(repoRoot(), "plugins", "oh-my-codex"), cacheDir, {
         recursive: true,
       });
+      await writeFile(
+        join(cacheDir, ".codex-plugin", "plugin.json"),
+        JSON.stringify(
+          {
+            name: OMX_PLUGIN_NAME,
+            version: OMX_LOCAL_PLUGIN_CACHE_KEY,
+            skills: "./skills/",
+            hooks: "./hooks/hooks.json",
+          },
+          null,
+          2,
+        ) + "\n",
+      );
       await writeFile(
         join(cacheDir, "hooks", "omx-command.json"),
         JSON.stringify({ command: "/stale/node", argsPrefix: ["/stale/omx.js"] }, null, 2) + "\n",
@@ -123,6 +137,10 @@ describe("plugin marketplace cache lifecycle", () => {
       ) as { command?: string; argsPrefix?: string[] };
       assert.equal(launcher.command, process.execPath);
       assert.deepEqual(launcher.argsPrefix, [join(repoRoot(), "dist", "cli", "omx.js")]);
+      const manifest = JSON.parse(
+        await readFile(join(cacheDir, ".codex-plugin", "plugin.json"), "utf-8"),
+      ) as { version?: unknown };
+      assert.equal(manifest.version, OMX_LOCAL_PLUGIN_CACHE_KEY);
     } finally {
       await rm(wd, { recursive: true, force: true });
     }

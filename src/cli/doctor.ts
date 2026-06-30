@@ -61,9 +61,11 @@ import {
 } from "./setup-preferences.js";
 import {
 	OMX_LOCAL_MARKETPLACE_NAME,
+	OMX_LOCAL_PLUGIN_CACHE_KEY,
 	OMX_LOCAL_PLUGIN_CONFIG_KEY,
 	discoverOmxPluginCacheDirs,
 	expectedPackagedOmxSkillNames,
+	omxLocalPluginCacheDir,
 	packagedOmxPluginVersion,
 	pluginHookCacheMatchesPackaged,
 	readOmxPluginCacheState,
@@ -1266,9 +1268,7 @@ async function checkPluginScopedNativeHooks(
 	}
 
 	const version = await packagedOmxPluginVersion(packagedMarketplace);
-	const expectedCacheDir = version
-		? join(codexHomeDir, "plugins", "cache", OMX_LOCAL_MARKETPLACE_NAME, "oh-my-codex", version)
-		: join(codexHomeDir, "plugins", "cache", OMX_LOCAL_MARKETPLACE_NAME, "oh-my-codex", "<version>");
+	const expectedCacheDir = omxLocalPluginCacheDir(codexHomeDir);
 	const expectedHooksPath = join(expectedCacheDir, "hooks", "hooks.json");
 	const expectedHookLauncherPath = join(expectedCacheDir, "hooks", "codex-native-hook.mjs");
 	const expectedPinnedLauncherPath = join(expectedCacheDir, "hooks", "omx-command.json");
@@ -1280,6 +1280,15 @@ async function checkPluginScopedNativeHooks(
 				status: "warn",
 				message:
 					`plugin-scoped hooks are enabled, but the expected Codex plugin cache manifest is missing at ${join(expectedCacheDir, ".codex-plugin", "plugin.json")} (internal compatibility plugin cache path: ${OMX_PLUGIN_CACHE_PATH_HINT}); ${setupHooksPathDescription}; run "omx setup --plugin --force" to refresh the plugin cache`,
+		};
+	}
+
+	if (state.manifestVersion !== OMX_LOCAL_PLUGIN_CACHE_KEY) {
+		return {
+			name: "Native hooks",
+			status: "warn",
+			message:
+				`plugin-scoped hooks are enabled, but the Codex plugin cache manifest version at ${join(expectedCacheDir, ".codex-plugin", "plugin.json")} is ${String(state.manifestVersion)} instead of ${OMX_LOCAL_PLUGIN_CACHE_KEY}; ${setupHooksPathDescription}; run "omx setup --plugin --force" to refresh the plugin cache`,
 		};
 	}
 
@@ -1863,7 +1872,8 @@ async function checkPluginMarketplaceRegistration(
 		};
 		const readyCache = cacheStates.find(
 			(state) =>
-				state.manifestVersion === packagedManifestSummary.manifestVersion &&
+				state.cacheDir === omxLocalPluginCacheDir(codexHomeDir) &&
+				state.manifestVersion === OMX_LOCAL_PLUGIN_CACHE_KEY &&
 				state.skillsPointer === "./skills/" &&
 				JSON.stringify(state.skillNames) ===
 					JSON.stringify(packagedManifestSummary.skillNames),
@@ -1871,13 +1881,14 @@ async function checkPluginMarketplaceRegistration(
 		if (!readyCache) {
 			const staleManifestCache = cacheStates.find(
 				(state) =>
+					state.cacheDir === omxLocalPluginCacheDir(codexHomeDir) &&
 					state.skillsPointer === "./skills/" &&
 					JSON.stringify(state.skillNames) ===
 						JSON.stringify(packagedManifestSummary.skillNames) &&
-					state.manifestVersion !== packagedManifestSummary.manifestVersion,
+					state.manifestVersion !== OMX_LOCAL_PLUGIN_CACHE_KEY,
 			);
 			const detail = staleManifestCache
-				? `installed Codex plugin cache manifest version ${String(staleManifestCache.manifestVersion)} does not match packaged version ${packagedManifestSummary.manifestVersion}`
+				? `installed Codex plugin cache manifest version ${String(staleManifestCache.manifestVersion)} does not match expected local cache key ${OMX_LOCAL_PLUGIN_CACHE_KEY}`
 				: cacheStates.length === 0
 					? "no installed Codex plugin cache was found"
 					: "installed Codex plugin cache is missing the packaged skills mirror";

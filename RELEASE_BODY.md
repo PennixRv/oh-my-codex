@@ -1,35 +1,35 @@
-# oh-my-codex-pennix v0.18.55
+# oh-my-codex-pennix v0.18.56
 
 > Release notes template for the Pennix fork. The tag workflow regenerates this file into the final GitHub release body.
 
 ## Summary
 
-This release ships the Pennix fork install/config and leader-mailbox boundary follow-up: OMX no longer owns the root `model_reasoning_effort`, npm postinstall no longer auto-runs setup, and leader-directed team mailbox dispatches now consistently land as durable mailbox boundary delivery instead of drifting between pending/deferred and visible-injection semantics.
+This release ships the Pennix fork plugin-cache lifecycle and install-stamp follow-up: plugin-mode local marketplace cache now converges on the official stable `local/` cache key, `doctor`/`setup` stop mistaking historical version-scoped caches for the live plugin surface, and explicit completed setup writes the missing install completion stamp.
 
 ## Highlights
 
-- Root `model_reasoning_effort` is user-owned again: setup, plugin migration, and uninstall preserve explicit user settings such as `xhigh`, while still cleaning up only the old OMX-managed legacy root `medium` line.
-- Global npm postinstall now records version state and prints a manual `omx setup` reminder instead of auto-running setup during install time.
-- `leader-fixed` mailbox sends now consistently resolve to `leader_mailbox_boundary_delivery` across runtime and notify-hook dispatch consumers, with no direct leader-pane injection fallback and no synthetic pending/deferred branch when the leader pane is absent.
-- Current OMX guidance now matches Codex full-history fork inheritance behavior, preferring narrow `agent_type` routing when needed without falsely requiring OMX to always force `agent_type`, `model`, or `reasoning_effort`.
+- Plugin-mode packaged OMX cache now materializes to `~/.codex/plugins/cache/oh-my-codex-local/oh-my-codex/local/` and rewrites the cached plugin manifest to `version = "local"`, so live hook entrypoints stop churning with every package version bump.
+- `omx setup` now refreshes the active stable `local` cache in place, preserves historical version-scoped compatibility residue for still-running older sessions, and prefers the `local` cache when inferring plugin install mode.
+- `omx doctor` now validates the stable local cache path explicitly for both plugin skills and plugin-scoped hooks instead of accepting arbitrary version-scoped cache directories as healthy current state.
+- Successful explicit setup now writes `setup_completed_version` into the OMX install stamp, with a dedicated active regression test covering the contract.
 
 ## Fixes / compatibility
 
-- `src/config/generator.ts`, `src/cli/setup.ts`, and `src/cli/uninstall.ts` now preserve user-owned root reasoning while only stripping the legacy OMX-managed root `medium` block shape.
-- `src/scripts/postinstall.ts` now records the install stamp and logs a manual setup reminder instead of invoking setup during postinstall.
-- `src/team/runtime.ts`, `src/team/mcp-comm.ts`, and `src/scripts/notify-hook/team-dispatch.ts` now treat `leader-fixed` mailbox traffic as durable boundary delivery all the way through runtime and hook dispatch accounting.
-- Installed guidance surfaces in `src/config/generator.ts`, `src/cli/ralph.ts`, and `src/hooks/agents-overlay.ts` now describe conditional `agent_type` routing that respects Codex full-history fork inheritance.
+- `src/cli/plugin-marketplace.ts`, `src/cli/setup.ts`, and `src/cli/doctor.ts` now align plugin-mode local marketplace cache semantics to the stable official `local` cache key while preserving historical version-scoped cache directories as compatibility residue.
+- `src/cli/update.ts` and `src/cli/setup.ts` now complete the OMX install stamp by writing `setup_completed_version` after a successful setup refresh.
+- The published regression surface now includes active coverage for stable local plugin cache materialization, doctor validation against the `local` cache, and explicit setup install-stamp completion.
 
 ## Merged PR inventory
 
-- No merged PRs. `0.18.55` is a direct release-line commit on the Pennix fork.
+- No merged PRs. `0.18.56` is a direct release-line commit on the Pennix fork.
 
 ## Validation
 
 - `npm run build`
-- `node dist/scripts/run-test-files.js dist/config/__tests__/generator-root-reasoning-contract.test.js dist/cli/__tests__/setup-agents-overwrite.test.js dist/cli/__tests__/uninstall.test.js dist/scripts/__tests__/postinstall.test.js dist/team/__tests__/mcp-comm.test.js dist/team/__tests__/runtime.test.js dist/hooks/__tests__/notify-hook-team-dispatch.test.js`
-- `npm run test:node`
-- `node dist/scripts/check-version-sync.js --tag v0.18.55`
+- `node dist/scripts/run-test-files.js dist/cli/__tests__/plugin-marketplace.test.js`
+- `node dist/scripts/run-test-files.js dist/cli/__tests__/doctor-warning-copy.test.js`
+- `node dist/scripts/run-test-files.js dist/cli/__tests__/setup-install-stamp.test.js`
+- `node dist/scripts/check-version-sync.js --tag v0.18.56`
 - `git diff --check`
 - `npm pack --dry-run`
 
@@ -37,4 +37,4 @@ This release ships the Pennix fork install/config and leader-mailbox boundary fo
 
 Thanks to the contributors who made this release possible.
 
-**Full Changelog**: [`v0.18.54...v0.18.55`](https://github.com/PennixRv/oh-my-codex/compare/v0.18.54...v0.18.55)
+**Full Changelog**: [`v0.18.55...v0.18.56`](https://github.com/PennixRv/oh-my-codex/compare/v0.18.55...v0.18.56)

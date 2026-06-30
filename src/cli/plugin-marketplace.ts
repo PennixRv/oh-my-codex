@@ -7,6 +7,7 @@ import { teamModeEnabled, type SetupTeamMode } from "../config/team-mode.js";
 export const OMX_LOCAL_MARKETPLACE_NAME = "oh-my-codex-local";
 export const OMX_PLUGIN_NAME = "oh-my-codex";
 export const OMX_LOCAL_PLUGIN_CONFIG_KEY = `${OMX_PLUGIN_NAME}@${OMX_LOCAL_MARKETPLACE_NAME}`;
+export const OMX_LOCAL_PLUGIN_CACHE_KEY = "local";
 
 export interface PackagedOmxMarketplace {
 	marketplacePath: string;
@@ -135,6 +136,10 @@ export function omxPluginCacheBase(codexHomeDir: string): string {
 	);
 }
 
+export function omxLocalPluginCacheDir(codexHomeDir: string): string {
+	return join(omxPluginCacheBase(codexHomeDir), OMX_LOCAL_PLUGIN_CACHE_KEY);
+}
+
 export async function discoverOmxPluginCacheDirs(
 	codexHomeDir: string,
 ): Promise<string[]> {
@@ -216,16 +221,16 @@ export async function hasExpectedOmxPluginCache(
 	packagedMarketplace: PackagedOmxMarketplace,
 	options: { teamMode?: SetupTeamMode } = {},
 ): Promise<boolean> {
-	const [version, expectedSkillNames] = await Promise.all([
-		packagedOmxPluginVersion(packagedMarketplace),
-		expectedPackagedOmxSkillNames(packagedMarketplace, options),
-	]);
-	if (!version || !expectedSkillNames) return false;
+	const expectedSkillNames = await expectedPackagedOmxSkillNames(
+		packagedMarketplace,
+		options,
+	);
+	if (!expectedSkillNames) return false;
 	const state = await readOmxPluginCacheState(
-		join(omxPluginCacheBase(codexHomeDir), version),
+		omxLocalPluginCacheDir(codexHomeDir),
 	);
 	if (
-		state?.manifestVersion !== version ||
+		state?.manifestVersion !== OMX_LOCAL_PLUGIN_CACHE_KEY ||
 		state.skillsPointer !== "./skills/" ||
 		state.hooksPointer !== "./hooks/hooks.json" ||
 		!state.hookLauncherPinned ||
@@ -237,6 +242,29 @@ export async function hasExpectedOmxPluginCache(
 	}
 
 	return pluginHookCacheMatchesPackaged(state.cacheDir, packagedMarketplace);
+}
+
+async function rewritePluginManifestVersion(
+	cacheDir: string,
+): Promise<void> {
+	const manifestPath = join(cacheDir, ".codex-plugin", "plugin.json");
+	const manifest = await readPluginManifest(manifestPath);
+	if (!manifest || manifest.name !== OMX_PLUGIN_NAME) {
+		throw new Error(`invalid OMX plugin manifest at ${manifestPath}`);
+	}
+	await writeFile(
+		manifestPath,
+		`${JSON.stringify(
+			{
+				...manifest,
+				version: OMX_LOCAL_PLUGIN_CACHE_KEY,
+				skills: "./skills/",
+				hooks: "./hooks/hooks.json",
+			},
+			null,
+			2,
+		)}\n`,
+	);
 }
 
 async function fileContentsEqual(leftPath: string, rightPath: string): Promise<boolean> {
@@ -333,7 +361,7 @@ export async function materializePackagedOmxPluginCache(
 	if (!packagedMarketplace) return { status: "unavailable" };
 	const version = await packagedOmxPluginVersion(packagedMarketplace);
 	if (!version) return { status: "unavailable" };
-	const cacheDir = join(omxPluginCacheBase(codexHomeDir), version);
+	const cacheDir = omxLocalPluginCacheDir(codexHomeDir);
 	if (await hasExpectedOmxPluginCache(codexHomeDir, packagedMarketplace, options)) {
 		return { status: "unchanged", cacheDir, version };
 	}
@@ -358,6 +386,7 @@ async function materializePackagedOmxPluginCacheInPlace(
 	try {
 		await cp(packagedMarketplace.pluginRoot, stagingDir, { recursive: true });
 		await applyTeamModeToPluginCache(stagingDir, options.teamMode);
+		await rewritePluginManifestVersion(stagingDir);
 		await writePinnedHookLauncher(stagingDir, packagedMarketplace);
 		await mergePluginCacheIntoExistingDir(stagingDir, cacheDir);
 	} finally {

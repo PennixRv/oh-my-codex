@@ -4,6 +4,15 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+## [0.18.56] - 2026-06-30
+
+Patch release for the Pennix fork plugin-cache and install-stamp lifecycle line: plugin-mode local marketplace cache now converges on the official stable `local/` cache key, active setup/doctor checks stop treating historical version-scoped caches as the live plugin surface, and completed plugin-mode setup writes the missing install completion stamp.
+
+- Plugin-mode packaged OMX cache materialization now targets the stable local marketplace path `~/.codex/plugins/cache/oh-my-codex-local/oh-my-codex/local/` and rewrites the cached plugin manifest to `version = "local"` so live hook entrypoints no longer churn with every package version bump.
+- `omx setup` plugin cache refresh now distinguishes the stable `local` cache from historical version-scoped caches: the active cache is refreshed in place, historical version directories are preserved as compatibility residue for still-running older sessions, and autodetection now prefers the stable `local` cache when inferring plugin install mode.
+- `omx doctor` now validates the stable local cache path explicitly for both plugin skills and plugin-scoped hooks instead of accepting arbitrary version-scoped cache directories as healthy current state.
+- Explicit successful setup now writes `setup_completed_version` back into the OMX install stamp, and release coverage now includes a dedicated active regression test for that stamp contract.
+
 ## [0.18.55] - 2026-06-30
 
 Patch release for the Pennix fork install/config and leader-mailbox boundary line: root `model_reasoning_effort` is now treated as user-owned again, postinstall no longer auto-runs setup, and leader-directed team mailbox dispatches are consistently recorded as mailbox boundary delivery instead of reviving deferred/injection semantics.

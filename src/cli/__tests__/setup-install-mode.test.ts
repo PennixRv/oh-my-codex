@@ -16,6 +16,7 @@ import { dirname, join } from "node:path";
 import { parse as parseToml } from "@iarna/toml";
 import { setup } from "../setup.js";
 import { uninstall } from "../uninstall.js";
+import { readUserInstallStamp } from "../update.js";
 import { OMX_FIRST_PARTY_MCP_SERVER_NAMES } from "../../config/omx-first-party-mcp.js";
 import {
 	OMX_DEVELOPER_INSTRUCTIONS,
@@ -607,6 +608,19 @@ async function seedSameVersionPluginCacheWithStaleHooks(codexHomeDir: string): P
 		recursive: true,
 	});
 	await writeFile(
+		join(cacheDir, ".codex-plugin", "plugin.json"),
+		JSON.stringify(
+			{
+				name: "oh-my-codex",
+				version: "local",
+				skills: "./skills/",
+				hooks: "./hooks/hooks.json",
+			},
+			null,
+			2,
+		) + "\n",
+	);
+	await writeFile(
 		join(cacheDir, "hooks", "omx-command.json"),
 		JSON.stringify({ command: process.execPath, argsPrefix: [join(packageRoot, "dist", "cli", "omx.js")] }, null, 2) + "\n",
 	);
@@ -627,6 +641,19 @@ async function seedSameVersionPluginCacheWithStaleLauncher(codexHomeDir: string)
 		recursive: true,
 	});
 	await writeFile(
+		join(cacheDir, ".codex-plugin", "plugin.json"),
+		JSON.stringify(
+			{
+				name: "oh-my-codex",
+				version: "local",
+				skills: "./skills/",
+				hooks: "./hooks/hooks.json",
+			},
+			null,
+			2,
+		) + "\n",
+	);
+	await writeFile(
 		join(cacheDir, "hooks", "omx-command.json"),
 		JSON.stringify({ command: "/stale/node", argsPrefix: ["/stale/omx.js"] }, null, 2) + "\n",
 	);
@@ -634,19 +661,13 @@ async function seedSameVersionPluginCacheWithStaleLauncher(codexHomeDir: string)
 }
 
 async function packagedPluginCacheDir(codexHomeDir: string): Promise<string> {
-	const manifest = JSON.parse(
-		await readFile(
-			join(packageRoot, "plugins", "oh-my-codex", ".codex-plugin", "plugin.json"),
-			"utf-8",
-		),
-	) as { version: string };
 	return join(
 		codexHomeDir,
 		"plugins",
 		"cache",
 		"oh-my-codex-local",
 		"oh-my-codex",
-		manifest.version,
+		"local",
 	);
 }
 
@@ -1268,6 +1289,49 @@ describe.skip("omx setup install mode behavior", () => {
 					const cacheDir = await packagedPluginCacheDir(codexHomeDir);
 					assert.equal(existsSync(cacheDir), false);
 					assert.match(output, /Would install local Codex plugin cache/);
+				});
+			});
+		} finally {
+			await rm(wd, { recursive: true, force: true });
+		}
+	});
+
+	it("writes setup_completed_version after a successful explicit plugin-mode setup", async () => {
+		const wd = await mkdtemp(join(tmpdir(), "omx-setup-install-mode-"));
+		try {
+			await withIsolatedUserHome(wd, async (codexHomeDir) => {
+				await withTempCwd(wd, async () => {
+					const stampPath = join(codexHomeDir, ".omx", "install-state.json");
+					await mkdir(dirname(stampPath), { recursive: true });
+					await writeFile(
+						stampPath,
+						JSON.stringify(
+							{
+								installed_version: "0.18.56",
+								install_channel: "stable",
+								install_source: "oh-my-codex-pennix@latest",
+								updated_at: "2026-06-30T00:00:00.000Z",
+							},
+							null,
+							2,
+						),
+					);
+
+					await setup({ scope: "user", installMode: "plugin" });
+
+					const stamp = await readUserInstallStamp(stampPath);
+					assert.equal(
+						typeof stamp?.setup_completed_version,
+						"string",
+						"explicit setup should mark setup_completed_version",
+					);
+					assert.equal(
+						stamp?.setup_completed_version,
+						stamp?.installed_version,
+						"completed setup stamp should match the installed version after setup",
+					);
+					assert.equal(stamp?.install_channel, "stable");
+					assert.equal(stamp?.install_source, "oh-my-codex-pennix@latest");
 				});
 			});
 		} finally {

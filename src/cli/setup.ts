@@ -109,10 +109,13 @@ import {
 	type SetupMcpMode,
 	type SetupScope,
 } from "./setup-preferences.js";
+import { writeCompletedSetupInstallStamp } from "./update.js";
 import {
 	OMX_LOCAL_MARKETPLACE_NAME,
+	OMX_LOCAL_PLUGIN_CACHE_KEY,
 	OMX_PLUGIN_NAME,
 	materializePackagedOmxPluginCache,
+	omxLocalPluginCacheDir,
 	resolvePackagedOmxMarketplace,
 	upsertLocalOmxMarketplaceRegistration,
 	upsertLocalOmxPluginEnablement,
@@ -1156,7 +1159,9 @@ async function discoverOmxPluginCacheDirs(
 async function discoverOmxPluginCacheDir(
 	cacheRoot = join(codexHome(), "plugins", "cache"),
 ): Promise<string | null> {
-	return (await discoverOmxPluginCacheDirs(cacheRoot))[0] ?? null;
+	const matches = await discoverOmxPluginCacheDirs(cacheRoot);
+	const localMatch = matches.find((dir) => basename(dir) === OMX_LOCAL_PLUGIN_CACHE_KEY);
+	return localMatch ?? matches[0] ?? null;
 }
 
 function isVersionScopedOmxPluginCacheDir(
@@ -1172,6 +1177,7 @@ function isVersionScopedOmxPluginCacheDir(
 	);
 	const relativePath = relative(pluginBaseDir, cacheDir);
 	if (!relativePath || relativePath.startsWith("..")) return false;
+	if (relativePath === OMX_LOCAL_PLUGIN_CACHE_KEY) return false;
 	return !relativePath.includes("/") && !relativePath.includes("\\");
 }
 
@@ -1205,6 +1211,7 @@ async function refreshOmxPluginDiscoveryCache(
 			join(cacheDir, ".codex-plugin", "plugin.json"),
 		);
 		if (manifest?.name !== OMX_PLUGIN_NAME) continue;
+		const isCurrentLocalCache = cacheDir === omxLocalPluginCacheDir(codexHomeDir);
 		const isHistoricalVersionScopedCache =
 			typeof expectedVersion === "string" &&
 			manifest.version !== expectedVersion &&
@@ -1213,7 +1220,9 @@ async function refreshOmxPluginDiscoveryCache(
 
 		const cachedSkillNames = await listChildDirectoryNames(join(cacheDir, "skills"));
 		const versionChanged =
-			expectedVersion !== null && manifest.version !== expectedVersion;
+			isCurrentLocalCache
+				? manifest.version !== OMX_LOCAL_PLUGIN_CACHE_KEY
+				: expectedVersion !== null && manifest.version !== expectedVersion;
 		const skillsPointerChanged = manifest.skills !== "./skills/";
 		const hooksPointerChanged = manifest.hooks !== "./hooks/hooks.json";
 		const hookFilesMissing = !existsSync(join(cacheDir, "hooks", "hooks.json"))
@@ -2950,6 +2959,20 @@ export async function setup(options: SetupOptions = {}): Promise<void> {
 			"Force mode: enabled additional destructive maintenance (for example stale deprecated skill cleanup).",
 		);
 		console.log();
+	}
+
+	if (!dryRun) {
+		const packageVersion = JSON.parse(
+			await readFile(join(getPackageRoot(), "package.json"), "utf-8"),
+		) as { version?: unknown };
+		const resolvedVersion = typeof packageVersion.version === "string"
+			? packageVersion.version.trim()
+			: "";
+		if (resolvedVersion !== "") {
+			await writeCompletedSetupInstallStamp(resolvedVersion, {
+				codexHomeDir: scopeDirs.codexHomeDir,
+			});
+		}
 	}
 
 	console.log('Setup complete! Run "omx doctor" to verify installation.');

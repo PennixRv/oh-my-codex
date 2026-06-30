@@ -85,20 +85,30 @@ function currentNativeHookCommand(codexHomeDir: string): string {
 async function installPluginCacheFixture(codexDir: string): Promise<string> {
 	const root = repoRoot();
 	const sourcePluginDir = join(root, "plugins", "oh-my-codex");
-	const manifest = JSON.parse(
-		await readFile(join(sourcePluginDir, ".codex-plugin", "plugin.json"), "utf-8"),
-	) as { version: string };
 	const cacheDir = join(
 		codexDir,
 		"plugins",
 		"cache",
 		"oh-my-codex-local",
 		"oh-my-codex",
-		manifest.version,
+		"local",
 	);
 	await rm(cacheDir, { recursive: true, force: true });
 	await mkdir(dirname(cacheDir), { recursive: true });
 	await cp(sourcePluginDir, cacheDir, { recursive: true });
+	await writeFile(
+		join(cacheDir, ".codex-plugin", "plugin.json"),
+		`${JSON.stringify(
+			{
+				name: "oh-my-codex",
+				version: "local",
+				skills: "./skills/",
+				hooks: "./hooks/hooks.json",
+			},
+			null,
+			2,
+		)}\n`,
+	);
 	await writeFile(
 		join(cacheDir, "hooks", "omx-command.json"),
 		`${JSON.stringify(
@@ -455,14 +465,13 @@ command = "node"
 			if (shouldSkipForSpawnPermissions(setupRes.error)) return;
 			assert.equal(setupRes.status, 0, setupRes.stderr || setupRes.stdout);
 
-			const version = await packagedPluginVersion();
 			const cacheManifestPath = join(
 				codexDir,
 				"plugins",
 				"cache",
 				"oh-my-codex-local",
 				"oh-my-codex",
-				version,
+				"local",
 				".codex-plugin",
 				"plugin.json",
 			);
@@ -484,7 +493,7 @@ command = "node"
 			assert.match(
 				res.stdout,
 				new RegExp(
-					`Skills: plugin marketplace oh-my-codex-local is registered, but installed Codex plugin cache manifest version 0\\.0\\.0-stale does not match packaged version ${version.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}; run "omx setup --plugin --force" so /skills can discover OMX plugin skills`,
+					'Skills: plugin marketplace oh-my-codex-local is registered, but installed Codex plugin cache manifest version 0\\.0\\.0-stale does not match expected local cache key local; run "omx setup --plugin --force" so /skills can discover OMX plugin skills',
 				),
 			);
 		} finally {

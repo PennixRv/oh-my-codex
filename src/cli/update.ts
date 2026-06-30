@@ -599,6 +599,30 @@ async function writeSuccessfulInstallStamp(
   });
 }
 
+export async function writeCompletedSetupInstallStamp(
+  installedVersion: string,
+  options: {
+    codexHomeDir?: string;
+  } = {},
+): Promise<void> {
+  const stampPath = omxUserInstallStampPath(options.codexHomeDir);
+  const existing = await readUserInstallStamp(stampPath);
+  const normalizedVersion = stripLeadingV(installedVersion);
+  await writeUserInstallStamp(
+    {
+      installed_version:
+        stripLeadingV(existing?.installed_version ?? '') || normalizedVersion,
+      setup_completed_version: normalizedVersion,
+      ...(existing?.install_channel ? { install_channel: existing.install_channel } : {}),
+      ...(existing?.install_source ? { install_source: existing.install_source } : {}),
+      ...(existing?.install_revision ? { install_revision: existing.install_revision } : {}),
+      ...(existing?.dev_base_version ? { dev_base_version: existing.dev_base_version } : {}),
+      updated_at: new Date().toISOString(),
+    },
+    stampPath,
+  );
+}
+
 export async function readUserInstallStamp(
   path = omxUserInstallStampPath(),
 ): Promise<UserInstallStamp | null> {
