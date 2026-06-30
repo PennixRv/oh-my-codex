@@ -37,10 +37,16 @@ export interface OmxConfigEnv {
 
 export type ConfiguredAgentReasoningEffort = 'low' | 'medium' | 'high' | 'xhigh';
 
+export interface ConfiguredRoleModelOverride {
+  model?: string;
+  reasoning?: ConfiguredAgentReasoningEffort;
+}
+
 interface OmxConfigFile {
   agentReasoning?: Record<string, unknown>;
   env?: OmxConfigEnv;
   models?: ModelsConfig;
+  roleModels?: Record<string, unknown>;
 }
 
 interface CodexConfigFile {
@@ -119,6 +125,10 @@ function normalizeAgentName(value: unknown): string | undefined {
   return normalized && /^[a-z0-9][a-z0-9_-]*$/.test(normalized) ? normalized : undefined;
 }
 
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return Boolean(value && typeof value === 'object' && !Array.isArray(value));
+}
+
 function readConfigEnvValue(key: string, codexHomeOverride?: string): string | undefined {
   const config = readOmxConfigFile(codexHomeOverride);
   if (!config || !config.env || typeof config.env !== 'object' || Array.isArray(config.env)) {
@@ -167,13 +177,45 @@ export function readAgentReasoningOverrides(
   return resolved;
 }
 
+export function readRoleModelOverrides(
+  codexHomeOverride?: string,
+): Record<string, ConfiguredRoleModelOverride> {
+  const config = readOmxConfigFile(codexHomeOverride);
+  const raw = config?.roleModels;
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {};
+
+  const resolved: Record<string, ConfiguredRoleModelOverride> = {};
+  for (const [key, value] of Object.entries(raw)) {
+    const role = normalizeAgentName(key);
+    if (!role || !isPlainObject(value)) continue;
+    const model = normalizeConfiguredValue(value.model);
+    const reasoning = normalizeAgentReasoningEffort(value.reasoning);
+    if (!model && !reasoning) continue;
+    resolved[role] = {
+      ...(model ? { model } : {}),
+      ...(reasoning ? { reasoning } : {}),
+    };
+  }
+  return resolved;
+}
+
+export function getRoleModelOverride(
+  agentName: string | undefined,
+  codexHomeOverride?: string,
+): ConfiguredRoleModelOverride | undefined {
+  const normalized = normalizeAgentName(agentName);
+  if (!normalized) return undefined;
+  return readRoleModelOverrides(codexHomeOverride)[normalized];
+}
+
 export function getAgentReasoningOverride(
   agentName: string | undefined,
   codexHomeOverride?: string,
 ): ConfiguredAgentReasoningEffort | undefined {
   const normalized = normalizeAgentName(agentName);
   if (!normalized) return undefined;
-  return readAgentReasoningOverrides(codexHomeOverride)[normalized];
+  return readRoleModelOverrides(codexHomeOverride)[normalized]?.reasoning
+    ?? readAgentReasoningOverrides(codexHomeOverride)[normalized];
 }
 
 export function readActiveProviderEnvOverrides(

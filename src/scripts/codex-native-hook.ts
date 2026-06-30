@@ -21,6 +21,7 @@ import {
   recordSubagentTurnForSession,
 } from "../subagents/tracker.js";
 import { resolveCanonicalTeamStateRoot, resolveWorkerNotifyTeamStateRootPath } from "../team/state-root.js";
+import { resolveAutoRouteDecision } from "../team/auto-route.js";
 import {
   appendToLog,
   isSessionStateUsable,
@@ -51,6 +52,7 @@ import {
 } from "../hooks/keyword-detector.js";
 import { buildDeepInterviewConfigInstruction } from "../hooks/deep-interview-config-instruction.js";
 import { readTeamModeConfig } from "../config/team-mode.js";
+import { resolveAvailableAgentTypes } from "../team/followup-planner.js";
 import {
   detectNativeStopStallPattern,
   loadAutoNudgeConfig,
@@ -2009,6 +2011,71 @@ function buildTeamHelpInstruction(cwd: string, payload?: CodexHookPayload): stri
     payload,
     nativeSessionId: safeString(payload?.session_id ?? payload?.sessionId).trim(),
   }).teamHelpInstruction;
+}
+
+async function buildAutoRouteAdditionalContext(
+  prompt: string,
+  cwd: string,
+  payload?: CodexHookPayload,
+): Promise<string | null> {
+  const normalizedPrompt = prompt.trim();
+  if (!normalizedPrompt) return null;
+  if (/^\s*[$/]/.test(normalizedPrompt)) return null;
+  if (looksLikeWorkflowSelectionPrompt(normalizedPrompt)) return null;
+  if (/^\s*(?:continue|继续|resume|keep going|现在呢|现状呢)\b/i.test(normalizedPrompt)) return null;
+  if (/^\s*(?:why|what|how|解释|说明|是什么|为什么)\b/i.test(normalizedPrompt) && !/\b(?:review|audit|verify|debug|investigate|research|compare|evaluate|implement|fix)\b/i.test(normalizedPrompt)) {
+    return null;
+  }
+
+  const executionEnvironment = resolveExecutionEnvironment(cwd, {
+    hookEventName: "UserPromptSubmit",
+    payload,
+    nativeSessionId: safeString(payload?.session_id ?? payload?.sessionId).trim(),
+  });
+  const availableAgentTypes = await resolveAvailableAgentTypes(cwd).catch(() => []);
+  const decision = resolveAutoRouteDecision(normalizedPrompt, {
+    availableAgentTypes,
+    attachedTmux: executionEnvironment.transport === "attached-tmux",
+    teamEnabled: readTeamModeConfig(cwd).enabled,
+  });
+  if (decision.mode !== "team") return null;
+
+  const launchCommand = `omx team ${decision.headcount}:${decision.preferredLaunchRole} ${JSON.stringify(normalizedPrompt)}`;
+  const allocationSummary = decision.staffingSummary || decision.allocations.map((allocation) => {
+    const reasoning = allocation.reasoningEffort ? `, ${allocation.reasoningEffort} reasoning` : "";
+    return `${allocation.role} x${allocation.count} (${allocation.reason}${reasoning})`;
+  }).join("; ");
+
+  if (decision.canAutoLaunchHere) {
+    return [
+      `OMX auto-routing judged this prompt better suited for the durable Team runtime than a generic solo lane.`,
+      `Primary role: ${decision.primaryRole}. Confidence: ${decision.confidence}. Reason: ${decision.routingReason}.`,
+      decision.reviewShape === "dual-lane"
+        ? `Review shape: dual-lane. Staffing: ${allocationSummary}.`
+        : `Staffing: ${allocationSummary}.`,
+      `If you choose Team, use the durable runtime via \`${launchCommand}\` rather than in-process fanout.`,
+    ].join(" ");
+  }
+
+  const outsideTmuxInstruction = executionEnvironment.launcher === "native"
+    ? "This surface cannot directly auto-start the tmux-only Team runtime."
+    : "Prompt-side routing can decide Team here, but this outside-tmux surface should not pretend the durable runtime already started.";
+  return [
+    `OMX auto-routing judged this prompt better suited for Team than a generic solo lane.`,
+    `Primary role: ${decision.primaryRole}. Confidence: ${decision.confidence}. Reason: ${decision.routingReason}.`,
+    decision.reviewShape === "dual-lane"
+      ? `Review shape: dual-lane. Staffing: ${allocationSummary}.`
+      : `Staffing: ${allocationSummary}.`,
+    outsideTmuxInstruction,
+    `If you want the durable runtime, launch it from an attached tmux OMX CLI shell: \`${launchCommand}\`.`,
+  ].join(" ");
+}
+
+function looksLikeWorkflowSelectionPrompt(prompt: string): boolean {
+  const normalizedPrompt = prompt.trim().toLowerCase();
+  if (!normalizedPrompt) return false;
+  return /\b(?:use|run|start|launch|activate|try|do)\s+(?:the\s+)?(?:\$)?(?:autopilot|ralph|ralplan|ultragoal|ultrawork|ultraqa|team|design|analyze|code-review|deep-interview|prometheus-strict|autoresearch)\b/.test(normalizedPrompt)
+    || /\b(?:autopilot|ralph|ralplan|ultragoal|ultrawork|ultraqa|team|design|analyze|code-review|deep-interview|prometheus-strict|autoresearch)\s+(?:workflow|mode)\b/.test(normalizedPrompt);
 }
 
 function buildNativeOutsideTmuxTeamPromptBlockState(
@@ -4426,6 +4493,7 @@ export async function dispatchCodexNativeHook(
   let goalWorkflowAdditionalContext: string | null = null;
   let ultragoalSteeringAdditionalContext: string | null = null;
   let leaderMailboxHandoffAdditionalContext: string | null = null;
+  let autoRouteAdditionalContext: string | null = null;
   const nonFatalErrors: Array<{ stage: string; error: string }> = [];
 
   const nativeSessionId = safeString(payload.session_id ?? payload.sessionId).trim();
@@ -4543,6 +4611,9 @@ export async function dispatchCodexNativeHook(
     goalWorkflowAdditionalContext = await buildGoalWorkflowReconciliationPromptWarning(cwd, prompt).catch(() => null);
     ultragoalSteeringAdditionalContext = prompt && !isSubagentPromptSubmit
       ? await applyUserPromptUltragoalSteering(cwd, prompt).catch((error) => `OMX native UserPromptSubmit rejected bounded .omx/ultragoal steering for G002-cli-and-prompt-submit-bridge: ${error instanceof Error ? error.message : String(error)}`)
+      : null;
+    autoRouteAdditionalContext = prompt && !isSubagentPromptSubmit
+      ? await buildAutoRouteAdditionalContext(prompt, cwd, payload).catch(() => null)
       : null;
     if (prompt && !isSubagentPromptSubmit) {
       skillState = buildNativeOutsideTmuxTeamPromptBlockState(
@@ -4708,6 +4779,7 @@ export async function dispatchCodexNativeHook(
         ? null
         : [
           buildAdditionalContextMessage(readPromptText(payload), skillState, cwd, payload),
+          autoRouteAdditionalContext,
           leaderMailboxHandoffAdditionalContext,
           ultragoalSteeringAdditionalContext,
           goalWorkflowAdditionalContext,

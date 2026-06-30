@@ -1,6 +1,7 @@
 import { getAgent } from '../agents/definitions.js';
 import {
   DEFAULT_SPARK_MODEL,
+  getRoleModelOverride,
   getAgentReasoningOverride,
   getMainDefaultModel,
   getSparkDefaultModel,
@@ -221,6 +222,8 @@ export function resolveAgentDefaultModel(
   if (typeof agentType !== 'string' || agentType.trim() === '') return undefined;
   const normalized = agentType.trim().toLowerCase();
   if (normalized === '') return undefined;
+  const roleOverrideModel = getRoleModelOverride(normalized, codexHomeOverride)?.model;
+  if (roleOverrideModel) return roleOverrideModel;
   if (normalized.endsWith('-low')) return resolveTeamLowComplexityDefaultModel(codexHomeOverride);
   if (normalized === 'executor') return getMainDefaultModel(codexHomeOverride);
 

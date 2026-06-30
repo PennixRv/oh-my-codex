@@ -200,6 +200,23 @@ describe('team model contract', () => {
       assert.equal(resolveAgentReasoningEffort('style-reviewer'), 'low');
     });
   });
+
+  it('prefers roleModels model overrides over built-in role defaults', async () => {
+    const codexHome = await mkdtemp(join(tmpdir(), 'omx-model-contract-rolemodels-'));
+    try {
+      await writeFile(join(codexHome, '.omx-config.json'), JSON.stringify({
+        roleModels: {
+          architect: {
+            model: 'gpt-5.4',
+          },
+        },
+      }));
+
+      assert.equal(resolveAgentDefaultModel('architect', codexHome), 'gpt-5.4');
+    } finally {
+      await rm(codexHome, { recursive: true, force: true });
+    }
+  });
 });
 
 describe('resolveTeamWorkerLaunchArgs - teammate reasoning allocation', () => {

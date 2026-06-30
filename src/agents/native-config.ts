@@ -13,6 +13,7 @@ import { getInstallableNativeAgentNames } from "./policy.js";
 import {
   getCodexConfigRootModelProvider,
   getEnvConfiguredStandardDefaultModel,
+  getRoleModelOverride,
   getAgentReasoningOverride,
   getMainDefaultModel,
   getSparkDefaultModel,
@@ -175,6 +176,11 @@ function resolveAgentModel(
   agent: AgentDefinition,
   options: AgentModelResolutionOptions = {},
 ): string {
+  const roleOverride = getRoleModelOverride(agent.name, options.codexHomeOverride);
+  if (roleOverride?.model) {
+    return roleOverride.model;
+  }
+
   if (agent.exactModel) {
     return agent.exactModel;
   }
@@ -347,7 +353,8 @@ export function generateAgentToml(
     ),
     model: resolvedModel,
     modelProvider: resolvedModelProvider,
-    reasoningEffort: getAgentReasoningOverride(agent.name, options.codexHomeOverride)
+    reasoningEffort: getRoleModelOverride(agent.name, options.codexHomeOverride)?.reasoning
+      ?? getAgentReasoningOverride(agent.name, options.codexHomeOverride)
       ?? agent.reasoningEffort,
   });
 }

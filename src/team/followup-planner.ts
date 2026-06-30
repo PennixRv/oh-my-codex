@@ -16,6 +16,7 @@ export interface FollowupLaunchHints {
   shellCommand: string;
   skillCommand: string;
   rationale: string;
+  launchRole?: string;
 }
 
 export interface FollowupVerificationPlan {
@@ -179,6 +180,7 @@ function buildLaunchHints(
       shellCommand: `omx team ${recommendedHeadcount}:${fallbackRole} ${toQuotedCliArg(task)}`,
       skillCommand: `$team ${recommendedHeadcount}:${fallbackRole} ${toQuotedCliArg(task)}`,
       rationale: 'Launch team directly when coordinated parallel delivery plus built-in verification lanes are sufficient without a separate linked Ralph launch.',
+      launchRole: fallbackRole,
     };
   }
 
@@ -187,6 +189,42 @@ function buildLaunchHints(
     skillCommand: `$ralph ${toQuotedCliArg(task)}`,
     rationale: 'Launch Ralph directly when one persistent implementation + verification loop is sufficient without team coordination overhead.',
   };
+}
+
+function isReviewLikeTask(task: string): boolean {
+  const normalizedTask = task.toLowerCase();
+  const weakReviewVerb = /\b(?:check|inspect)\b/.test(normalizedTask);
+  const explicitReviewVerb = /\b(?:audit|review|validate|verify)\b|(?:审查|审核|验证|复核)/i.test(task);
+  const localExplorationLike = (
+    /\b(?:check|find|inspect|locate|look up|lookup|map|search|trace|understand|which files?|where(?:\s+is|\s+are)?)\b/.test(normalizedTask)
+      && /\b(?:file|files|symbol|symbols|repo|repository|codebase|path|paths|usage|usages|reference|references|relationship|relationships|implementation|local)\b/.test(normalizedTask)
+  ) || /\b(?:call sites?|current(?:ly)? use|how we use|integration points?|our usage|where we use|what it does)\b/.test(normalizedTask)
+    || /(?:^|[\s(])(?:src|app|lib|packages|services|components|modules|tests?)\/\S+/.test(normalizedTask);
+  const reviewSubject = /\b(?:code|change|changes|correctness|diff|gap|gaps|implementation|patch|patches|performance|quality|refactor|regression|security|verification|compatibility)\b/.test(normalizedTask);
+
+  if (localExplorationLike) return false;
+  return explicitReviewVerb || (weakReviewVerb && reviewSubject);
+}
+
+function choosePreferredLaunchRoleForTask(
+  task: string,
+  availableAgentTypes: readonly string[],
+  fallbackRole: string,
+): string {
+  const normalizedTask = task.toLowerCase();
+  if (isReviewLikeTask(normalizedTask)) {
+    if (/(security|auth|authorization|authentication|xss|injection|cve|vulnerability)/.test(normalizedTask)) {
+      return chooseAvailableRole(availableAgentTypes, ['security-reviewer', 'code-reviewer', 'quality-reviewer'], fallbackRole);
+    }
+    if (/(api|compatibility|versioning|contract)/.test(normalizedTask)) {
+      return chooseAvailableRole(availableAgentTypes, ['api-reviewer', 'code-reviewer', 'quality-reviewer'], fallbackRole);
+    }
+    if (/(benchmark|latency|memory|performance|profiling|throughput)/.test(normalizedTask)) {
+      return chooseAvailableRole(availableAgentTypes, ['performance-reviewer', 'code-reviewer', 'quality-reviewer'], fallbackRole);
+    }
+    return chooseAvailableRole(availableAgentTypes, ['quality-reviewer', 'code-reviewer'], fallbackRole);
+  }
+  return fallbackRole;
 }
 
 function buildVerificationPlan(
@@ -284,7 +322,13 @@ export function buildFollowupStaffingPlan(
     mode === 'team' ? 'team-exec' : 'team-verify',
     fallbackRole,
   );
-  const primaryRole = chooseAvailableRole(availableAgentTypes, [primaryRoute.role], fallbackRole);
+  const reviewLikeTask = isReviewLikeTask(task);
+  const preferredLaunchRole = mode === 'team' && reviewLikeTask
+    ? choosePreferredLaunchRoleForTask(task, [...availableAgentTypes], chooseAvailableRole(availableAgentTypes, [primaryRoute.role], fallbackRole))
+    : fallbackRole;
+  const primaryRole = mode === 'team' && reviewLikeTask
+    ? preferredLaunchRole
+    : chooseAvailableRole(availableAgentTypes, [primaryRoute.role], fallbackRole);
   const qualityRole = chooseAvailableRole(
     availableAgentTypes,
     ['test-engineer', 'verifier', 'quality-reviewer'],
@@ -333,7 +377,12 @@ export function buildFollowupStaffingPlan(
     allocations,
     rosterSummary: availableAgentTypes.join(', '),
     staffingSummary: summarizeAllocations(allocations),
-    launchHints: buildLaunchHints(mode, task, workerCount, fallbackRole),
+    launchHints: buildLaunchHints(
+      mode,
+      task,
+      workerCount,
+      mode === 'team' ? preferredLaunchRole : fallbackRole,
+    ),
     verificationPlan: buildVerificationPlan(mode, allocations),
   };
 }

@@ -17473,3 +17473,189 @@ describe("leader mailbox handoff", () => {
     }
   });
 });
+
+describe("native prompt auto-route guidance", () => {
+  it("suggests a dual-lane Team review in attached tmux for ordinary review prompts", async () => {
+    const cwd = await mkdtemp(join(tmpdir(), "omx-native-hook-auto-route-review-tmux-"));
+    try {
+      await mkdir(join(cwd, ".omx", "state"), { recursive: true });
+      process.env.TMUX = "/tmp/tmux-auto-route-review";
+      process.env.TMUX_PANE = "%21";
+
+      const result = await dispatchCodexNativeHook(
+        {
+          hook_event_name: "UserPromptSubmit",
+          cwd,
+          session_id: "auto-route-review-tmux-1",
+          thread_id: "thread-auto-route-review-tmux-1",
+          turn_id: "turn-auto-route-review-tmux-1",
+          prompt: "Review this authentication refactor for security regressions and verification gaps",
+        },
+        { cwd },
+      );
+
+      const additionalContext = String(
+        (result.outputJson as { hookSpecificOutput?: { additionalContext?: string } })?.hookSpecificOutput?.additionalContext ?? "",
+      );
+      assert.match(additionalContext, /OMX auto-routing judged this prompt better suited for the durable Team runtime/);
+      assert.match(additionalContext, /Primary role: security-reviewer|Primary role: code-reviewer|Primary role: quality-reviewer/);
+      assert.match(additionalContext, /Review shape: dual-lane/);
+      assert.match(additionalContext, /security-reviewer x1|code-reviewer x1|quality-reviewer x1/);
+      assert.match(additionalContext, /architect x1 \(architecture challenge lane/);
+      assert.match(additionalContext, /If you choose Team, use the durable runtime via `omx team 2:(security-reviewer|code-reviewer|quality-reviewer)/);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+
+  it("keeps review auto-route guidance outside tmux as a launch handoff instead of pretending Team already started", async () => {
+    const cwd = await mkdtemp(join(tmpdir(), "omx-native-hook-auto-route-review-native-"));
+    try {
+      await mkdir(join(cwd, ".omx", "state"), { recursive: true });
+
+      const result = await dispatchCodexNativeHook(
+        {
+          hook_event_name: "UserPromptSubmit",
+          cwd,
+          source: "codex-app",
+          session_id: "auto-route-review-native-1",
+          thread_id: "thread-auto-route-review-native-1",
+          turn_id: "turn-auto-route-review-native-1",
+          prompt: "Review this authentication refactor for security regressions and verification gaps",
+        },
+        { cwd },
+      );
+
+      const additionalContext = String(
+        (result.outputJson as { hookSpecificOutput?: { additionalContext?: string } })?.hookSpecificOutput?.additionalContext ?? "",
+      );
+      assert.match(additionalContext, /OMX auto-routing judged this prompt better suited for Team than a generic solo lane/);
+      assert.match(additionalContext, /Review shape: dual-lane/);
+      assert.match(additionalContext, /This surface cannot directly auto-start the tmux-only Team runtime/);
+      assert.match(additionalContext, /launch it from an attached tmux OMX CLI shell: `omx team 2:(security-reviewer|code-reviewer|quality-reviewer)/);
+      assert.doesNotMatch(additionalContext, /If you choose Team, use the durable runtime via/);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+
+  it("does not over-teamify narrow ordinary implementation prompts", async () => {
+    const cwd = await mkdtemp(join(tmpdir(), "omx-native-hook-auto-route-narrow-"));
+    try {
+      await mkdir(join(cwd, ".omx", "state"), { recursive: true });
+      process.env.TMUX = "/tmp/tmux-auto-route-narrow";
+      process.env.TMUX_PANE = "%22";
+
+      const result = await dispatchCodexNativeHook(
+        {
+          hook_event_name: "UserPromptSubmit",
+          cwd,
+          session_id: "auto-route-narrow-1",
+          thread_id: "thread-auto-route-narrow-1",
+          turn_id: "turn-auto-route-narrow-1",
+          prompt: "fix typo in src/foo.ts",
+        },
+        { cwd },
+      );
+
+      const additionalContext = String(
+        (result.outputJson as { hookSpecificOutput?: { additionalContext?: string } })?.hookSpecificOutput?.additionalContext ?? "",
+      );
+      assert.doesNotMatch(additionalContext, /OMX auto-routing judged this prompt better suited for Team/);
+      assert.match(additionalContext, /narrow edit-shaped/);
+      assert.match(additionalContext, /Prefer the executor role surface/);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+
+  it("does not emit Team auto-route guidance when team mode is disabled", async () => {
+    const cwd = await mkdtemp(join(tmpdir(), "omx-native-hook-auto-route-disabled-team-"));
+    try {
+      await mkdir(join(cwd, ".omx", "state"), { recursive: true });
+      await writeJson(join(cwd, ".omx", "setup-scope.json"), {
+        scope: "project",
+        teamMode: "disabled",
+      });
+      process.env.TMUX = "/tmp/tmux-auto-route-disabled-team";
+      process.env.TMUX_PANE = "%23";
+
+      const result = await dispatchCodexNativeHook(
+        {
+          hook_event_name: "UserPromptSubmit",
+          cwd,
+          session_id: "auto-route-disabled-team-1",
+          thread_id: "thread-auto-route-disabled-team-1",
+          turn_id: "turn-auto-route-disabled-team-1",
+          prompt: "Review this authentication refactor for security regressions and verification gaps",
+        },
+        { cwd },
+      );
+
+      const additionalContext = String(
+        (result.outputJson as { hookSpecificOutput?: { additionalContext?: string } })?.hookSpecificOutput?.additionalContext ?? "",
+      );
+      assert.doesNotMatch(additionalContext, /OMX auto-routing judged this prompt better suited for Team/);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+
+  it("does not emit Team auto-route guidance for exploration-shaped check prompts", async () => {
+    const cwd = await mkdtemp(join(tmpdir(), "omx-native-hook-auto-route-explore-check-"));
+    try {
+      await mkdir(join(cwd, ".omx", "state"), { recursive: true });
+      process.env.TMUX = "/tmp/tmux-auto-route-explore-check";
+      process.env.TMUX_PANE = "%24";
+
+      const result = await dispatchCodexNativeHook(
+        {
+          hook_event_name: "UserPromptSubmit",
+          cwd,
+          session_id: "auto-route-explore-check-1",
+          thread_id: "thread-auto-route-explore-check-1",
+          turn_id: "turn-auto-route-explore-check-1",
+          prompt: "check how we use this SDK today",
+        },
+        { cwd },
+      );
+
+      const additionalContext = String(
+        (result.outputJson as { hookSpecificOutput?: { additionalContext?: string } })?.hookSpecificOutput?.additionalContext ?? "",
+      );
+      assert.doesNotMatch(additionalContext, /OMX auto-routing judged this prompt better suited for Team/);
+      assert.match(additionalContext, /Prefer the researcher role surface|Prefer the explore role surface|read-only\/question-shaped/);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+
+  it("preserves prose workflow-selection prompts instead of prepending Team auto-route guidance", async () => {
+    const cwd = await mkdtemp(join(tmpdir(), "omx-native-hook-auto-route-workflow-selection-"));
+    try {
+      await mkdir(join(cwd, ".omx", "state"), { recursive: true });
+      process.env.TMUX = "/tmp/tmux-auto-route-workflow-selection";
+      process.env.TMUX_PANE = "%25";
+
+      const result = await dispatchCodexNativeHook(
+        {
+          hook_event_name: "UserPromptSubmit",
+          cwd,
+          session_id: "auto-route-workflow-selection-1",
+          thread_id: "thread-auto-route-workflow-selection-1",
+          turn_id: "turn-auto-route-workflow-selection-1",
+          prompt: "use autopilot to review this authentication refactor",
+        },
+        { cwd },
+      );
+
+      const additionalContext = String(
+        (result.outputJson as { hookSpecificOutput?: { additionalContext?: string } })?.hookSpecificOutput?.additionalContext ?? "",
+      );
+      assert.doesNotMatch(additionalContext, /OMX auto-routing judged this prompt better suited for Team/);
+      assert.equal(result.skillState, null);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});

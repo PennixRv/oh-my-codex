@@ -134,6 +134,37 @@ describe("agents/native-config", () => {
     }
   });
 
+  it("applies roleModels model and reasoning overrides when generating native TOML", async () => {
+    const codexHome = await mkdtemp(join(tmpdir(), "omx-native-config-rolemodels-"));
+    try {
+      await writeFile(join(codexHome, ".omx-config.json"), JSON.stringify({
+        roleModels: {
+          architect: {
+            model: "gpt-5.4",
+            reasoning: "xhigh",
+          },
+        },
+      }));
+      const agent: AgentDefinition = {
+        name: "architect",
+        description: "System design",
+        reasoningEffort: "high",
+        posture: "frontier-orchestrator",
+        modelClass: "frontier",
+        routingRole: "leader",
+        tools: "read-only",
+        category: "build",
+      };
+
+      const toml = generateAgentToml(agent, "Architect prompt", { codexHomeOverride: codexHome });
+
+      assert.match(toml, /model = "gpt-5\.4"/);
+      assert.match(toml, /model_reasoning_effort = "xhigh"/);
+    } finally {
+      await rm(codexHome, { recursive: true, force: true });
+    }
+  });
+
 
   it("pins ralplan thesis/antithesis and researcher to exact gpt-5.4-mini without downgrading judgment roles", () => {
     process.env.OMX_DEFAULT_FRONTIER_MODEL = "gpt-5.5";

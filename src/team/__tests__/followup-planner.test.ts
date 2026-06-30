@@ -78,6 +78,21 @@ describe('followup-planner', () => {
     assert.equal(plan.verificationPlan.checkpoints.length, 3);
   });
 
+  it('prefers a reviewer launch role for review-like team follow-up commands', () => {
+    const plan = buildFollowupStaffingPlan(
+      'team',
+      'Review this authentication refactor for security regressions and verification gaps',
+      ['architect', 'code-reviewer', 'executor', 'quality-reviewer', 'security-reviewer', 'verifier'],
+      { workerCount: 2, fallbackRole: 'executor' },
+    );
+
+    assert.match(plan.launchHints.shellCommand, /^omx team 2:security-reviewer /);
+    assert.match(plan.launchHints.skillCommand, /^\$team 2:security-reviewer /);
+    assert.equal(plan.launchHints.launchRole, 'security-reviewer');
+    assert.match(plan.staffingSummary, /security-reviewer x1 \(primary delivery lane/);
+    assert.match(plan.staffingSummary, /verifier x1 \(verification \+ regression lane/);
+  });
+
   it('applies per-agent reasoning overrides to Ralph sign-off staffing guidance', async () => {
     const codexHome = await mkdtemp(join(tmpdir(), 'omx-followup-reasoning-'));
     try {

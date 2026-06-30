@@ -8,6 +8,7 @@ import {
   DEFAULT_SPARK_MODEL,
   DEFAULT_TEAM_CHILD_MODEL,
   getAgentReasoningOverride,
+  getRoleModelOverride,
   getEnvConfiguredStandardDefaultModel,
   getMainDefaultModel,
   getModelForMode,
@@ -264,6 +265,27 @@ describe('getModelForMode', () => {
     });
     assert.equal(getAgentReasoningOverride('ARCHITECT'), 'xhigh');
     assert.equal(getAgentReasoningOverride('executor'), undefined);
+  });
+
+  it('reads normalized roleModels overrides and lets roleModels.reasoning override legacy agentReasoning', async () => {
+    await writeConfig({
+      roleModels: {
+        Planner: { model: ' gpt-5.4 ', reasoning: ' high ' },
+        debugger: { model: 'gpt-5.4-mini' },
+      },
+      agentReasoning: {
+        planner: 'low',
+      },
+    });
+
+    assert.deepEqual(getRoleModelOverride('planner'), {
+      model: 'gpt-5.4',
+      reasoning: 'high',
+    });
+    assert.deepEqual(getRoleModelOverride('debugger'), {
+      model: 'gpt-5.4-mini',
+    });
+    assert.equal(getAgentReasoningOverride('planner'), 'high');
   });
 
   it('keeps explicit low-complexity config ahead of OMX_DEFAULT_SPARK_MODEL', async () => {
