@@ -15,7 +15,6 @@ describe.skip('config generator', () => {
 
       // Top-level keys must appear before the first [table] header
       const notifyIdx = toml.indexOf('notify =');
-      const reasoningIdx = toml.indexOf('model_reasoning_effort =');
       const devInstrIdx = toml.indexOf('developer_instructions =');
       const modelIdx = toml.indexOf('model = "gpt-5.5"');
       const seededStartIdx = toml.indexOf(
@@ -27,7 +26,6 @@ describe.skip('config generator', () => {
       const featuresIdx = toml.indexOf('[features]');
 
       assert.ok(notifyIdx >= 0, 'notify not found');
-      assert.ok(reasoningIdx >= 0, 'model_reasoning_effort not found');
       assert.ok(devInstrIdx >= 0, 'developer_instructions not found');
       assert.ok(modelIdx >= 0, 'model not found');
       assert.ok(seededStartIdx >= 0, 'seeded defaults start marker not found');
@@ -37,7 +35,6 @@ describe.skip('config generator', () => {
       assert.ok(featuresIdx >= 0, '[features] not found');
 
       assert.ok(notifyIdx < featuresIdx, 'notify must come before [features]');
-      assert.ok(reasoningIdx < featuresIdx, 'model_reasoning_effort must come before [features]');
       assert.ok(devInstrIdx < featuresIdx, 'developer_instructions must come before [features]');
       assert.ok(modelIdx < featuresIdx, 'model must come before [features]');
       assert.ok(
@@ -113,19 +110,20 @@ describe.skip('config generator', () => {
     }
   });
 
-  it('writes model_reasoning_effort and strengthened developer_instructions', async () => {
+  it('preserves user ownership of model_reasoning_effort and writes strengthened developer_instructions', async () => {
     const wd = await mkdtemp(join(tmpdir(), 'omx-config-gen-'));
     try {
       const configPath = join(wd, 'config.toml');
       await mergeConfig(configPath, wd);
       const toml = await readFile(configPath, 'utf-8');
 
-      assert.match(toml, /^model_reasoning_effort = "medium"$/m);
+      assert.doesNotMatch(toml, /^model_reasoning_effort = /m);
       assert.match(toml, /^developer_instructions = "You have oh-my-codex installed/m);
       assert.match(toml, /AGENTS\.md is the orchestration brain and main control surface/);
       assert.match(toml, /Follow AGENTS\.md for skill\/keyword routing, \$name workflow invocation, and role-specialized subagents/);
       assert.match(toml, /Native subagents live in \.codex\/agents/);
-      assert.match(toml, /set `agent_type` to an installed role and never omit it for OMX work/);
+      assert.match(toml, /prefer setting `agent_type` to the narrowest installed role/);
+      assert.match(toml, /full-history fork mode inherits agent settings from the parent/);
       assert.match(toml, /Treat installed prompts as narrower execution surfaces under AGENTS\.md authority/);
       assert.match(toml, new RegExp(`^developer_instructions = "${OMX_DEVELOPER_INSTRUCTIONS.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}"$`, 'm'));
     } finally {
@@ -185,7 +183,7 @@ describe.skip('config generator', () => {
       // Top-level keys present and before [features]
       assert.match(rerun, /^notify = \["node", ".*notify-hook\.js"\]$/m);
       assert.match(rerun, /^hooks = true$/m);
-      assert.match(rerun, /^model_reasoning_effort = "medium"$/m);
+      assert.doesNotMatch(rerun, /^model_reasoning_effort = /m);
       const notifyIdx = rerun.indexOf('notify =');
       const featuresIdx = rerun.indexOf('[features]');
       assert.ok(notifyIdx < featuresIdx, 'notify must come before [features]');
@@ -238,6 +236,7 @@ describe.skip('config generator', () => {
       const existing = [
         'model = "o3"',
         'approval_policy = "on-failure"',
+        'model_reasoning_effort = "xhigh"',
         '',
         '[features]',
         'web_search = true',
@@ -251,10 +250,10 @@ describe.skip('config generator', () => {
       // User's existing top-level keys preserved
       assert.match(toml, /^model = "o3"$/m);
       assert.match(toml, /^approval_policy = "on-failure"$/m);
+      assert.match(toml, /^model_reasoning_effort = "xhigh"$/m);
 
       // OMX keys added
       assert.match(toml, /^notify = \[/m);
-      assert.match(toml, /^model_reasoning_effort = "medium"$/m);
 
       // User's feature flag preserved
       assert.match(toml, /^web_search = true$/m);
@@ -262,6 +261,33 @@ describe.skip('config generator', () => {
       // OMX feature flags added
       assert.match(toml, /^multi_agent = true$/m);
       assert.match(toml, /^goals = true$/m);
+    } finally {
+      await rm(wd, { recursive: true, force: true });
+    }
+  });
+
+  it('keeps an existing root model_reasoning_effort unchanged across setup reruns', async () => {
+    const wd = await mkdtemp(join(tmpdir(), 'omx-config-gen-'));
+    try {
+      const configPath = join(wd, 'config.toml');
+      await writeFile(
+        configPath,
+        [
+          'model = "gpt-5.4"',
+          'model_reasoning_effort = "xhigh"',
+          '',
+          '[features]',
+          'web_search = true',
+          '',
+        ].join('\n'),
+      );
+
+      await mergeConfig(configPath, wd);
+      await mergeConfig(configPath, wd);
+      const toml = await readFile(configPath, 'utf-8');
+
+      assert.equal((toml.match(/^model_reasoning_effort = "xhigh"$/gm) ?? []).length, 1);
+      assert.doesNotMatch(toml, /^model_reasoning_effort = "medium"$/m);
     } finally {
       await rm(wd, { recursive: true, force: true });
     }

@@ -4,6 +4,15 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+## [0.18.55] - 2026-06-30
+
+Patch release for the Pennix fork install/config and leader-mailbox boundary line: root `model_reasoning_effort` is now treated as user-owned again, postinstall no longer auto-runs setup, and leader-directed team mailbox dispatches are consistently recorded as mailbox boundary delivery instead of reviving deferred/injection semantics.
+
+- `omx setup`, plugin-migration cleanup, and uninstall no longer strip or reset a user-owned root `model_reasoning_effort`; only the historical OMX-managed legacy root `medium` line is cleaned up when it appears in the old managed block shape.
+- Global npm postinstall now records the installed version and prints an explicit `omx setup` / `omx update` reminder instead of auto-running plugin setup during install.
+- `leader-fixed` mailbox dispatches now resolve to durable mailbox boundary delivery across runtime and notify-hook dispatch consumers, with no direct leader-pane injection fallback and no pending/deferred missing-pane branch.
+- Current installed guidance now reflects Codex full-history fork inheritance: OMX surfaces prefer a narrow `agent_type` when needed, but stop pretending they must always force `agent_type`, `model`, or `reasoning_effort` on every native subagent dispatch.
+
 ## [0.18.54] - 2026-06-30
 
 Patch release for the Pennix fork Spark-lane diagnostics line: `doctor` no longer misclassifies intentional non-default root providers such as `cch` as broken Spark routing when the installed Spark-lane agent matches the configured root provider.

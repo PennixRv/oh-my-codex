@@ -4651,43 +4651,6 @@ function resolveDispatchPolicy(
   });
 }
 
-function isLeaderPaneMissingMailboxPersistedOutcome(params: {
-  workerName: string;
-  paneId?: string;
-  outcome: DispatchOutcome;
-}): boolean {
-  const { workerName, paneId, outcome } = params;
-  return workerName === 'leader-fixed'
-    && !paneId
-    && outcome.ok
-    && outcome.reason === 'leader_pane_missing_mailbox_persisted';
-}
-
-async function markDispatchRequestLeaderPaneMissingDeferred(params: {
-  teamName: string;
-  requestId: string;
-  messageId?: string;
-  cwd: string;
-}): Promise<void> {
-  const { teamName, requestId, messageId, cwd } = params;
-  const current = await readDispatchRequest(teamName, requestId, cwd);
-  if (!current) return;
-  if (current.status !== 'pending') return;
-
-  await transitionDispatchRequest(
-    teamName,
-    requestId,
-    current.status,
-    current.status,
-    {
-      message_id: messageId ?? current.message_id,
-      last_reason: 'leader_pane_missing_deferred',
-    },
-    cwd,
-  ).catch(() => {});
-}
-
-
 async function attemptStartupDirectTrigger(params: {
   teamName: string;
   config: TeamConfig;
@@ -5290,24 +5253,6 @@ async function finalizeHookPreferredMailboxDispatch(params: {
   }
 
   if (fallback.ok) {
-    if (isLeaderPaneMissingMailboxPersistedOutcome({ workerName, paneId, outcome: fallback })) {
-      await markDispatchRequestLeaderPaneMissingDeferred({
-        teamName,
-        requestId,
-        messageId,
-        cwd,
-      });
-      const outcome = {
-        ok: true,
-        transport: fallback.transport,
-        reason: 'leader_pane_missing_mailbox_persisted',
-        request_id: requestId,
-        message_id: messageId,
-      } as const;
-      await logRuntimeDispatchOutcome({ cwd, teamName, workerName, requestId, messageId, intent, outcome });
-      return outcome;
-    }
-
     await markMessageNotified(teamName, workerName, messageId, cwd).catch(() => false);
     const marked = await markDispatchRequestNotified(
       teamName,
@@ -5365,10 +5310,8 @@ async function notifyLeaderAsync(config: TeamConfig): Promise<DispatchOutcome> {
   // Canonical leader delivery is durable mailbox persistence plus HUD-owned
   // authority processing. Team runtime must not directly inject into the
   // leader pane from this fallback path.
-  if (!config.leader_pane_id) {
-    return { ok: true, transport: 'mailbox', reason: 'leader_pane_missing_mailbox_persisted' };
-  }
-  return { ok: true, transport: 'mailbox', reason: 'leader_mailbox_notified' };
+  void config;
+  return { ok: true, transport: 'mailbox', reason: 'leader_mailbox_boundary_delivery' };
 }
 
 async function deliverPendingMailboxMessages(
@@ -5446,7 +5389,7 @@ function resolveWorkerMailboxTransportPreference(
 function resolveLeaderMailboxTransportPreference(
   dispatchPolicy: TeamPolicy,
 ): Exclude<RuntimeMailboxTransportPreference, 'prompt_stdin'> {
-  return dispatchPolicy.dispatch_mode === 'transport_direct' ? 'transport_direct' : 'hook_preferred_with_fallback';
+  return dispatchPolicy.dispatch_mode === 'transport_direct' ? 'transport_direct' : 'transport_direct';
 }
 
 function isExistingMailboxNotificationOutcome(outcome: DispatchOutcome): boolean {
@@ -5613,87 +5556,21 @@ async function sendLeaderMailboxMessage(params: {
     intent: triggerDirective.intent,
     cwd,
     transportPreference,
-    fallbackAllowed: transportPreference === 'hook_preferred_with_fallback',
+    fallbackAllowed: false,
     notify: async () => {
-      if (transportPreference === 'hook_preferred_with_fallback') {
-        return { ok: true, transport: 'hook', reason: 'queued_for_hook_dispatch' };
-      }
-      if (!config.leader_pane_id) {
-        return { ok: false, transport: 'mailbox', reason: 'leader_pane_missing_transport_direct_failed' };
-      }
       return await notifyLeaderAsync(config);
     },
   });
-
-  if (
-    !isExistingMailboxNotificationOutcome(queuedOutcome)
-    && transportPreference === 'hook_preferred_with_fallback'
-    && !config.leader_pane_id
-  ) {
-    if (queuedOutcome.request_id) {
-      await markDispatchRequestLeaderPaneMissingDeferred({
-        teamName,
-        requestId: queuedOutcome.request_id,
-        messageId: queuedOutcome.message_id,
-        cwd,
-      });
-    }
-    const deferredOutcome: DispatchOutcome = {
-      ...queuedOutcome,
-      ok: true,
-      transport: 'mailbox',
-      reason: 'leader_pane_missing_mailbox_persisted',
-    };
-    await logRuntimeDispatchOutcome({
-      cwd,
-      teamName,
-      workerName: 'leader-fixed',
-      requestId: deferredOutcome.request_id,
-      messageId: deferredOutcome.message_id,
-      intent: triggerDirective.intent,
-      outcome: deferredOutcome,
-    });
-    return deferredOutcome;
-  }
-
-  if (
-    !isExistingMailboxNotificationOutcome(queuedOutcome)
-    && transportPreference === 'transport_direct'
-    && !config.leader_pane_id
-  ) {
-    const failedOutcome: DispatchOutcome = {
-      ...queuedOutcome,
-      ok: false,
-      transport: 'mailbox',
-      reason: 'leader_pane_missing_transport_direct_failed',
-    };
-    await logRuntimeDispatchOutcome({
-      cwd,
-      teamName,
-      workerName: 'leader-fixed',
-      requestId: failedOutcome.request_id,
-      messageId: failedOutcome.message_id,
-      intent: triggerDirective.intent,
-      outcome: failedOutcome,
-    });
-    return failedOutcome;
-  }
-
-  const canLeaderFallbackDirectly = Boolean(config.leader_pane_id) && isTmuxAvailable();
-  return await finalizeQueuedMailboxDispatch({
-    queuedOutcome,
-    transportPreference: canLeaderFallbackDirectly ? transportPreference : 'transport_direct',
+  await logRuntimeDispatchOutcome({
+    cwd,
     teamName,
     workerName: 'leader-fixed',
-    paneId: config.leader_pane_id ?? undefined,
+    requestId: queuedOutcome.request_id,
     messageId: queuedOutcome.message_id,
-    triggerMessage: triggerDirective.text,
     intent: triggerDirective.intent,
-    config,
-    dispatchPolicy,
-    cwd,
-    fallbackNotify: async () => await notifyLeaderAsync(config),
+    outcome: queuedOutcome,
   });
+  return queuedOutcome;
 }
 
 async function sendRecipientMailboxMessage(params: {

@@ -12,6 +12,7 @@ import {
   sanitizePreviousNotifyCommand,
   stripExistingOmxBlocks,
   stripManagedOmxDeveloperInstructions,
+  stripManagedLegacyRootReasoning,
   stripOmxEnvSettings,
   stripOmxTopLevelKeys,
   stripOmxFeatureFlags,
@@ -88,7 +89,7 @@ function detectOmxConfigArtifacts(config: string): {
 
   const hasTopLevelKeys =
     /^\s*notify\s*=.*node/m.test(config) ||
-    /^\s*model_reasoning_effort\s*=/m.test(config) ||
+    /# oh-my-codex(?:-pennix)? top-level settings \(must be before any \[table\]\)\r?\n(?:\s*notify\s*=.*\r?\n)?\s*model_reasoning_effort\s*=\s*"medium"/m.test(config) ||
     /^\s*developer_instructions\s*=/m.test(config);
 
   const hasFeatureFlags =
@@ -348,6 +349,7 @@ async function cleanConfig(
 
   // Strip OMX top-level keys, then restore a pre-existing user notify when
   // setup had wrapped it in the OMX dispatcher.
+  config = stripManagedLegacyRootReasoning(config);
   config = stripOmxTopLevelKeys(config);
   config = cleanupDeveloperInstructionsRootKey(config);
   config = await restorePreviousNotifyIfDispatcher(configPath, config, original);
@@ -606,7 +608,7 @@ function printSummary(summary: UninstallSummary, dryRun: boolean): void {
     }
     if (summary.topLevelKeysRemoved) {
       console.log(
-        "    Top-level keys (notify, model_reasoning_effort, developer_instructions)",
+        "    Top-level keys (notify, developer_instructions, managed legacy reasoning keys)",
       );
     }
     if (summary.featureFlagsRemoved) {

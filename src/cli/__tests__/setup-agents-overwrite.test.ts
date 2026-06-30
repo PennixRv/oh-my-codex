@@ -7,6 +7,7 @@ import { tmpdir } from 'node:os';
 import { setup } from '../setup.js';
 import {
   OMX_DEVELOPER_INSTRUCTIONS,
+  HISTORICAL_OMX_PLUGIN_DEVELOPER_INSTRUCTIONS,
   OMX_PLUGIN_DEVELOPER_INSTRUCTIONS,
 } from '../../config/generator.js';
 import {
@@ -961,6 +962,71 @@ describe('omx setup plugin developer_instructions behavior', () => {
 
       assert.match(config, /custom header/);
       assert.equal(countOccurrences(config, '<omx version=\\"1\\">'), 1);
+    } finally {
+      restoreHome();
+      restoreTty();
+      await rm(wd, { recursive: true, force: true });
+    }
+  });
+
+  it('refreshes historical wrapped plugin developer_instructions automatically', async () => {
+    const wd = await mkdtemp(join(tmpdir(), 'omx-setup-plugin-devinst-'));
+    const restoreTty = setMockTty(false);
+    const home = join(wd, 'home');
+    const restoreHome = setMockHome(home);
+    try {
+      await mkdir(join(wd, '.omx', 'state'), { recursive: true });
+      await mkdir(join(home, '.codex'), { recursive: true });
+      await writeFile(
+        join(home, '.codex', 'config.toml'),
+        `developer_instructions = ${JSON.stringify(HISTORICAL_OMX_PLUGIN_DEVELOPER_INSTRUCTIONS)}\n`,
+      );
+
+      const output = await runSetupWithCapturedLogs(wd, {
+        scope: 'user',
+        installMode: 'plugin',
+      });
+      const config = await readFile(join(home, '.codex', 'config.toml'), 'utf-8');
+
+      assert.match(output, /plugin-mode developer_instructions default/i);
+      assert.match(config, /<omx version=\\"1\\">You have Pennix OMX installed through Codex plugin mode/);
+      assert.doesNotMatch(config, /never omit it for OMX work/);
+      assert.match(config, /prefer setting `agent_type` to the narrowest installed role/);
+      assert.equal(countOccurrences(config, '<omx version=\\"1\\">'), 1);
+      assert.equal((config.match(/^developer_instructions\s*=/gm) ?? []).length, 1);
+    } finally {
+      restoreHome();
+      restoreTty();
+      await rm(wd, { recursive: true, force: true });
+    }
+  });
+
+  it('preserves an existing root model_reasoning_effort during plugin migration', async () => {
+    const wd = await mkdtemp(join(tmpdir(), 'omx-setup-plugin-devinst-'));
+    const restoreTty = setMockTty(false);
+    const home = join(wd, 'home');
+    const restoreHome = setMockHome(home);
+    try {
+      await mkdir(join(wd, '.omx', 'state'), { recursive: true });
+      await mkdir(join(home, '.codex'), { recursive: true });
+      await writeFile(
+        join(home, '.codex', 'config.toml'),
+        [
+          'model_reasoning_effort = "xhigh"',
+          `developer_instructions = ${JSON.stringify(OMX_DEVELOPER_INSTRUCTIONS)}`,
+          '',
+        ].join('\n'),
+      );
+
+      await runSetupWithCapturedLogs(wd, {
+        scope: 'user',
+        installMode: 'plugin',
+      });
+      const config = await readFile(join(home, '.codex', 'config.toml'), 'utf-8');
+
+      assert.match(config, /^model_reasoning_effort = "xhigh"$/m);
+      assert.equal((config.match(/^model_reasoning_effort\s*=/gm) ?? []).length, 1);
+      assert.match(config, /<omx version=\\"1\\">You have Pennix OMX installed through Codex plugin mode/);
     } finally {
       restoreHome();
       restoreTty();

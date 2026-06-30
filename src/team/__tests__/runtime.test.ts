@@ -8363,7 +8363,7 @@ esac
     }
   });
 
-  it('sendWorkerMessage hook-preferred path persists leader mailbox guidance when leader pane exists', async () => {
+  it('sendWorkerMessage leader mailbox path persists leader mailbox guidance when leader pane exists', async () => {
     const cwd = await mkdtemp(join(tmpdir(), 'omx-runtime-leader-inject-'));
     try {
       await withMockTmuxFixture(
@@ -8408,7 +8408,7 @@ esac
           const requests = await listDispatchRequests('team-leader-inject', cwd, { kind: 'mailbox', to_worker: 'leader-fixed' });
           const latest = requests[requests.length - 1];
           assert.equal(latest?.status, 'notified');
-          assert.equal(latest?.last_reason, 'fallback_confirmed:leader_mailbox_notified');
+          assert.equal(latest?.last_reason, 'leader_mailbox_boundary_delivery');
           assert.match(
             latest?.trigger_message ?? '',
             /Leader mailbox update from worker-1: unread context is sourced from \/tmp\/custom-team-state-root\/team\/team-leader-inject\/mailbox\/leader-fixed\.json on the next UserPromptSubmit or PreToolUse boundary\./,
@@ -8421,9 +8421,8 @@ esac
             && entry.to_worker === 'leader-fixed'
             && entry.transport === 'mailbox'
             && entry.result === 'confirmed'
-            && typeof entry.reason === 'string'
-            && String(entry.reason).includes('leader_mailbox_notified'));
-          assert.equal(runtimeEntries.length, 1, 'leader hook-preferred confirmation should emit exactly one runtime dispatch_result entry');
+            && entry.reason === 'leader_mailbox_boundary_delivery');
+          assert.equal(runtimeEntries.length, 1, 'leader mailbox boundary delivery should emit exactly one runtime dispatch_result entry');
         },
       );
     } finally {
@@ -8431,79 +8430,7 @@ esac
     }
   });
 
-  it('sendWorkerMessage keeps failed hook receipts failed when fallback mailbox persistence confirms delivery', { concurrency: false }, async () => {
-    const cwd = await mkdtemp(join(tmpdir(), 'omx-runtime-leader-failed-receipt-'));
-    try {
-      await withMockTmuxFixture(
-        {
-          dirPrefix: 'omx-runtime-leader-failed-receipt-bin-',
-          tmuxScript: (tmuxLogPath) => `#!/bin/sh
-set -eu
-printf '%s\n' "$*" >> "${tmuxLogPath}"
-case "\${1:-}" in
-  send-keys)
-    exit 0
-    ;;
-  *)
-    exit 0
-    ;;
-esac
-`,
-        },
-        async () => {
-          await initTeamState('team-leader-failed-receipt', 'leader failed receipt fallback test', 'executor', 1, cwd);
-          const cfg = await readTeamConfig('team-leader-failed-receipt', cwd);
-          assert.ok(cfg);
-          if (!cfg) throw new Error('missing team config');
-          cfg.leader_pane_id = '%55';
-          await saveTeamConfig(cfg, cwd);
-
-          const manifestPath = teamStateTestPath(cwd, 'team', 'team-leader-failed-receipt', 'manifest.v2.json');
-          const manifest = JSON.parse(await readFile(manifestPath, 'utf-8'));
-          manifest.policy = { ...(manifest.policy || {}), dispatch_ack_timeout_ms: 250 };
-          await writeFile(manifestPath, JSON.stringify(manifest, null, 2));
-
-          const sendPromise = sendWorkerMessage('team-leader-failed-receipt', 'worker-1', 'leader-fixed', 'hello failed receipt', cwd);
-
-          const deadline = Date.now() + 2_000;
-          let requestId: string | null = null;
-          while (Date.now() < deadline && !requestId) {
-            const requests = await listDispatchRequests('team-leader-failed-receipt', cwd, { kind: 'mailbox', to_worker: 'leader-fixed' });
-            requestId = requests[requests.length - 1]?.request_id ?? null;
-            if (!requestId) await new Promise((resolve) => setTimeout(resolve, 20));
-          }
-          assert.ok(requestId, 'expected mailbox dispatch request to be queued');
-          if (!requestId) throw new Error('missing request id');
-
-          await transitionDispatchRequest(
-            'team-leader-failed-receipt',
-            requestId,
-            'pending',
-            'failed',
-            { last_reason: 'hook_failed:test_receipt' },
-            cwd,
-          );
-
-          const outcome = await sendPromise;
-          assert.equal(outcome.ok, true);
-          assert.equal(outcome.reason, 'fallback_confirmed_after_failed_receipt:leader_mailbox_notified');
-
-          const requests = await listDispatchRequests('team-leader-failed-receipt', cwd, { kind: 'mailbox', to_worker: 'leader-fixed' });
-          const latest = requests[requests.length - 1];
-          assert.equal(latest?.request_id, requestId);
-          assert.equal(latest?.status, 'failed');
-          assert.equal(latest?.last_reason, 'fallback_confirmed_after_failed_receipt:leader_mailbox_notified');
-
-          const mailbox = await listMailboxMessages('team-leader-failed-receipt', 'leader-fixed', cwd);
-          assert.ok(mailbox[0]?.notified_at, 'fallback mailbox persistence should still mark notified_at');
-        },
-      );
-    } finally {
-      await rm(cwd, { recursive: true, force: true });
-    }
-  });
-
-  it('sendWorkerMessage hook-preferred path for leader waits for receipt then falls back to mailbox persistence', async () => {
+  it('sendWorkerMessage leader mailbox path marks boundary delivery as notified', async () => {
     const cwd = await mkdtemp(join(tmpdir(), 'omx-runtime-leader-hook-'));
     try {
       await initTeamState('team-leader-hook', 'leader hook fallback test', 'executor', 1, cwd);
@@ -8517,14 +8444,14 @@ esac
       const mailbox = await listMailboxMessages('team-leader-hook', 'leader-fixed', cwd);
       assert.ok(mailbox.length >= 1, `expected at least 1 mailbox message, got ${mailbox.length}`);
       const notifiedMsg = mailbox.find((m: { notified_at?: string }) => m.notified_at);
-      assert.equal(notifiedMsg, undefined, 'leader mailbox message should remain unnotified while pane is missing');
+      assert.ok(notifiedMsg, 'leader mailbox message should be marked notified once boundary delivery is persisted');
 
       const requests = await listDispatchRequests('team-leader-hook', cwd, { kind: 'mailbox' });
       assert.ok(requests.length >= 1, `expected at least 1 dispatch request, got ${requests.length}`);
-      const pending = requests.find((r: { status?: string; to_worker?: string }) =>
-        r.status === 'pending' && r.to_worker === 'leader-fixed');
-      assert.ok(pending, 'expected a pending leader-fixed dispatch request');
-      assert.equal(pending?.last_reason, 'leader_pane_missing_deferred');
+      const latest = requests.filter((r: { to_worker?: string }) => r.to_worker === 'leader-fixed').at(-1);
+      assert.ok(latest, 'expected a leader-fixed dispatch request');
+      assert.equal(latest?.status, 'notified');
+      assert.equal(latest?.last_reason, 'leader_mailbox_boundary_delivery');
 
       const deliveryLog = await readTeamDeliveryLog(cwd);
       const runtimeEntries = deliveryLog.filter((entry) =>
@@ -8532,14 +8459,14 @@ esac
         && entry.source === 'team.runtime'
         && entry.to_worker === 'leader-fixed'
         && entry.transport === 'mailbox'
-        && entry.reason === 'leader_pane_missing_mailbox_persisted');
-      assert.equal(runtimeEntries.length, 1, 'leader missing-pane fallback should emit exactly one runtime dispatch_result entry');
+        && entry.reason === 'leader_mailbox_boundary_delivery');
+      assert.equal(runtimeEntries.length, 1, 'leader mailbox boundary delivery should emit exactly one runtime dispatch_result entry');
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
   });
 
-  it('sendWorkerMessage transport_direct fails fast for leader-fixed when leader_pane_id missing', async () => {
+  it('sendWorkerMessage transport_direct still resolves leader-fixed through mailbox boundary delivery when leader_pane_id is missing', async () => {
     const cwd = await mkdtemp(join(tmpdir(), 'omx-runtime-leader-direct-'));
     try {
       await initTeamState('team-leader-direct', 'leader direct transport test', 'executor', 1, cwd);
@@ -8554,19 +8481,18 @@ esac
       manifest.policy = { ...(manifest.policy || {}), dispatch_mode: 'transport_direct' };
       await writeFile(manifestPath, JSON.stringify(manifest, null, 2));
 
-      await assert.rejects(
-        sendWorkerMessage('team-leader-direct', 'worker-1', 'leader-fixed', 'hello leader direct', cwd),
-        /mailbox_notify_failed:leader_pane_missing_transport_direct_failed/,
-      );
+      const outcome = await sendWorkerMessage('team-leader-direct', 'worker-1', 'leader-fixed', 'hello leader direct', cwd);
+      assert.equal(outcome.ok, true);
+      assert.equal(outcome.reason, 'leader_mailbox_boundary_delivery');
 
       const mailbox = await listMailboxMessages('team-leader-direct', 'leader-fixed', cwd);
       assert.ok(mailbox.length >= 1, `expected at least 1 mailbox message, got ${mailbox.length}`);
       const requests = await listDispatchRequests('team-leader-direct', cwd, { kind: 'mailbox', to_worker: 'leader-fixed' });
       assert.ok(requests.length >= 1, `expected at least 1 leader-fixed dispatch request, got ${requests.length}`);
       const latest = requests[requests.length - 1];
-      assert.equal(latest?.status, 'failed');
-      assert.equal(latest?.last_reason, 'leader_pane_missing_transport_direct_failed');
-      assert.ok(latest?.failed_at, 'missing leader pane should fail fast with failed_at evidence');
+      assert.equal(latest?.status, 'notified');
+      assert.equal(latest?.last_reason, 'leader_mailbox_boundary_delivery');
+      assert.equal(latest?.failed_at, undefined);
 
       const deliveryLog = await readTeamDeliveryLog(cwd);
       const runtimeEntries = deliveryLog.filter((entry) =>
@@ -8574,9 +8500,9 @@ esac
         && entry.source === 'team.runtime'
         && entry.to_worker === 'leader-fixed'
         && entry.transport === 'mailbox'
-        && entry.result === 'failed'
-        && entry.reason === 'leader_pane_missing_transport_direct_failed');
-      assert.equal(runtimeEntries.length, 1, 'leader direct missing-pane failure should emit exactly one runtime dispatch_result entry');
+        && entry.result === 'confirmed'
+        && entry.reason === 'leader_mailbox_boundary_delivery');
+      assert.equal(runtimeEntries.length, 1, 'leader direct missing-pane boundary delivery should emit exactly one runtime dispatch_result entry');
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }

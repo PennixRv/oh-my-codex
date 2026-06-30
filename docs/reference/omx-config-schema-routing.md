@@ -202,7 +202,7 @@ Use `omx team status <team-name> --model-inspect` when you need inspect hints fo
 
 Supported reasoning-effort surfaces are:
 
-- Active Codex `config.toml` root key: `model_reasoning_effort = "medium"`.
+- Active Codex `config.toml` root key, when you choose to set it yourself, for example: `model_reasoning_effort = "xhigh"`.
 - `omx reasoning <low|medium|high|xhigh>`, which edits the active Codex `config.toml`.
 - `omx --high` and `omx --xhigh`, which pass `-c model_reasoning_effort="high|xhigh"` to Codex launch.
 - Generated native agent TOML files, where OMX writes each role's built-in `reasoningEffort` metadata.
@@ -215,6 +215,8 @@ OMX_TEAM_WORKER_LAUNCH_ARGS='-c model_reasoning_effort="low" --model gpt-5.3-cod
 ```
 
 Team runtime can also inject role-default or `agentReasoning`-overridden reasoning for Codex workers when no explicit reasoning override is present. Explicit launch args win.
+
+Current Pennix fork behavior: `omx setup` and npm postinstall do not auto-write or auto-reset the root `model_reasoning_effort`. Root reasoning ownership stays with the user or explicit launch flags/commands.
 
 ## Starter configs
 

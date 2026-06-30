@@ -385,6 +385,36 @@ describe('omx uninstall', () => {
       assert.doesNotMatch(config, /multi_agent/);
       assert.doesNotMatch(config, /child_agents_md/);
       assert.doesNotMatch(config, /^hooks\s*=/m);
+      assert.doesNotMatch(config, /developer_instructions\s*=/);
+    } finally {
+      await rm(wd, { recursive: true, force: true });
+    }
+  });
+
+  it('preserves user-owned root model_reasoning_effort while removing OMX-managed config', async () => {
+    const wd = await mkdtemp(join(tmpdir(), 'omx-uninstall-'));
+    try {
+      const home = join(wd, 'home');
+      const codexDir = join(home, '.codex');
+      await mkdir(codexDir, { recursive: true });
+      await writeFile(
+        join(codexDir, 'config.toml'),
+        buildMixedConfig().replace(
+          '# User settings\nmodel = "o4-mini"\n',
+          '# User settings\nmodel = "o4-mini"\nmodel_reasoning_effort = "xhigh"\n',
+        ),
+      );
+
+      const res = runOmx(wd, ['uninstall'], { HOME: home });
+      if (shouldSkipForSpawnPermissions(res.error)) return;
+      assert.equal(res.status, 0, res.stderr || res.stdout);
+
+      const config = await readFile(join(codexDir, 'config.toml'), 'utf-8');
+      assert.match(config, /^model_reasoning_effort = "xhigh"$/m);
+      assert.equal((config.match(/^model_reasoning_effort\s*=/gm) ?? []).length, 1);
+      assert.doesNotMatch(config, /notify\s*=.*node/);
+      assert.doesNotMatch(config, /developer_instructions\s*=/);
+      assert.doesNotMatch(config, /oh-my-codex \(OMX\) Configuration/);
     } finally {
       await rm(wd, { recursive: true, force: true });
     }

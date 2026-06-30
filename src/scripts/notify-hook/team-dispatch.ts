@@ -194,9 +194,6 @@ const DEFAULT_ISSUE_DISPATCH_COOLDOWN_MS = 15 * 60 * 1000;
 const ISSUE_DISPATCH_COOLDOWN_ENV = 'OMX_TEAM_DISPATCH_ISSUE_COOLDOWN_MS';
 const DEFAULT_DISPATCH_TRIGGER_COOLDOWN_MS = 30 * 1000;
 const DISPATCH_TRIGGER_COOLDOWN_ENV = 'OMX_TEAM_DISPATCH_TRIGGER_COOLDOWN_MS';
-const LEADER_PANE_MISSING_DEFERRED_REASON = 'leader_pane_missing_deferred';
-const LEADER_NOTIFICATION_DEFERRED_TYPE = 'leader_notification_deferred';
-
 async function emitOperationalHookEvent(cwd, eventName, context) {
   try {
     const { buildNativeHookEvent } = await import('../../hooks/extensibility/events.js');
@@ -475,37 +472,6 @@ function defaultInjectTarget(request, config) {
   return null;
 }
 
-async function appendLeaderNotificationDeferredEvent({
-  stateDir,
-  teamName,
-  request,
-  reason,
-  nowIso,
-  tmuxSession = '',
-  leaderPaneId = '',
-  sourceType = 'team_dispatch',
-}) {
-  const eventsDir = join(stateDir, 'team', teamName, 'events');
-  const eventsPath = join(eventsDir, 'events.ndjson');
-  const event = {
-    event_id: `leader-deferred-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`,
-    team: teamName,
-    type: LEADER_NOTIFICATION_DEFERRED_TYPE,
-    worker: request.to_worker,
-    to_worker: request.to_worker,
-    reason,
-    created_at: nowIso,
-    request_id: request.request_id,
-    ...(request.message_id ? { message_id: request.message_id } : {}),
-    tmux_session: tmuxSession || null,
-    leader_pane_id: leaderPaneId || null,
-    tmux_injection_attempted: false,
-    source_type: sourceType,
-  };
-  await mkdir(eventsDir, { recursive: true }).catch(() => {});
-  await appendFile(eventsPath, JSON.stringify(event) + '\n').catch(() => {});
-}
-
 async function finalizeClaimedDispatchRequest({
   claim,
   result,
@@ -686,16 +652,15 @@ async function finalizeClaimedDispatchRequest({
         result: 'failed',
         reason: result.reason,
       });
-      await emitOperationalHookEvent(cwd, result.reason === LEADER_PANE_MISSING_DEFERRED_REASON ? 'handoff-needed' : 'failed', {
+      await emitOperationalHookEvent(cwd, 'failed', {
         team: teamName,
         worker: request.to_worker,
         request_id: request.request_id,
         message_id: request.message_id || null,
         command: request.trigger_message,
         reason: result.reason,
-        ...(result.reason === LEADER_PANE_MISSING_DEFERRED_REASON
-          ? { status: 'handoff-needed' }
-          : { status: 'failed', error_summary: result.reason }),
+        status: 'failed',
+        error_summary: result.reason,
       });
     }
 
@@ -754,21 +719,21 @@ const INJECT_VERIFY_DELAY_MS = 250;
 const INJECT_VERIFY_ROUNDS = 3;
 
 async function injectDispatchRequest(request, config, cwd, stateDir) {
-  const target = defaultInjectTarget(request, config);
-  if (!target) {
-    return { ok: false, reason: 'missing_tmux_target' };
-  }
   const leaderTargeted = request.to_worker === 'leader-fixed';
   if (leaderTargeted) {
     return {
       ok: true,
-      reason: 'leader_mailbox_notified',
+      reason: 'leader_mailbox_boundary_delivery',
       pane: null,
       pane_source: 'leader_mailbox_persisted',
       readiness_evidence: null,
       pane_current_command: null,
       tmux_injection_attempted: false,
     };
+  }
+  const target = defaultInjectTarget(request, config);
+  if (!target) {
+    return { ok: false, reason: 'missing_tmux_target' };
   }
   let resolution;
   if (target.type === 'session') {
@@ -970,7 +935,7 @@ async function appendDeliveryTelemetry(logsDir, event) {
 function resolveDispatchTransport(request, result) {
   const isLeaderMailboxNotify =
     safeString(request?.to_worker).trim() === 'leader-fixed'
-    && safeString(result?.reason).trim() === 'leader_mailbox_notified';
+    && safeString(result?.reason).trim() === 'leader_mailbox_boundary_delivery';
   return isLeaderMailboxNotify ? 'mailbox' : 'send-keys';
 }
 
@@ -1039,56 +1004,6 @@ export async function drainPendingTeamDispatch({
         if (!request || typeof request !== 'object') continue;
         if (shouldSkipRequest(request)) {
           skipped += 1;
-          continue;
-        }
-
-        if (request.to_worker === 'leader-fixed' && !resolveLeaderPaneId(config)) {
-          const nowIso = new Date().toISOString();
-          const alreadyDeferred = safeString(request.last_reason).trim() === LEADER_PANE_MISSING_DEFERRED_REASON;
-          request.updated_at = nowIso;
-          request.last_reason = LEADER_PANE_MISSING_DEFERRED_REASON;
-          request.status = 'pending';
-          skipped += 1;
-          mutated = true;
-          if (!alreadyDeferred) {
-            await appendDispatchLog(logsDir, {
-              type: 'dispatch_deferred',
-              team: teamName,
-              request_id: request.request_id,
-              worker: request.to_worker,
-              to_worker: request.to_worker,
-              message_id: request.message_id || null,
-              reason: LEADER_PANE_MISSING_DEFERRED_REASON,
-              status: 'pending',
-              tmux_session: safeString(config?.tmux_session).trim() || null,
-              leader_pane_id: safeString(config?.leader_pane_id).trim() || null,
-              tmux_injection_attempted: false,
-              pane_target: null,
-              pane_source: null,
-              readiness_evidence: null,
-              pane_current_command: null,
-            });
-            await appendDeliveryTelemetry(logsDir, {
-              event: 'dispatch_result',
-              team: teamName,
-              request_id: request.request_id,
-              message_id: request.message_id || null,
-              to_worker: request.to_worker,
-              transport: 'send-keys',
-              result: 'deferred',
-              reason: LEADER_PANE_MISSING_DEFERRED_REASON,
-            });
-            await appendLeaderNotificationDeferredEvent({
-              stateDir,
-              teamName,
-              request,
-              reason: LEADER_PANE_MISSING_DEFERRED_REASON,
-              nowIso,
-              tmuxSession: safeString(config?.tmux_session).trim(),
-              leaderPaneId: safeString(config?.leader_pane_id).trim(),
-              sourceType: 'team_dispatch',
-            });
-          }
           continue;
         }
 

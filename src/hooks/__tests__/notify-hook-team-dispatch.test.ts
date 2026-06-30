@@ -252,7 +252,7 @@ describe.skip('notify-hook team dispatch consumer', () => {
     }
   });
 
-  it('leader-fixed dispatch remains pending with leader_pane_missing_deferred when pane missing', async () => {
+  it('leader-fixed dispatch records mailbox boundary delivery even when leader pane is missing', async () => {
     const cwd = await mkdtemp(join(tmpdir(), 'omx-hook-team-dispatch-'));
     try {
       await initTeamState('alpha', 'task', 'executor', 1, cwd);
@@ -272,60 +272,41 @@ describe.skip('notify-hook team dispatch consumer', () => {
         injector: async () => ({ ok: true, reason: 'injected_for_test' }),
       });
 
-      assert.equal(result.processed, 0);
-      assert.ok(result.skipped >= 1);
+      assert.equal(result.processed, 1);
 
       const request = await readDispatchRequest('alpha', queued.request.request_id, cwd);
-      assert.equal(request?.status, 'pending');
-      assert.equal(request?.last_reason, 'leader_pane_missing_deferred');
+      assert.equal(request?.status, 'notified');
+      assert.equal(request?.last_reason, 'leader_mailbox_boundary_delivery');
+      assert.ok(request?.notified_at);
 
       const mailbox = await listMailboxMessages('alpha', 'leader-fixed', cwd);
       assert.equal(mailbox.length, 1);
-      assert.equal(mailbox[0]?.notified_at, undefined);
-
-      const eventsPath = join(cwd, '.omx', 'state', 'team', 'alpha', 'events', 'events.ndjson');
-      const eventsRaw = await readFile(eventsPath, 'utf-8');
-      const events = eventsRaw.trim().split('\n').filter(Boolean).map((line) => JSON.parse(line));
-      const deferred = events.find((event: {
-        type?: string;
-        reason?: string;
-        request_id?: string;
-        to_worker?: string;
-      }) =>
-        event.type === 'leader_notification_deferred'
-        && event.reason === 'leader_pane_missing_deferred'
-        && event.request_id === queued.request.request_id
-        && event.to_worker === 'leader-fixed');
-      assert.ok(deferred, 'expected leader_notification_deferred event for missing leader pane');
-      assert.equal(deferred.source_type, 'team_dispatch');
-      assert.equal(typeof deferred.tmux_session, 'string');
-      assert.ok(deferred.tmux_session.length > 0);
-      assert.equal(deferred.leader_pane_id, null);
-      assert.equal(deferred.tmux_injection_attempted, false);
+      assert.ok(mailbox[0]?.notified_at);
 
       const dispatchLogPath = join(cwd, '.omx', 'logs', `team-dispatch-${new Date().toISOString().slice(0, 10)}.jsonl`);
       const dispatchLogs = (await readFile(dispatchLogPath, 'utf-8')).trim().split('\n').filter(Boolean).map((line) => JSON.parse(line));
-      const deferredLog = dispatchLogs.find((entry: { type?: string; request_id?: string }) =>
-        entry.type === 'dispatch_deferred' && entry.request_id === queued.request.request_id);
-      assert.ok(deferredLog, 'expected dispatch_deferred log entry');
-      assert.equal(typeof deferredLog.tmux_session, 'string');
-      assert.ok(deferredLog.tmux_session.length > 0);
-      assert.equal(deferredLog.leader_pane_id, null);
-      assert.equal(deferredLog.tmux_injection_attempted, false);
+      const notifiedLog = dispatchLogs.find((entry: { type?: string; request_id?: string; reason?: string }) =>
+        entry.type === 'dispatch_notified'
+        && entry.request_id === queued.request.request_id
+        && entry.reason === 'leader_mailbox_boundary_delivery');
+      assert.ok(notifiedLog, 'expected dispatch_notified log entry');
+      assert.equal(notifiedLog.pane_target, null);
+      assert.equal(notifiedLog.pane_source, 'leader_mailbox_persisted');
+      assert.equal(notifiedLog.tmux_injection_attempted, false);
 
       const deliveryLog = await readTeamDeliveryLog(cwd);
       assert.ok(deliveryLog.some((entry) =>
         entry.event === 'dispatch_result'
         && entry.source === 'notify-hook.team-dispatch'
         && entry.request_id === queued.request.request_id
-        && entry.result === 'deferred'
-        && entry.reason === 'leader_pane_missing_deferred'));
+        && entry.result === 'notified'
+        && entry.reason === 'leader_mailbox_boundary_delivery'));
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
   });
 
-  it('does not duplicate deferred leader artifacts across repeated drain ticks', async () => {
+  it('does not duplicate leader mailbox boundary-delivery artifacts across repeated drain ticks', async () => {
     const cwd = await mkdtemp(join(tmpdir(), 'omx-hook-team-dispatch-'));
     try {
       await initTeamState('alpha', 'task', 'executor', 1, cwd);
@@ -342,25 +323,22 @@ describe.skip('notify-hook team dispatch consumer', () => {
       await mod.drainPendingTeamDispatch({ cwd, maxPerTick: 5, injector: async () => ({ ok: true, reason: 'injected_for_test' }) });
       await mod.drainPendingTeamDispatch({ cwd, maxPerTick: 5, injector: async () => ({ ok: true, reason: 'injected_for_test' }) });
 
-      const eventsPath = join(cwd, '.omx', 'state', 'team', 'alpha', 'events', 'events.ndjson');
-      const events = (await readFile(eventsPath, 'utf-8')).trim().split('\n').filter(Boolean).map((line) => JSON.parse(line));
-      const deferredEvents = events.filter((event: { type?: string; request_id?: string }) =>
-        event.type === 'leader_notification_deferred' && event.request_id === queued.request.request_id);
-      assert.equal(deferredEvents.length, 1, 'should only write one deferred event per missing-pane request until state changes');
-
       const dispatchLogPath = join(cwd, '.omx', 'logs', `team-dispatch-${new Date().toISOString().slice(0, 10)}.jsonl`);
       const dispatchLogs = (await readFile(dispatchLogPath, 'utf-8')).trim().split('\n').filter(Boolean).map((line) => JSON.parse(line));
-      const deferredLogs = dispatchLogs.filter((entry: { type?: string; request_id?: string }) =>
-        entry.type === 'dispatch_deferred' && entry.request_id === queued.request.request_id);
-      assert.equal(deferredLogs.length, 1, 'should only log one dispatch_deferred artifact per missing-pane request until state changes');
+      const notifiedLogs = dispatchLogs.filter((entry: { type?: string; request_id?: string; reason?: string }) =>
+        entry.type === 'dispatch_notified'
+        && entry.request_id === queued.request.request_id
+        && entry.reason === 'leader_mailbox_boundary_delivery');
+      assert.equal(notifiedLogs.length, 1, 'should only log one dispatch_notified artifact per leader mailbox request until state changes');
 
       const deliveryLog = await readTeamDeliveryLog(cwd);
-      const deferredDeliveryLogs = deliveryLog.filter((entry) =>
+      const notifiedDeliveryLogs = deliveryLog.filter((entry) =>
         entry.event === 'dispatch_result'
         && entry.source === 'notify-hook.team-dispatch'
         && entry.request_id === queued.request.request_id
-        && entry.result === 'deferred');
-      assert.equal(deferredDeliveryLogs.length, 1, 'should only log one deferred team-delivery artifact per missing-pane request until state changes');
+        && entry.result === 'notified'
+        && entry.reason === 'leader_mailbox_boundary_delivery');
+      assert.equal(notifiedDeliveryLogs.length, 1, 'should only log one boundary-delivery team artifact per leader mailbox request until state changes');
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }

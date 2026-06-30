@@ -288,7 +288,7 @@ describe('team leader runtime regressions', () => {
           && entry.to_worker === 'leader-fixed'
           && entry.transport === 'mailbox'
           && entry.result === 'notified'
-          && entry.reason === 'leader_mailbox_notified'),
+          && entry.reason === 'leader_mailbox_boundary_delivery'),
       );
       assert.equal(existsSync(tmuxLogPath), false, 'leader mailbox dispatch should not touch tmux');
     });

@@ -38,11 +38,13 @@ import {
 	hasLegacyOmxTeamRunTable,
 	appendManagedOmxDeveloperInstructions,
 	hasCurrentOmxPluginDeveloperInstructionsFragment,
+	isHistoricalOmxPluginDeveloperInstructionsFragment,
 	isCurrentOmxPluginDeveloperInstructionsFragment,
 	LEGACY_OMX_PLUGIN_DEVELOPER_INSTRUCTIONS,
 	stripExistingOmxBlocks,
 	stripExistingSharedMcpRegistryBlock,
 	stripManagedOmxDeveloperInstructions,
+	stripManagedLegacyRootReasoning,
 	mergeSharedMcpRegistryBlock,
 	stripOmxEnvSettings,
 	stripOmxFeatureFlags,
@@ -912,8 +914,12 @@ function classifyPluginDeveloperInstructions(
 	if (isCurrentOmxPluginDeveloperInstructionsFragment(normalized)) {
 		return "current";
 	}
+	if (isHistoricalOmxPluginDeveloperInstructionsFragment(normalized)) {
+		return "historical";
+	}
 	if (
 		normalized === normalizeDeveloperInstructionsText(OMX_DEVELOPER_INSTRUCTIONS)
+		|| normalized === normalizeDeveloperInstructionsText(LEGACY_OMX_PLUGIN_DEVELOPER_INSTRUCTIONS)
 	) {
 		return "historical";
 	}
@@ -1511,6 +1517,7 @@ function stripPluginModeLegacyRootDefaults(
 	config: string,
 	developerInstructionsDecision: PluginDeveloperInstructionsDecision,
 ): string {
+	config = stripManagedLegacyRootReasoning(config);
 	const lines = config.split(/\r?\n/);
 	const firstTableIndex = lines.findIndex((line) => /^\s*\[/.test(line));
 	const boundary = firstTableIndex >= 0 ? firstTableIndex : lines.length;
@@ -1529,12 +1536,6 @@ function stripPluginModeLegacyRootDefaults(
 		if (
 			index < boundary &&
 			/^\s*notify\s*=\s*\["node",\s*".*notify-hook\.js"\]\s*$/.test(line)
-		) {
-			continue;
-		}
-		if (
-			index < boundary &&
-			/^\s*model_reasoning_effort\s*=\s*"medium"\s*$/.test(line)
 		) {
 			continue;
 		}

@@ -10,7 +10,7 @@
 
 `0.18.51` is a narrow install/setup release:
 
-- global postinstall now attempts automatic plugin setup after install bumps
+- global postinstall attempted automatic plugin setup after install bumps at the time of `0.18.51`; newer releases have since moved back to explicit manual setup reminders
 - plugin-mode setup automatically appends the OMX developer-instructions fragment instead of replacing user content
 - plugin-mode setup no longer prompts for OMX-owned AGENTS defaults
 - uninstall now strips only OMX-managed developer-instruction content

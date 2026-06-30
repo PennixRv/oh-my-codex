@@ -162,6 +162,7 @@ omx team shutdown <team-name>
 ### Team shutdown policy
 
 Use `omx team shutdown <team-name>` after the team reaches a terminal state.
+Terminal tasks mean the workers are done, but their results are only reconciled back into the leader worktree during shutdown/reconcile. Treat task completion and leader integration as two separate phases.
 Team cleanup now follows one standalone path; legacy linked-Ralph shutdown handling is no longer a separate public workflow.
 
 团队 worker 的 Worker CLI 选择：
@@ -191,7 +192,7 @@ OMX_TEAM_AUTO_INTERRUPT_RETRY=0  # 可选：禁用自适应 queue->resend 回退
 - 现有 `AGENTS.md` 文件绝不会被静默覆盖：交互式 TTY 下 setup 会先询问是否替换；非交互模式下除非传入 `--force`，否则会跳过替换（活动会话安全检查仍然适用）。
 - `config.toml` 更新（两种作用域均适用）：
   - `notify = ["node", "..."]`
-  - `model_reasoning_effort = "medium"`
+  - 根级 `model_reasoning_effort` 保持为用户自管；如需设置请显式使用 `omx reasoning ...` 或启动参数
   - `developer_instructions = "..."`
   - `[features] multi_agent = true, child_agents_md = true`
   - MCP 服务器条目（`omx_state`、`omx_memory`、`omx_code_intel`、`omx_trace`）

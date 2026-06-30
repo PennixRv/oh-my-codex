@@ -63,3 +63,30 @@
 - **Pages:** omx-0-18-41-release-prep-block-summary-2026-06-28.md, omx-leader-mailbox-notification-chain-analysis-2026-06-28.md, omx-team-lifecycle-restart-smoke-failures-2026-06-24.md, omx-team-smoke-findings-2026-06-28.md, omx-tmux-inject-marker-multisource-analysis-2026-06-26.md
 - **Summary:** Lint: 6 issues (5 orphan, 0 stale, 0 broken, 0 contradictions)
 
+## [2026-06-29T08:36:05.281Z] query
+- **Pages:** none
+- **Summary:** Query "role routing model mapping worker agent_type .omx-config.json config.toml team worker launch args" → 0 results (of 0 total)
+
+## [2026-06-29T08:54:15.928Z] ingest
+- **Pages:** omx-role-routing-and-model-mapping-analysis-2026-06-29.md
+- **Summary:** Created new page "OMX Role Routing And Model Mapping Analysis 2026-06-29"
+
+## [2026-06-29T08:54:15.930Z] add
+- **Pages:** omx-role-routing-and-model-mapping-analysis-2026-06-29.md
+- **Summary:** Created wiki page omx-role-routing-and-model-mapping-analysis-2026-06-29.md
+
+## [2026-06-29T09:13:09.551Z] add
+- **Pages:** omx-0-18-41-release-prep-block-summary-2026-06-28.md, omx-leader-mailbox-notification-chain-analysis-2026-06-28.md, omx-role-routing-and-model-mapping-analysis-2026-06-29.md, omx-team-lifecycle-restart-smoke-failures-2026-06-24.md, omx-team-smoke-findings-2026-06-28.md, omx-tmux-inject-marker-multisource-analysis-2026-06-26.md
+- **Summary:** Refreshed wiki index and derived metadata surfaces
+
+## [2026-06-29T09:18:44.356Z] add
+- **Pages:** omx-0-18-41-release-prep-block-summary-2026-06-28.md, omx-leader-mailbox-notification-chain-analysis-2026-06-28.md, omx-role-routing-and-model-mapping-analysis-2026-06-29.md, omx-team-lifecycle-restart-smoke-failures-2026-06-24.md, omx-team-smoke-findings-2026-06-28.md, omx-tmux-inject-marker-multisource-analysis-2026-06-26.md
+- **Summary:** Refreshed wiki index and derived metadata surfaces
+
+## [2026-06-29T09:27:13.151Z] add
+- **Pages:** omx-0-18-41-release-prep-block-summary-2026-06-28.md, omx-leader-mailbox-notification-chain-analysis-2026-06-28.md, omx-role-routing-and-model-mapping-analysis-2026-06-29.md, omx-team-lifecycle-restart-smoke-failures-2026-06-24.md, omx-team-smoke-findings-2026-06-28.md, omx-tmux-inject-marker-multisource-analysis-2026-06-26.md
+- **Summary:** Refreshed wiki index and derived metadata surfaces
+
+## [2026-06-29T11:54:16.000Z] add
+- **Pages:** omx-role-routing-and-model-mapping-analysis-2026-06-29.md
+- **Summary:** Flattened Pennix role mapping guidance to `role -> model/reasoning`, moved context budgeting out of the role map, and recorded shared `gpt-5.4` context-budget policy as wiki-only guidance

@@ -286,7 +286,7 @@ describe.skip('team message delivery end-to-end smoke tests', () => {
         const workerRequests = requests.filter((request) => request.message_id === workerMessages[0]?.message_id);
         assert.equal(workerRequests.length, 1);
         assert.equal(workerRequests[0]?.status, 'notified');
-        assert.match(workerRequests[0]?.last_reason ?? '', /leader_mailbox_notified/);
+        assert.match(workerRequests[0]?.last_reason ?? '', /leader_mailbox_boundary_delivery/);
       });
     } finally {
       await cleanup();

@@ -5,7 +5,7 @@
  * TOML structure reminder: bare key=value pairs after a [table] header belong
  * to that table.  Top-level (root-table) keys MUST appear before the first
  * [table] header.  This generator therefore splits its output into:
- *   1. Top-level keys  (notify, model_reasoning_effort, developer_instructions)
+ *   1. Top-level keys  (notify, developer_instructions, and user-owned root keys)
  *   2. [features] flags
  *   3. [table] sections (shell_environment_policy.set, mcp_servers, tui)
  */
@@ -115,7 +115,6 @@ const OMX_MANAGED_PACKAGE_PATH_PATTERN = new RegExp(
 /** Keys we own at the TOML root level. Used for upsert + strip. */
 const OMX_TOP_LEVEL_KEYS = [
   "notify",
-  "model_reasoning_effort",
   "developer_instructions",
 ] as const;
 
@@ -167,16 +166,24 @@ const OMX_SEEDED_BEHAVIORAL_DEFAULTS_END_MARKERS = [
 ] as const;
 
 export const OMX_DEVELOPER_INSTRUCTIONS =
-  `You have ${OMX_FORK_USER_FACING_NAME} installed. AGENTS.md is the orchestration brain and main control surface. Follow AGENTS.md for skill/keyword routing, $name workflow invocation, and role-specialized subagents; when spawning native subagents, set \`agent_type\` to an installed role and never omit it for OMX work. Use outcome-first, concise progress updates: state the target result, constraints, validation evidence, and stop condition before adding process detail. Native subagents live in .codex/agents and may handle independent parallel subtasks within one Codex session or team pane. Skills load from .codex/skills, not native-agent TOMLs. Treat installed prompts as narrower execution surfaces under AGENTS.md authority.`;
+  `You have ${OMX_FORK_USER_FACING_NAME} installed. AGENTS.md is the orchestration brain and main control surface. Follow AGENTS.md for skill/keyword routing, $name workflow invocation, and role-specialized subagents; when spawning native subagents, prefer setting \`agent_type\` to the narrowest installed role, but if Codex full-history fork mode inherits agent settings from the parent then follow that constraint instead of redundantly forcing \`agent_type\`, \`model\`, or \`reasoning_effort\`. Use outcome-first, concise progress updates: state the target result, constraints, validation evidence, and stop condition before adding process detail. Native subagents live in .codex/agents and may handle independent parallel subtasks within one Codex session or team pane. Skills load from .codex/skills, not native-agent TOMLs. Treat installed prompts as narrower execution surfaces under AGENTS.md authority.`;
 export const LEGACY_OMX_DEVELOPER_INSTRUCTIONS =
-  `You have ${OMX_LEGACY_DISPLAY_NAME} installed. AGENTS.md is the orchestration brain and main control surface. Follow AGENTS.md for skill/keyword routing, $name workflow invocation, and role-specialized subagents; when spawning native subagents, set \`agent_type\` to an installed role and never omit it for OMX work. Use outcome-first, concise progress updates: state the target result, constraints, validation evidence, and stop condition before adding process detail. Native subagents live in .codex/agents and may handle independent parallel subtasks within one Codex session or team pane. Skills load from .codex/skills, not native-agent TOMLs. Treat installed prompts as narrower execution surfaces under AGENTS.md authority.`;
+  `You have ${OMX_LEGACY_DISPLAY_NAME} installed. AGENTS.md is the orchestration brain and main control surface. Follow AGENTS.md for skill/keyword routing, $name workflow invocation, and role-specialized subagents; when spawning native subagents, prefer setting \`agent_type\` to the narrowest installed role, but if Codex full-history fork mode inherits agent settings from the parent then follow that constraint instead of redundantly forcing \`agent_type\`, \`model\`, or \`reasoning_effort\`. Use outcome-first, concise progress updates: state the target result, constraints, validation evidence, and stop condition before adding process detail. Native subagents live in .codex/agents and may handle independent parallel subtasks within one Codex session or team pane. Skills load from .codex/skills, not native-agent TOMLs. Treat installed prompts as narrower execution surfaces under AGENTS.md authority.`;
 export const OMX_PLUGIN_DEVELOPER_INSTRUCTIONS =
-  `<omx version="1">You have ${OMX_FORK_USER_FACING_NAME} installed through Codex plugin mode. AGENTS.md is the orchestration brain and main control surface. Follow AGENTS.md for skill/keyword routing and $name workflow invocation. When spawning native subagents, set \`agent_type\` to an installed role and never omit it for OMX work. Registered Codex plugin marketplace surfaces supply ${OMX_FORK_USER_FACING_NAME} workflows and plugin-scoped companion resources when the plugin is installed. Setup still installs native agent role TOML files under the active Codex home so agent_type routing works. Do not assume bundled prompt/skill files are copied into local .codex prompts/skills directories in plugin mode. User-installed skills may still live under ~/.codex/skills. Use outcome-first, concise progress updates: state the target result, constraints, validation evidence, and stop condition before adding process detail.</omx>`;
+  `<omx version="1">You have ${OMX_FORK_USER_FACING_NAME} installed through Codex plugin mode. AGENTS.md is the orchestration brain and main control surface. Follow AGENTS.md for skill/keyword routing and $name workflow invocation. When spawning native subagents, prefer setting \`agent_type\` to the narrowest installed role, but if Codex full-history fork mode inherits agent settings from the parent then follow that constraint instead of redundantly forcing \`agent_type\`, \`model\`, or \`reasoning_effort\`. Registered Codex plugin marketplace surfaces supply ${OMX_FORK_USER_FACING_NAME} workflows and plugin-scoped companion resources when the plugin is installed. Setup still installs native agent role TOML files under the active Codex home so agent_type routing works. Do not assume bundled prompt/skill files are copied into local .codex prompts/skills directories in plugin mode. User-installed skills may still live under ~/.codex/skills. Use outcome-first, concise progress updates: state the target result, constraints, validation evidence, and stop condition before adding process detail.</omx>`;
 export const LEGACY_OMX_PLUGIN_DEVELOPER_INSTRUCTIONS =
+  `<omx version="1">You have ${OMX_LEGACY_DISPLAY_NAME} installed through Codex plugin mode. AGENTS.md is the orchestration brain and main control surface. Follow AGENTS.md for skill/keyword routing and $name workflow invocation. When spawning native subagents, prefer setting \`agent_type\` to the narrowest installed role, but if Codex full-history fork mode inherits agent settings from the parent then follow that constraint instead of redundantly forcing \`agent_type\`, \`model\`, or \`reasoning_effort\`. Registered Codex plugin marketplace surfaces supply OMX workflows and plugin-scoped companion resources when the plugin is installed. Setup still installs native agent role TOML files under the active Codex home so agent_type routing works. Do not assume bundled prompt/skill files are copied into local .codex prompts/skills directories in plugin mode. User-installed skills may still live under ~/.codex/skills. Use outcome-first, concise progress updates: state the target result, constraints, validation evidence, and stop condition before adding process detail.</omx>`;
+export const HISTORICAL_OMX_PLUGIN_DEVELOPER_INSTRUCTIONS =
+  `<omx version="1">You have ${OMX_FORK_USER_FACING_NAME} installed through Codex plugin mode. AGENTS.md is the orchestration brain and main control surface. Follow AGENTS.md for skill/keyword routing and $name workflow invocation. When spawning native subagents, set \`agent_type\` to an installed role and never omit it for OMX work. Registered Codex plugin marketplace surfaces supply ${OMX_FORK_USER_FACING_NAME} workflows and plugin-scoped companion resources when the plugin is installed. Setup still installs native agent role TOML files under the active Codex home so agent_type routing works. Do not assume bundled prompt/skill files are copied into local .codex prompts/skills directories in plugin mode. User-installed skills may still live under ~/.codex/skills. Use outcome-first, concise progress updates: state the target result, constraints, validation evidence, and stop condition before adding process detail.</omx>`;
+export const LEGACY_HISTORICAL_OMX_PLUGIN_DEVELOPER_INSTRUCTIONS =
   `<omx version="1">You have ${OMX_LEGACY_DISPLAY_NAME} installed through Codex plugin mode. AGENTS.md is the orchestration brain and main control surface. Follow AGENTS.md for skill/keyword routing and $name workflow invocation. When spawning native subagents, set \`agent_type\` to an installed role and never omit it for OMX work. Registered Codex plugin marketplace surfaces supply OMX workflows and plugin-scoped companion resources when the plugin is installed. Setup still installs native agent role TOML files under the active Codex home so agent_type routing works. Do not assume bundled prompt/skill files are copied into local .codex prompts/skills directories in plugin mode. User-installed skills may still live under ~/.codex/skills. Use outcome-first, concise progress updates: state the target result, constraints, validation evidence, and stop condition before adding process detail.</omx>`;
 const OMX_PLUGIN_DEVELOPER_INSTRUCTION_FRAGMENTS = [
   OMX_PLUGIN_DEVELOPER_INSTRUCTIONS,
   LEGACY_OMX_PLUGIN_DEVELOPER_INSTRUCTIONS,
+] as const;
+const HISTORICAL_OMX_PLUGIN_DEVELOPER_INSTRUCTION_FRAGMENTS = [
+  HISTORICAL_OMX_PLUGIN_DEVELOPER_INSTRUCTIONS,
+  LEGACY_HISTORICAL_OMX_PLUGIN_DEVELOPER_INSTRUCTIONS,
 ] as const;
 const OMX_PLUGIN_DEVELOPER_INSTRUCTION_FRAGMENT_PATTERN =
   /<omx version="1">[\s\S]*?<\/omx>/g;
@@ -320,12 +327,67 @@ function normalizeDeveloperInstructionsText(value: string): string {
   return value.replace(/\r\n/g, "\n").trim();
 }
 
+function unwrapManagedPluginDeveloperInstructions(value: string): string {
+  return value
+    .replace(/^<omx version="1">/, "")
+    .replace(/<\/omx>$/, "");
+}
+
+const CURRENT_MANAGED_PLUGIN_DEVELOPER_INSTRUCTIONS = [
+  OMX_PLUGIN_DEVELOPER_INSTRUCTIONS,
+  LEGACY_OMX_PLUGIN_DEVELOPER_INSTRUCTIONS,
+  unwrapManagedPluginDeveloperInstructions(OMX_PLUGIN_DEVELOPER_INSTRUCTIONS),
+  unwrapManagedPluginDeveloperInstructions(LEGACY_OMX_PLUGIN_DEVELOPER_INSTRUCTIONS),
+] as const;
+
+const HISTORICAL_MANAGED_PLUGIN_DEVELOPER_INSTRUCTIONS = [
+  HISTORICAL_OMX_PLUGIN_DEVELOPER_INSTRUCTIONS,
+  LEGACY_HISTORICAL_OMX_PLUGIN_DEVELOPER_INSTRUCTIONS,
+  unwrapManagedPluginDeveloperInstructions(HISTORICAL_OMX_PLUGIN_DEVELOPER_INSTRUCTIONS),
+  unwrapManagedPluginDeveloperInstructions(LEGACY_HISTORICAL_OMX_PLUGIN_DEVELOPER_INSTRUCTIONS),
+] as const;
+
+function isManagedPluginDeveloperInstructions(
+  value: string,
+  candidates: readonly string[],
+): boolean {
+  const normalized = normalizeDeveloperInstructionsText(value);
+  return candidates.some(
+    (candidate) => normalizeDeveloperInstructionsText(candidate) === normalized,
+  );
+}
+
+function stripManagedPluginDeveloperInstructionsSubstrings(
+  value: string,
+  candidates: readonly string[],
+): { cleaned: string; removed: boolean } {
+  let cleaned = value;
+  let removed = false;
+  for (const candidate of candidates) {
+    const normalizedCandidate = normalizeDeveloperInstructionsText(candidate);
+    if (!normalizedCandidate) continue;
+    if (!cleaned.includes(normalizedCandidate)) continue;
+    cleaned = cleaned.replace(normalizedCandidate, "");
+    removed = true;
+  }
+  return { cleaned, removed };
+}
+
 export function isCurrentOmxPluginDeveloperInstructionsFragment(
   value: string,
 ): boolean {
-  const normalized = normalizeDeveloperInstructionsText(value);
-  return OMX_PLUGIN_DEVELOPER_INSTRUCTION_FRAGMENTS.some(
-    (fragment) => normalizeDeveloperInstructionsText(fragment) === normalized,
+  return isManagedPluginDeveloperInstructions(
+    value,
+    CURRENT_MANAGED_PLUGIN_DEVELOPER_INSTRUCTIONS,
+  );
+}
+
+export function isHistoricalOmxPluginDeveloperInstructionsFragment(
+  value: string,
+): boolean {
+  return isManagedPluginDeveloperInstructions(
+    value,
+    HISTORICAL_MANAGED_PLUGIN_DEVELOPER_INSTRUCTIONS,
   );
 }
 
@@ -333,6 +395,13 @@ export function hasCurrentOmxPluginDeveloperInstructionsFragment(
   value: string,
 ): boolean {
   const normalized = normalizeDeveloperInstructionsText(value);
+  if (
+    CURRENT_MANAGED_PLUGIN_DEVELOPER_INSTRUCTIONS.some((candidate) =>
+      normalized.includes(normalizeDeveloperInstructionsText(candidate)),
+    )
+  ) {
+    return true;
+  }
   return Array.from(
     normalized.matchAll(OMX_PLUGIN_DEVELOPER_INSTRUCTION_FRAGMENT_PATTERN),
   ).some((match) => isCurrentOmxPluginDeveloperInstructionsFragment(match[0]));
@@ -346,13 +415,36 @@ export function stripManagedOmxDeveloperInstructions(
   let cleaned = value.replace(
     OMX_PLUGIN_DEVELOPER_INSTRUCTION_FRAGMENT_PATTERN,
     (fragment) => {
-      if (!isCurrentOmxPluginDeveloperInstructionsFragment(fragment)) {
+      if (
+        !isCurrentOmxPluginDeveloperInstructionsFragment(fragment)
+        && !isHistoricalOmxPluginDeveloperInstructionsFragment(fragment)
+      ) {
         return fragment;
       }
       removed = true;
+      if (isHistoricalOmxPluginDeveloperInstructionsFragment(fragment)) {
+        removedHistorical = true;
+      }
       return "";
     },
   );
+
+  const currentManagedPluginStripped =
+    stripManagedPluginDeveloperInstructionsSubstrings(
+      cleaned,
+      CURRENT_MANAGED_PLUGIN_DEVELOPER_INSTRUCTIONS,
+    );
+  cleaned = currentManagedPluginStripped.cleaned;
+  removed ||= currentManagedPluginStripped.removed;
+
+  const historicalManagedPluginStripped =
+    stripManagedPluginDeveloperInstructionsSubstrings(
+      cleaned,
+      HISTORICAL_MANAGED_PLUGIN_DEVELOPER_INSTRUCTIONS,
+    );
+  cleaned = historicalManagedPluginStripped.cleaned;
+  removed ||= historicalManagedPluginStripped.removed;
+  removedHistorical ||= historicalManagedPluginStripped.removed;
 
   const normalizedCleaned = normalizeDeveloperInstructionsText(cleaned);
   if (
@@ -799,6 +891,20 @@ function stripOrphanedManagedNotify(config: string, pkgRoot: string): string {
  */
 export function stripOmxTopLevelKeys(config: string): string {
   return stripRootLevelKeys(config, OMX_TOP_LEVEL_KEYS);
+}
+
+export function stripManagedLegacyRootReasoning(config: string): string {
+  let cleaned = config;
+  for (const marker of OMX_TOP_LEVEL_SETTINGS_MARKERS) {
+    cleaned = cleaned.replace(
+      new RegExp(
+        `(^\\s*${escapeRegExp(marker)}\\s*$\\r?\\n(?:\\s*notify\\s*=.*\\r?\\n)?)\\s*model_reasoning_effort\\s*=\\s*"medium"\\s*(?:\\r?\\n)?`,
+        "m",
+      ),
+      "$1",
+    );
+  }
+  return cleaned;
 }
 
 // ---------------------------------------------------------------------------
@@ -2602,7 +2708,7 @@ function getOmxTablesBlock(
  * Preserves existing user settings, appends OMX block if not present.
  *
  * Layout:
- *   1. OMX top-level keys (notify, model_reasoning_effort, developer_instructions)
+ *   1. OMX/user top-level keys (notify, developer_instructions, preserved user root keys)
  *   2. [features] with multi_agent + child_agents_md + hooks + goals
  *   3. [shell_environment_policy.set] with defaulted deprecated explore-routing opt-out
  *   4. … user sections …
@@ -2641,6 +2747,7 @@ export function buildMergedConfig(
     !isOmxManagedNotifyCommand(getRootTomlArray(existing, "notify"), pkgRoot)
       ? getRootTomlArray(existing, "notify")
       : null;
+  existing = stripManagedLegacyRootReasoning(existing);
   existing = stripOmxTopLevelKeys(existing);
   if (userNotifyToPreserve) {
     existing = `${`notify = ${formatTomlStringArray(userNotifyToPreserve)}`}\n${existing.trimStart()}`;

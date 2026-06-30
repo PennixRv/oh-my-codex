@@ -3,11 +3,13 @@ import assert from 'node:assert/strict';
 import { mkdtemp, rm, readFile } from 'fs/promises';
 import { join } from 'path';
 import { tmpdir } from 'os';
+import { setTimeout as delay } from 'timers/promises';
 import {
   initTeamState,
   listMailboxMessages,
   listDispatchRequests,
   readDispatchRequest,
+  transitionDispatchRequest,
 } from '../state.js';
 import {
   queueInboxInstruction,
@@ -93,7 +95,7 @@ describe('mcp-comm', () => {
     }
   });
 
-  it('queueDirectMailboxMessage keeps leader-fixed missing-pane request pending/deferred', async () => {
+  it('queueDirectMailboxMessage marks leader-fixed boundary delivery as notified', async () => {
     const cwd = await mkdtemp(join(tmpdir(), 'omx-mcp-comm-'));
     try {
       await initTeamState('alpha', 't', 'executor', 1, cwd);
@@ -107,21 +109,22 @@ describe('mcp-comm', () => {
         cwd,
         transportPreference: 'transport_direct',
         fallbackAllowed: false,
-        notify: async () => ({ ok: true, transport: 'mailbox', reason: 'leader_pane_missing_mailbox_persisted' }),
+        notify: async () => ({ ok: true, transport: 'mailbox', reason: 'leader_mailbox_boundary_delivery' }),
       });
 
       assert.equal(outcome.ok, true);
       assert.ok(outcome.request_id);
       assert.ok(outcome.message_id);
+      assert.equal(outcome.reason, 'leader_mailbox_boundary_delivery');
 
       const request = await readDispatchRequest('alpha', outcome.request_id!, cwd);
-      assert.equal(request?.status, 'pending');
-      assert.equal(request?.last_reason, 'leader_pane_missing_deferred');
+      assert.equal(request?.status, 'notified');
+      assert.equal(request?.last_reason, 'leader_mailbox_boundary_delivery');
 
       const mailbox = await listMailboxMessages('alpha', 'leader-fixed', cwd);
       assert.equal(mailbox.length, 1);
       assert.equal(mailbox[0]?.body, 'hello leader');
-      assert.equal(mailbox[0]?.notified_at, undefined);
+      assert.ok(mailbox[0]?.notified_at);
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -141,11 +144,11 @@ describe('mcp-comm', () => {
         cwd,
         transportPreference: 'transport_direct',
         fallbackAllowed: false,
-        notify: async () => ({ ok: true, transport: 'mailbox', reason: 'leader_mailbox_notified' }),
+        notify: async () => ({ ok: true, transport: 'mailbox', reason: 'leader_mailbox_boundary_delivery' }),
       });
 
       assert.equal(first.ok, true);
-      assert.equal(first.reason, 'leader_mailbox_notified');
+      assert.equal(first.reason, 'leader_mailbox_boundary_delivery');
 
       const second = await queueDirectMailboxMessage({
         teamName: 'alpha-dedupe',
@@ -313,6 +316,61 @@ describe('mcp-comm', () => {
       const request = await readDispatchRequest('alpha', outcome.request_id!, cwd);
       assert.equal(request?.status, 'failed');
       assert.match(request?.last_reason ?? '', /^notify_exception:/);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+
+  it('does not promote a failed leader mailbox dispatch request back to notified when mailbox persistence already succeeded', async () => {
+    const cwd = await mkdtemp(join(tmpdir(), 'omx-mcp-comm-'));
+    try {
+      await initTeamState('alpha', 't', 'executor', 1, cwd);
+
+      let requestId: string | null = null;
+      const sendPromise = queueDirectMailboxMessage({
+        teamName: 'alpha',
+        fromWorker: 'worker-1',
+        toWorker: 'leader-fixed',
+        toPaneId: '%55',
+        body: 'hello leader',
+        triggerMessage: 'check leader mailbox',
+        cwd,
+        transportPreference: 'transport_direct',
+        fallbackAllowed: false,
+        notify: async (_target, _message, context) => {
+          requestId = context.request.request_id;
+          await delay(50);
+          return { ok: true, transport: 'mailbox', reason: 'leader_mailbox_boundary_delivery' };
+        },
+      });
+
+      const deadline = Date.now() + 2_000;
+      while (Date.now() < deadline && !requestId) {
+        await delay(10);
+      }
+      assert.ok(requestId, 'expected mailbox dispatch request to be observed before notify resolves');
+      if (!requestId) throw new Error('missing request id');
+
+      await transitionDispatchRequest(
+        'alpha',
+        requestId,
+        'pending',
+        'failed',
+        { last_reason: 'hook_failed:test_receipt' },
+        cwd,
+      );
+
+      const outcome = await sendPromise;
+      assert.equal(outcome.ok, true);
+      assert.equal(outcome.reason, 'leader_mailbox_boundary_delivery');
+
+      const request = await readDispatchRequest('alpha', requestId, cwd);
+      assert.equal(request?.status, 'failed');
+      assert.equal(request?.last_reason, 'hook_failed:test_receipt');
+
+      const mailbox = await listMailboxMessages('alpha', 'leader-fixed', cwd);
+      assert.equal(mailbox.length, 1);
+      assert.ok(mailbox[0]?.notified_at);
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }

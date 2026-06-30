@@ -1,6 +1,10 @@
 # Wiki Index
 
-> 5 pages | Last updated: 2026-06-28T05:00:00.000Z
+> 6 pages | Last updated: 2026-06-29T11:54:16.000Z
+
+## architecture
+
+- [OMX Role Routing And Model Mapping Analysis 2026-06-29](omx-role-routing-and-model-mapping-analysis-2026-06-29.md) — # OMX Role Routing And Model Mapping Analysis 2026-06-29
 
 ## debugging
 

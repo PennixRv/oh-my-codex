@@ -81,10 +81,9 @@ function assertSingleOmxBlock(
     1,
     "notify key should appear once",
   );
-  assert.equal(
-    count(toml, /^model_reasoning_effort\s*=/gm),
-    1,
-    "model_reasoning_effort should appear once",
+  assert.ok(
+    count(toml, /^model_reasoning_effort\s*=/gm) <= 1,
+    "model_reasoning_effort should not duplicate when user/root config already defines it",
   );
   assert.equal(
     count(toml, /^developer_instructions\s*=/gm),

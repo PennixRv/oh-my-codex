@@ -282,9 +282,9 @@ async function readProjectMemorySummary(cwd: string): Promise<string> {
 
 function getNativeSubagentRoutingInstructions(): string {
   return [
-    "When spawning Codex native subagents, always set `agent_type` to an installed OMX role.",
+    "When spawning Codex native subagents, prefer setting `agent_type` to an installed OMX role and choose the narrowest role that matches the task.",
     "Use the most specific role (`architect`, `code-reviewer`, `critic`, `planner`, `debugger`, etc.); use `executor` only for generic implementation work.",
-    "Never omit `agent_type` for OMX work: untyped Task subagents appear as default subagents and lose role-specific prompts/routing.",
+    "If Codex is using a full-history fork mode that inherits agent settings from the parent, follow that constraint instead of redundantly forcing `agent_type`, `model`, or `reasoning_effort`; otherwise avoid untyped Task subagents because they lose role-specific prompts/routing.",
   ].join("\n");
 }
 
