@@ -32,7 +32,7 @@ checksum = "88904434abc2901f197fe8cc55f0445e7ded921dba5911dad2e2b39b48e663c4"
 
 [[package]]
 name = "omx-api"
-version = "0.18.60"
+version = "0.18.61"
 dependencies = [
  "serde",
  "serde_json",
@@ -40,14 +40,14 @@ dependencies = [
 
 [[package]]
 name = "omx-explore-harness"
-version = "0.18.60"
+version = "0.18.61"
 dependencies = [
  "libc",
 ]
 
 [[package]]
 name = "omx-mux"
-version = "0.18.60"
+version = "0.18.61"
 dependencies = [
  "serde",
  "serde_json",
@@ -55,7 +55,7 @@ dependencies = [
 
 [[package]]
 name = "omx-runtime"
-version = "0.18.60"
+version = "0.18.61"
 dependencies = [
  "omx-mux",
  "omx-runtime-core",
@@ -64,7 +64,7 @@ dependencies = [
 
 [[package]]
 name = "omx-runtime-core"
-version = "0.18.60"
+version = "0.18.61"
 dependencies = [
  "fs2",
  "serde",
@@ -73,7 +73,7 @@ dependencies = [
 
 [[package]]
 name = "omx-sparkshell"
-version = "0.18.60"
+version = "0.18.61"
 dependencies = [
  "omx-mux",
 ]

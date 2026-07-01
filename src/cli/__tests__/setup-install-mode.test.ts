@@ -27,6 +27,16 @@ const packageRoot = process.cwd();
 let previousPathForFakeCodex: string | undefined;
 let fakeCodexBinDir: string | null = null;
 
+async function readActivePackageVersion(): Promise<string> {
+	const pkg = JSON.parse(
+		await readFile(join(packageRoot, "package.json"), "utf-8"),
+	) as { version?: string };
+	if (typeof pkg.version !== "string" || pkg.version.length === 0) {
+		throw new Error("package.json version is missing");
+	}
+	return pkg.version;
+}
+
 before(async () => {
 	previousPathForFakeCodex = process.env.PATH;
 	fakeCodexBinDir = await mkdtemp(join(tmpdir(), "omx-fake-codex-"));
@@ -1353,6 +1363,7 @@ describe.skip("omx setup install mode behavior", () => {
 	it("writes setup_completed_version after a successful explicit plugin-mode setup", async () => {
 		const wd = await mkdtemp(join(tmpdir(), "omx-setup-install-mode-"));
 		try {
+			const activePackageVersion = await readActivePackageVersion();
 			await withIsolatedUserHome(wd, async (codexHomeDir) => {
 				await withTempCwd(wd, async () => {
 					const stampPath = join(codexHomeDir, ".omx", "install-state.json");
@@ -1381,12 +1392,12 @@ describe.skip("omx setup install mode behavior", () => {
 					);
 					assert.equal(
 						stamp?.installed_version,
-						"0.18.59",
+						activePackageVersion,
 						"explicit setup should advance installed_version to the active package version",
 					);
 					assert.equal(
 						stamp?.setup_completed_version,
-						"0.18.59",
+						activePackageVersion,
 						"completed setup stamp should match the active package version after setup",
 					);
 					assert.equal(stamp?.install_channel, "stable");

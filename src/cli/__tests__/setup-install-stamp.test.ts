@@ -6,8 +6,19 @@ import { tmpdir } from "node:os";
 import { setup } from "../setup.js";
 import { readUserInstallStamp } from "../update.js";
 
+const packageRoot = process.cwd();
 let previousPathForFakeCodex: string | undefined;
 let fakeCodexBinDir: string | null = null;
+
+async function readActivePackageVersion(): Promise<string> {
+  const pkg = JSON.parse(
+    await readFile(join(packageRoot, "package.json"), "utf-8"),
+  ) as { version?: string };
+  if (typeof pkg.version !== "string" || pkg.version.length === 0) {
+    throw new Error("package.json version is missing");
+  }
+  return pkg.version;
+}
 
 async function withIsolatedUserHome<T>(
   wd: string,
@@ -44,6 +55,7 @@ describe("omx setup install stamp", () => {
   it("writes setup_completed_version after a successful explicit plugin-mode setup", async () => {
     const wd = await mkdtemp(join(tmpdir(), "omx-setup-install-stamp-"));
     try {
+      const activePackageVersion = await readActivePackageVersion();
       previousPathForFakeCodex = process.env.PATH;
       fakeCodexBinDir = await mkdtemp(join(tmpdir(), "omx-fake-codex-"));
       const fakeCodexPath = join(fakeCodexBinDir, "codex");
@@ -90,8 +102,8 @@ describe("omx setup install stamp", () => {
 
           const stamp = await readUserInstallStamp(stampPath);
           assert.equal(typeof stamp?.setup_completed_version, "string");
-          assert.equal(stamp?.installed_version, "0.18.59");
-          assert.equal(stamp?.setup_completed_version, "0.18.59");
+          assert.equal(stamp?.installed_version, activePackageVersion);
+          assert.equal(stamp?.setup_completed_version, activePackageVersion);
           assert.equal(stamp?.install_channel, "stable");
           assert.equal(stamp?.install_source, "oh-my-codex-pennix@latest");
         });
