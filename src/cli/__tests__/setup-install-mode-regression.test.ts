@@ -1,0 +1,135 @@
+import { after, before, describe, it } from "node:test";
+import assert from "node:assert/strict";
+import { existsSync } from "node:fs";
+import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { setup } from "../setup.js";
+import {
+	upsertLocalOmxMarketplaceRegistration,
+	upsertLocalOmxPluginEnablement,
+} from "../plugin-marketplace.js";
+
+const packageRoot = process.cwd();
+let previousPathForFakeCodex: string | undefined;
+let fakeCodexBinDir: string | null = null;
+
+before(async () => {
+	previousPathForFakeCodex = process.env.PATH;
+	fakeCodexBinDir = await mkdtemp(join(tmpdir(), "omx-fake-codex-"));
+	const fakeCodexPath = join(fakeCodexBinDir, "codex");
+	await writeFile(
+		fakeCodexPath,
+		[
+			"#!/usr/bin/env node",
+			"if (process.argv[2] === 'features' && process.argv[3] === 'list') {",
+			"  console.log('hooks                                   stable             true');",
+			"  console.log('plugin_hooks                            experimental       true');",
+			"  console.log('goals                                   experimental       true');",
+			"  process.exit(0);",
+			"}",
+			"if (process.argv.includes('--version') || process.argv[2] === '--version') {",
+			"  console.log('codex-cli 0.999.0');",
+			"  process.exit(0);",
+			"}",
+			"process.exit(0);",
+			"",
+		].join("\n"),
+	);
+	await chmod(fakeCodexPath, 0o755);
+	process.env.PATH = `${fakeCodexBinDir}${process.env.PATH ? `:${process.env.PATH}` : ""}`;
+});
+
+after(async () => {
+	if (previousPathForFakeCodex === undefined) {
+		delete process.env.PATH;
+	} else {
+		process.env.PATH = previousPathForFakeCodex;
+	}
+	if (fakeCodexBinDir !== null) {
+		await rm(fakeCodexBinDir, { recursive: true, force: true });
+	}
+});
+
+async function withTempCwd<T>(wd: string, fn: () => Promise<T>): Promise<T> {
+	const previousCwd = process.cwd();
+	process.chdir(wd);
+	try {
+		return await fn();
+	} finally {
+		process.chdir(previousCwd);
+	}
+}
+
+async function withIsolatedUserHome<T>(
+	wd: string,
+	fn: (codexHomeDir: string) => Promise<T>,
+): Promise<T> {
+	const previousHome = process.env.HOME;
+	const previousCodexHome = process.env.CODEX_HOME;
+	const homeDir = join(wd, "home");
+	const codexHomeDir = join(homeDir, ".codex");
+	await mkdir(codexHomeDir, { recursive: true });
+	process.env.HOME = homeDir;
+	process.env.CODEX_HOME = codexHomeDir;
+	try {
+		return await fn(codexHomeDir);
+	} finally {
+		if (typeof previousHome === "string") process.env.HOME = previousHome;
+		else delete process.env.HOME;
+		if (typeof previousCodexHome === "string") {
+			process.env.CODEX_HOME = previousCodexHome;
+		} else {
+			delete process.env.CODEX_HOME;
+		}
+	}
+}
+
+describe("omx setup install mode regressions", () => {
+	it("defaults to plugin mode when existing Codex config already advertises OMX plugin mode", async () => {
+		const wd = await mkdtemp(join(tmpdir(), "omx-setup-install-mode-regression-"));
+		try {
+			await withIsolatedUserHome(wd, async (codexHomeDir) => {
+				const configPath = join(codexHomeDir, "config.toml");
+				const pluginCacheDir = join(
+					codexHomeDir,
+					"plugins",
+					"cache",
+					"oh-my-codex-local",
+					"oh-my-codex",
+					"local",
+				);
+				const config = upsertLocalOmxMarketplaceRegistration(
+					upsertLocalOmxPluginEnablement('plugin_hooks = true\n'),
+					packageRoot,
+				);
+				await writeFile(configPath, config);
+
+				await withTempCwd(wd, async () => {
+					await setup({ scope: "user" });
+				});
+
+				const persisted = JSON.parse(
+					await readFile(join(wd, ".omx", "setup-scope.json"), "utf-8"),
+				) as { scope: string; installMode?: string; mcpMode?: string };
+				assert.deepEqual(persisted, {
+					scope: "user",
+					installMode: "plugin",
+					mcpMode: "none",
+				});
+				assert.equal(
+					existsSync(join(codexHomeDir, "skills", "ask", "SKILL.md")),
+					false,
+					"plugin-mode inference must not reinstall legacy skill copies",
+				);
+				assert.equal(
+					existsSync(join(pluginCacheDir, ".codex-plugin", "plugin.json")),
+					true,
+					"plugin-mode inference should still materialize the local plugin cache",
+				);
+			});
+		} finally {
+			await rm(wd, { recursive: true, force: true });
+		}
+	});
+});

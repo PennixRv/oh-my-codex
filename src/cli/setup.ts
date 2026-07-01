@@ -81,7 +81,7 @@ import {
 	isNativeAgentInstallableStatus,
 	isSetupPromptAssetName,
 } from "../agents/policy.js";
-import { getPackageRoot } from "../utils/package.js";
+import { getPackageRoot, isOmxPackageName } from "../utils/package.js";
 import { readSessionState, isSessionStale } from "../hooks/session.js";
 import { getCatalogHeadlineCounts } from "./catalog-contract.js";
 import { tryReadCatalogManifest } from "../catalog/reader.js";
@@ -1295,6 +1295,78 @@ function resolveSetupMcpMode(
 	return { mcpMode: DEFAULT_SETUP_MCP_MODE, source: "default" };
 }
 
+function isEnabledTomlValue(value: unknown): boolean {
+	return value === true
+		|| (
+			typeof value === "string"
+			&& ["1", "true", "yes", "on"].includes(value.trim().toLowerCase())
+		);
+}
+
+function configEnablesPluginScopedHooks(configContent: string): boolean {
+	try {
+		const parsed = TOML.parse(configContent) as {
+			plugin_hooks?: unknown;
+			features?: Record<string, unknown>;
+		};
+		return isEnabledTomlValue(parsed.plugin_hooks)
+			|| isEnabledTomlValue(parsed.features?.plugin_hooks);
+	} catch {
+		return /^\s*plugin_hooks\s*=\s*(?:true|1|"true"|"1"|"yes"|"on")\s*$/m.test(
+			configContent,
+		);
+	}
+}
+
+function getParsedPluginMarketplaceConfig(content: string): {
+	marketplace: { source_type?: unknown; source?: unknown } | null;
+	plugin: { enabled?: unknown } | null;
+} {
+	const parsed = TOML.parse(content) as {
+		marketplaces?: Record<string, { source_type?: unknown; source?: unknown }>;
+		plugins?: Record<string, { enabled?: unknown }>;
+	};
+	return {
+		marketplace: parsed.marketplaces?.[OMX_LOCAL_MARKETPLACE_NAME] ?? null,
+		plugin: parsed.plugins?.[`${OMX_PLUGIN_NAME}@${OMX_LOCAL_MARKETPLACE_NAME}`] ?? null,
+	};
+}
+
+async function isTrustedOmxPluginMarketplaceSource(
+	source: unknown,
+	packageRoot: string,
+): Promise<boolean> {
+	if (source === packageRoot) return true;
+	if (typeof source !== "string" || source.length === 0) return false;
+	try {
+		const packageJson = JSON.parse(
+			await readFile(join(source, "package.json"), "utf-8"),
+		) as { name?: unknown };
+		return isOmxPackageName(packageJson.name);
+	} catch {
+		return false;
+	}
+}
+
+async function configSuggestsPluginInstallMode(
+	configPath: string,
+	packageRoot: string,
+): Promise<boolean> {
+	if (!existsSync(configPath)) return false;
+	try {
+		const configContent = await readFile(configPath, "utf-8");
+		if (!configEnablesPluginScopedHooks(configContent)) return false;
+		const { marketplace, plugin } = getParsedPluginMarketplaceConfig(configContent);
+		if (!marketplace || marketplace.source_type !== "local") return false;
+		if (!(await isTrustedOmxPluginMarketplaceSource(marketplace.source, packageRoot))) {
+			return false;
+		}
+		return plugin?.enabled === true;
+	} catch {
+		return false;
+	}
+}
+
 async function resolveSetupInstallMode(
 	projectRoot: string,
 	scope: SetupScope,
@@ -1322,10 +1394,14 @@ async function resolveSetupInstallMode(
 	if (scope !== "user") return null;
 
 	const discoveredPluginCacheDir = await discoverOmxPluginCacheDir();
+	const packageRoot = getPackageRoot();
+	const inferredPluginFromConfig = discoveredPluginCacheDir
+		? false
+		: await configSuggestsPluginInstallMode(codexConfigPath(), packageRoot);
 	const defaultMode =
 		persistedReviewDecision === "review" && persisted?.installMode
 			? persisted.installMode
-			: discoveredPluginCacheDir
+			: (discoveredPluginCacheDir || inferredPluginFromConfig)
 				? "plugin"
 				: DEFAULT_SETUP_INSTALL_MODE;
 
@@ -1336,6 +1412,10 @@ async function resolveSetupInstallMode(
 		if (discoveredPluginCacheDir) {
 			console.log(
 				`Detected installed Codex plugin cache for ${OMX_DISPLAY_NAME} at ${discoveredPluginCacheDir}.`,
+			);
+		} else if (inferredPluginFromConfig) {
+			console.log(
+				`Detected existing Codex plugin-mode ${OMX_DISPLAY_NAME} registration in ${codexConfigPath()}.`,
 			);
 		}
 		const installMode = installModePrompt

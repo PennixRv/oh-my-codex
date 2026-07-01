@@ -4,6 +4,15 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+## [0.18.58] - 2026-07-01
+
+Patch release for the Pennix fork startup and setup convergence line: OMX launch paths no longer block on an interactive GitHub star prompt, and fresh user-scope setup now reuses existing plugin-mode Codex config signals instead of spuriously falling back to legacy mode after reinstall.
+
+- Normal `omx` launch paths (`launch`, HUD launch, and overlay exec) no longer invoke the interactive GitHub star prompt at startup. The non-blocking `omx setup` support hint remains unchanged for users with authenticated `gh`.
+- `omx setup` user-scope install-mode inference now treats an existing plugin-mode Codex config as a first-class plugin signal when no persisted setup preference or plugin cache is present.
+- The new inference reuses the same evidence class already relied on by `omx doctor`: `plugin_hooks` enabled, a trusted local OMX marketplace registration, and the OMX plugin enabled in `config.toml`.
+- Focused regression coverage now locks both behaviors: launch startup must not reference the interactive star prompt, and setup must default back to plugin mode when the Codex config already advertises OMX plugin mode after a clean reinstall.
+
 ## [0.18.57] - 2026-06-30
 
 Patch release for the Pennix fork mailbox-boundary handoff line: interactive team workers now consume unread leader mailbox context at native prompt/tool boundaries instead of relying on tmux injection fallback, while worker trigger guidance and dispatch telemetry align to the same boundary-driven contract.

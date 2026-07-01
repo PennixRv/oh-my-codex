@@ -1,33 +1,33 @@
-# oh-my-codex-pennix v0.18.57
+# oh-my-codex-pennix v0.18.58
 
 > Release notes template for the Pennix fork. The tag workflow regenerates this file into the final GitHub release body.
 
 ## Summary
 
-This release ships the Pennix fork mailbox-boundary handoff follow-up: interactive team workers now consume unread leader mailbox messages at native hook prompt/tool boundaries instead of relying on tmux injection fallback, while leader/worker guidance and dispatch telemetry are aligned to the same boundary-driven contract.
+This release ships the Pennix fork startup/setup convergence follow-up: normal OMX launches no longer block on an interactive GitHub star prompt, and fresh user-scope setup now reuses existing plugin-mode Codex config evidence instead of drifting back to legacy mode after a reinstall.
 
 ## Highlights
 
-- Interactive worker steady-state mailbox delivery now resolves to durable `mailbox_boundary` dispatches, so unread leader messages surface through native-hook `additionalContext` on the next `UserPromptSubmit` or `PreToolUse` boundary instead of being re-injected into tmux panes.
-- Worker mailbox dispatch state is now marked notified immediately with explicit `worker_mailbox_boundary_delivery` telemetry, keeping runtime, dispatch logs, and boundary consumption aligned without synthetic reminder writes back into the leader mailbox.
-- Worker mailbox trigger copy now tells workers to finish the current step, read the real mailbox file, mark messages delivered, and continue feasible work, matching the intended boundary-driven leader/worker mental model.
-- Regression coverage now locks unread leader and worker mailbox context handoff, same-batch dedupe, delivered-message ignore behavior, and interactive worker boundary dispatch semantics.
+- Normal `omx` startup paths no longer invoke the interactive GitHub star prompt, so launch, HUD startup, and overlay exec do not unexpectedly block or surprise the foreground session.
+- The static support hint in `omx setup` remains intact for users who already have authenticated GitHub CLI access, preserving the non-blocking support path without launch-time interruption.
+- `omx setup` user-scope install-mode inference now defaults back to plugin mode when the existing Codex config already advertises trusted OMX plugin-mode registration, even before the local plugin cache has been materialized again.
+- Regression coverage now locks both contracts: startup source must not call the interactive star prompt, and setup must prefer plugin mode when Codex config already contains valid OMX plugin-mode signals after reinstall.
 
 ## Fixes / compatibility
 
-- `src/scripts/codex-native-hook.ts` now resolves unread worker/leader mailbox batches directly from the real mailbox state and attaches them as structured boundary context, deduped per unread-batch signature and session/turn boundary.
-- `src/team/runtime.ts`, `src/team/mcp-comm.ts`, and team dispatch state types now formalize `mailbox_boundary` as the interactive worker mailbox transport instead of treating steady-state worker messages as hook-preferred tmux injection work.
-- `src/team/worker-bootstrap.ts` and related guidance/tests now describe worker mailbox handling as boundary-delivered asynchronous review rather than visible injection or retry-driven prompting.
+- `src/cli/index.ts` stops calling the interactive star-prompt helper from the normal launch entrypoints, removing a foreground startup interruption while leaving the helper and setup-time support hint available for explicit/non-launch use.
+- `src/cli/setup.ts` now infers plugin mode from existing trusted plugin-mode Codex config when user-scope setup lacks both a persisted choice and a materialized plugin cache, aligning setup with the already-shipped `doctor` evidence model.
+- New focused tests cover the launch startup contract and the plugin-config fallback regression so future release lines cannot silently reintroduce either user-visible issue.
 
 ## Merged PR inventory
 
-- No merged PRs. `0.18.57` is a direct release-line commit on the Pennix fork.
+- No merged PRs. `0.18.58` is a direct release-line commit on the Pennix fork.
 
 ## Validation
 
 - `npm run build`
-- `node dist/scripts/run-test-files.js dist/team/__tests__/delivery-e2e-smoke.test.js dist/team/__tests__/runtime.test.js dist/scripts/__tests__/codex-native-hook.test.js dist/team/__tests__/mcp-comm.test.js dist/team/__tests__/worker-bootstrap.test.js`
-- `node dist/scripts/check-version-sync.js --tag v0.18.57`
+- `node dist/scripts/run-test-files.js dist/cli/__tests__/launch-startup-contract.test.js dist/cli/__tests__/setup-install-mode-regression.test.js dist/cli/__tests__/star-prompt.test.js dist/cli/__tests__/setup-gh-star.test.js dist/cli/__tests__/windows-popup-loop-contract.test.js`
+- `node dist/scripts/check-version-sync.js --tag v0.18.58`
 - `git diff --check`
 - `npm pack --dry-run`
 
@@ -35,4 +35,4 @@ This release ships the Pennix fork mailbox-boundary handoff follow-up: interacti
 
 Thanks to the contributors who made this release possible.
 
-**Full Changelog**: [`v0.18.56...v0.18.57`](https://github.com/PennixRv/oh-my-codex/compare/v0.18.56...v0.18.57)
+**Full Changelog**: [`v0.18.57...v0.18.58`](https://github.com/PennixRv/oh-my-codex/compare/v0.18.57...v0.18.58)
