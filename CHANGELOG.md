@@ -4,6 +4,14 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+## [0.18.59] - 2026-07-01
+
+Patch release for the Pennix fork config-repair line: setup and launch-time config repair now proactively scrub malformed Codex `tui.model_availability_nux` subtables before Codex reloads config, preventing `invalid type: map, expected u32` failures while preserving user-owned root/provider settings during plugin-mode setup refreshes.
+
+- `stripCodexModelAvailabilityNux()` now removes both the normal transient `[tui.model_availability_nux]` table and malformed nested variants such as `[tui.model_availability_nux.gpt-5]`, which Codex may parse as nested maps instead of integer counters.
+- `omx setup` now runs the same NUX cleanup before both plugin-mode legacy-config cleanup and general managed-config refresh, so broken transient Codex NUX state is repaired before setup merges runtime flags, plugin marketplace registration, and developer instructions.
+- New active regression coverage locks both contracts: malformed nested NUX subtables are scrubbed, and plugin-mode setup still preserves user-owned root/provider config such as `model_provider`, `model_reasoning_summary`, and custom provider tables while repairing the malformed Codex state.
+
 ## [0.18.58] - 2026-07-01
 
 Patch release for the Pennix fork startup and setup convergence line: OMX launch paths no longer block on an interactive GitHub star prompt, and fresh user-scope setup now reuses existing plugin-mode Codex config signals instead of spuriously falling back to legacy mode after reinstall.

@@ -3,7 +3,10 @@ import assert from "node:assert/strict";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { mergeConfig } from "../generator.js";
+import {
+  cleanCodexModelAvailabilityNuxIfNeeded,
+  mergeConfig,
+} from "../generator.js";
 
 describe("config generator root reasoning ownership", () => {
   it("strips historical OMX-managed root medium reasoning during merge", async () => {
@@ -59,6 +62,42 @@ describe("config generator root reasoning ownership", () => {
       assert.match(toml, /^model_reasoning_effort = "xhigh"$/m);
       assert.equal((toml.match(/^model_reasoning_effort\s*=/gm) ?? []).length, 1);
       assert.doesNotMatch(toml, /^model_reasoning_effort = "medium"$/m);
+    } finally {
+      await rm(wd, { recursive: true, force: true });
+    }
+  });
+
+  it("cleans malformed nested Codex model availability NUX subtables", async () => {
+    const wd = await mkdtemp(join(tmpdir(), "omx-root-nux-cleanup-"));
+    try {
+      const configPath = join(wd, "config.toml");
+      await writeFile(
+        configPath,
+        [
+          'model = "gpt-5.5"',
+          "",
+          "[tui]",
+          'theme = "dark"',
+          "",
+          "[tui.model_availability_nux]",
+          '"gpt-5.5" = 4',
+          "",
+          "[tui.model_availability_nux.gpt-5]",
+          "5 = 1",
+          "",
+        ].join("\n"),
+      );
+
+      const cleaned = await cleanCodexModelAvailabilityNuxIfNeeded(configPath);
+      const toml = await readFile(configPath, "utf-8");
+
+      assert.equal(cleaned, true);
+      assert.match(toml, /^\[tui\]$/m);
+      assert.match(toml, /^theme = "dark"$/m);
+      assert.doesNotMatch(toml, /^\[tui\.model_availability_nux\]$/m);
+      assert.doesNotMatch(toml, /^\[tui\.model_availability_nux\./m);
+      assert.doesNotMatch(toml, /^"gpt-5\.5" = 4$/m);
+      assert.doesNotMatch(toml, /^5 = 1$/m);
     } finally {
       await rm(wd, { recursive: true, force: true });
     }

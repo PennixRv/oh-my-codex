@@ -49,6 +49,7 @@ import {
 	stripOmxEnvSettings,
 	stripOmxFeatureFlags,
 	stripOmxSeededBehavioralDefaults,
+	cleanCodexModelAvailabilityNuxIfNeeded,
 	upsertPluginModeRuntimeFeatureFlags,
 	upsertManagedCodexHookTrustState,
 	stripManagedCodexHookTrustState,
@@ -881,30 +882,6 @@ async function promptForAgentsOverwrite(
 	}
 }
 
-async function promptForPluginAgentsMdDefault(
-	destinationPath: string,
-): Promise<boolean> {
-	if (!process.stdin.isTTY || !process.stdout.isTTY) {
-		return !existsSync(destinationPath);
-	}
-	const rl = createInterface({
-		input: process.stdin,
-		output: process.stdout,
-	});
-	try {
-		const answer = (
-			await rl.question(
-				`Plugin mode: install/update OMX AGENTS.md defaults at "${destinationPath}"? [Y/n]: `,
-			)
-		)
-			.trim()
-			.toLowerCase();
-		return answer === "" || answer === "y" || answer === "yes";
-	} finally {
-		rl.close();
-	}
-}
-
 function normalizeDeveloperInstructionsText(value: string): string {
 	return value.replace(/\r\n/g, "\n").trim();
 }
@@ -942,37 +919,8 @@ function readRootDeveloperInstructions(config: string): unknown | undefined {
 	}
 }
 
-function legacyPluginDeveloperInstructionsDecision(
-	choice: boolean | "skip" | "preserve-or-add" | "refresh",
-	state: PluginDeveloperInstructionsDecision["state"] = "missing",
-): PluginDeveloperInstructionsDecision {
-	if (choice === "refresh" || (choice === true && state === "historical")) {
-		return {
-			action: "update",
-			state: "historical",
-			reason:
-				choice === "refresh"
-					? "legacy explicit refresh policy"
-					: "legacy boolean approval refreshed historical developer_instructions",
-		};
-	}
-	if (choice === true || choice === "preserve-or-add") {
-		return {
-			action: "add",
-			state: "missing",
-			reason: "legacy explicit add-if-missing policy",
-		};
-	}
-	return {
-		action: "preserve",
-		state,
-		reason: "legacy explicit skip policy",
-	};
-}
-
 async function resolvePluginDeveloperInstructionsDecision(
 	configPath: string,
-	options: Pick<SetupOptions, "pluginDeveloperInstructionsPrompt">,
 ): Promise<PluginDeveloperInstructionsDecision> {
 	const existing = existsSync(configPath)
 		? await readFile(configPath, "utf-8")
@@ -1604,7 +1552,6 @@ function removeRootTomlKey(config: string, key: string): string {
 
 function stripPluginModeLegacyRootDefaults(
 	config: string,
-	developerInstructionsDecision: PluginDeveloperInstructionsDecision,
 ): string {
 	config = stripManagedLegacyRootReasoning(config);
 	const lines = config.split(/\r?\n/);
@@ -1976,6 +1923,10 @@ async function cleanupPluginModeLegacyConfig(
 ): Promise<boolean> {
 	if (!existsSync(configPath)) return false;
 
+	if (!options.dryRun) {
+		await cleanCodexModelAvailabilityNuxIfNeeded(configPath);
+	}
+
 	const original = await readFile(configPath, "utf-8");
 	const preservedFirstPartyMcp = options.preserveFirstPartyMcp
 		? extractFirstPartyOmxMcpSections(original)
@@ -1984,10 +1935,7 @@ async function cleanupPluginModeLegacyConfig(
 	config = stripFirstPartyOmxMcpSections(config);
 	config = stripExistingOmxBlocks(config).cleaned;
 	config = stripExistingSharedMcpRegistryBlock(config).cleaned;
-	config = stripPluginModeLegacyRootDefaults(
-		config,
-		options.developerInstructionsDecision,
-	);
+	config = stripPluginModeLegacyRootDefaults(config);
 	config = stripOmxSeededBehavioralDefaults(config);
 	config = stripOmxFeatureFlags(config);
 	config = stripManagedCodexHookTrustState(config);
@@ -2031,8 +1979,6 @@ export async function setup(options: SetupOptions = {}): Promise<void> {
 		persistedSetupReviewPrompt,
 		installModePrompt,
 		modelUpgradePrompt,
-		pluginAgentsMdPrompt,
-		pluginDeveloperInstructionsPrompt,
 		firstPartyMcpRemovalPrompt,
 	} = options;
 	const pkgRoot = getPackageRoot();
@@ -2149,7 +2095,6 @@ export async function setup(options: SetupOptions = {}): Promise<void> {
 		isPluginInstallMode
 			? await resolvePluginDeveloperInstructionsDecision(
 					scopeDirs.codexConfigFile,
-					{ pluginDeveloperInstructionsPrompt },
 				)
 			: {
 					action: "preserve",
@@ -3984,6 +3929,9 @@ async function updateManagedConfig(
 		codexHookFeatureFlag: CodexHookFeatureFlag;
 	},
 ): Promise<ManagedConfigResult> {
+	if (!options.dryRun) {
+		await cleanCodexModelAvailabilityNuxIfNeeded(configPath);
+	}
 	const existing = existsSync(configPath)
 		? await readFile(configPath, "utf-8")
 		: "";

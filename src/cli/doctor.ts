@@ -32,7 +32,6 @@ import { getPackageRoot } from "../utils/package.js";
 import {
 	hasLegacyOmxTeamRunTable,
 	getModelContextRecommendation,
-	hasCurrentOmxPluginDeveloperInstructionsFragment,
 } from "../config/generator.js";
 import {
 	MANAGED_HOOK_EVENTS,
@@ -1267,7 +1266,6 @@ async function checkPluginScopedNativeHooks(
 		};
 	}
 
-	const version = await packagedOmxPluginVersion(packagedMarketplace);
 	const expectedCacheDir = omxLocalPluginCacheDir(codexHomeDir);
 	const expectedHooksPath = join(expectedCacheDir, "hooks", "hooks.json");
 	const expectedHookLauncherPath = join(expectedCacheDir, "hooks", "codex-native-hook.mjs");

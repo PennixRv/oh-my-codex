@@ -132,4 +132,64 @@ describe("omx setup install mode regressions", () => {
 			await rm(wd, { recursive: true, force: true });
 		}
 	});
+
+	it("preserves user root/provider config while plugin setup cleans malformed Codex NUX tables", async () => {
+		const wd = await mkdtemp(join(tmpdir(), "omx-setup-plugin-nux-repair-"));
+		try {
+			await withIsolatedUserHome(wd, async (codexHomeDir) => {
+				const configPath = join(codexHomeDir, "config.toml");
+				await writeFile(
+					configPath,
+					[
+						'model = "gpt-5.4"',
+						'model_provider = "cch"',
+						'model_reasoning_summary = "detailed"',
+						'plan_mode_reasoning_effort = "xhigh"',
+						"",
+						"[model_providers.cch]",
+						'name = "cch"',
+						'base_url = "https://cch.example.test/v1"',
+						'wire_api = "responses"',
+						"requires_openai_auth = true",
+						"",
+						"[agents]",
+						"max_threads = 6",
+						"max_depth = 2",
+						"",
+						"[tui]",
+						'theme = "dark"',
+						"",
+						"[tui.model_availability_nux]",
+						'"gpt-5.5" = 4',
+						"",
+						"[tui.model_availability_nux.gpt-5]",
+						"5 = 1",
+						"",
+					].join("\n"),
+				);
+
+				await withTempCwd(wd, async () => {
+					await setup({ scope: "user", installMode: "plugin", force: true });
+				});
+
+				const config = await readFile(configPath, "utf-8");
+				assert.match(config, /^model = "gpt-5\.4"$/m);
+				assert.match(config, /^model_provider = "cch"$/m);
+				assert.match(config, /^model_reasoning_summary = "detailed"$/m);
+				assert.match(config, /^\[model_providers\.cch\]$/m);
+				assert.match(
+					config,
+					/^base_url = "https:\/\/cch\.example\.test\/v1"$/m,
+				);
+				assert.doesNotMatch(config, /^\[tui\.model_availability_nux\]$/m);
+				assert.doesNotMatch(config, /^\[tui\.model_availability_nux\./m);
+				assert.doesNotMatch(config, /^"gpt-5\.5" = 4$/m);
+				assert.doesNotMatch(config, /^5 = 1$/m);
+				assert.match(config, /^plugin_hooks = true$/m);
+				assert.match(config, /^goals = true$/m);
+			});
+		} finally {
+			await rm(wd, { recursive: true, force: true });
+		}
+	});
 });

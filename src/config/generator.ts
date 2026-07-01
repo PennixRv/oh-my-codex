@@ -177,14 +177,6 @@ export const HISTORICAL_OMX_PLUGIN_DEVELOPER_INSTRUCTIONS =
   `<omx version="1">You have ${OMX_FORK_USER_FACING_NAME} installed through Codex plugin mode. AGENTS.md is the orchestration brain and main control surface. Follow AGENTS.md for skill/keyword routing and $name workflow invocation. When spawning native subagents, set \`agent_type\` to an installed role and never omit it for OMX work. Registered Codex plugin marketplace surfaces supply ${OMX_FORK_USER_FACING_NAME} workflows and plugin-scoped companion resources when the plugin is installed. Setup still installs native agent role TOML files under the active Codex home so agent_type routing works. Do not assume bundled prompt/skill files are copied into local .codex prompts/skills directories in plugin mode. User-installed skills may still live under ~/.codex/skills. Use outcome-first, concise progress updates: state the target result, constraints, validation evidence, and stop condition before adding process detail.</omx>`;
 export const LEGACY_HISTORICAL_OMX_PLUGIN_DEVELOPER_INSTRUCTIONS =
   `<omx version="1">You have ${OMX_LEGACY_DISPLAY_NAME} installed through Codex plugin mode. AGENTS.md is the orchestration brain and main control surface. Follow AGENTS.md for skill/keyword routing and $name workflow invocation. When spawning native subagents, set \`agent_type\` to an installed role and never omit it for OMX work. Registered Codex plugin marketplace surfaces supply OMX workflows and plugin-scoped companion resources when the plugin is installed. Setup still installs native agent role TOML files under the active Codex home so agent_type routing works. Do not assume bundled prompt/skill files are copied into local .codex prompts/skills directories in plugin mode. User-installed skills may still live under ~/.codex/skills. Use outcome-first, concise progress updates: state the target result, constraints, validation evidence, and stop condition before adding process detail.</omx>`;
-const OMX_PLUGIN_DEVELOPER_INSTRUCTION_FRAGMENTS = [
-  OMX_PLUGIN_DEVELOPER_INSTRUCTIONS,
-  LEGACY_OMX_PLUGIN_DEVELOPER_INSTRUCTIONS,
-] as const;
-const HISTORICAL_OMX_PLUGIN_DEVELOPER_INSTRUCTION_FRAGMENTS = [
-  HISTORICAL_OMX_PLUGIN_DEVELOPER_INSTRUCTIONS,
-  LEGACY_HISTORICAL_OMX_PLUGIN_DEVELOPER_INSTRUCTIONS,
-] as const;
 const OMX_PLUGIN_DEVELOPER_INSTRUCTION_FRAGMENT_PATTERN =
   /<omx version="1">[\s\S]*?<\/omx>/g;
 const SHARED_MCP_REGISTRY_MARKER =
@@ -277,7 +269,10 @@ const OMX_CONFIG_END_MARKERS = [
   LEGACY_OMX_CONFIG_END_MARKER,
 ] as const;
 
-const CODEX_MODEL_AVAILABILITY_NUX_TABLE_PATTERN = /^\s*\[tui\.model_availability_nux\]\s*(?:#.*)?$/;
+const CODEX_MODEL_AVAILABILITY_NUX_TABLE_PATTERN =
+  /^\s*\[tui\.model_availability_nux\]\s*(?:#.*)?$/;
+const CODEX_MODEL_AVAILABILITY_NUX_SUBTABLE_PATTERN =
+  /^\s*\[tui\.model_availability_nux\.[^\]]+\]\s*(?:#.*)?$/;
 const TOML_TABLE_HEADER_PATTERN = /^\s*\[\[?[^\]]+\]?\]\s*(?:#.*)?$/;
 
 export function stripCodexModelAvailabilityNux(config: string): string {
@@ -286,7 +281,10 @@ export function stripCodexModelAvailabilityNux(config: string): string {
   let removed = false;
 
   for (let i = 0; i < lines.length;) {
-    if (CODEX_MODEL_AVAILABILITY_NUX_TABLE_PATTERN.test(lines[i])) {
+    if (
+      CODEX_MODEL_AVAILABILITY_NUX_TABLE_PATTERN.test(lines[i]) ||
+      CODEX_MODEL_AVAILABILITY_NUX_SUBTABLE_PATTERN.test(lines[i])
+    ) {
       removed = true;
       i += 1;
       while (i < lines.length && !TOML_TABLE_HEADER_PATTERN.test(lines[i])) {
