@@ -593,6 +593,38 @@ function appendHookAdditionalContext(
   };
 }
 
+function sanitizeCodexHookOutput(
+  hookEventName: CodexHookEventName | null,
+  output: Record<string, unknown> | null,
+): Record<string, unknown> | null {
+  if (!output) return output;
+  if (hookEventName !== "PreToolUse") return output;
+
+  const sanitized: Record<string, unknown> = {};
+  const decision = safeString(output.decision).trim();
+  const reason = safeString(output.reason).trim();
+  const systemMessage = safeString(output.systemMessage).trim();
+  const stopReason = safeString(output.stopReason).trim();
+  const continueValue = typeof output.continue === "boolean" ? output.continue : undefined;
+  const hookSpecificOutput = safeObject(output.hookSpecificOutput);
+  const hookEvent = safeString(hookSpecificOutput.hookEventName).trim();
+  const additionalContext = safeString(hookSpecificOutput.additionalContext).trim();
+
+  if (decision) sanitized.decision = decision;
+  if (reason) sanitized.reason = reason;
+  if (typeof continueValue === "boolean") sanitized.continue = continueValue;
+  if (stopReason) sanitized.stopReason = stopReason;
+  if (systemMessage) sanitized.systemMessage = systemMessage;
+  if (hookEvent || additionalContext) {
+    sanitized.hookSpecificOutput = {
+      ...(hookEvent ? { hookEventName: hookEvent } : {}),
+      ...(additionalContext ? { additionalContext } : {}),
+    };
+  }
+
+  return Object.keys(sanitized).length > 0 ? sanitized : {};
+}
+
 const SIDE_CONVERSATION_BOUNDARY_PATTERNS = [
   /side conversation boundary/i,
   /inherited history from the parent thread/i,
@@ -5347,8 +5379,10 @@ export async function runCodexNativeHookCli(): Promise<void> {
 
     const result = await dispatchCodexNativeHook(payload);
     if (result.outputJson) {
-      writeNativeHookJsonStdout(result.outputJson);
-    } else if (result.hookEventName === "Stop") {
+      writeNativeHookJsonStdout(
+        sanitizeCodexHookOutput(result.hookEventName, result.outputJson) ?? {},
+      );
+    } else if (result.hookEventName !== "PreCompact" && result.hookEventName !== "PostCompact") {
       writeNativeHookJsonStdout({});
     }
   } catch (error) {

@@ -13,8 +13,10 @@ import {
   buildManagedCodexHooksConfig,
   discoverCodexHookConfigPaths,
   dedupeCodexHookConfigPaths,
+  extractCodexHooksJsonTrustState,
   getMissingManagedCodexHookEvents,
   hasUserCodexHooksAfterManagedRemoval,
+  hasCodexHooksJsonTopLevelState,
   isRuntimeCodexHomeMirrorPath,
   mergeManagedCodexHooksConfig,
   removeManagedCodexHooks,
@@ -418,6 +420,64 @@ describe.skip("codex hooks helpers", () => {
     assert.match(JSON.stringify(merged.hooks.Stop), /echo user-stop/);
   });
 
+  it("extracts trust state from both legacy hooks.state and top-level state objects", () => {
+    const extracted = extractCodexHooksJsonTrustState(
+      JSON.stringify({
+        state: {
+          "custom:/hooks.json:prompt:0:0": {
+            trusted_hash: "sha256:top-level-user",
+            enabled: true,
+          },
+        },
+        hooks: {
+          state: {
+            "custom:/hooks.json:stop:0:0": {
+              trusted_hash: "sha256:user",
+              enabled: false,
+            },
+          },
+        },
+      }),
+    );
+
+    assert.deepEqual(extracted, {
+      "custom:/hooks.json:stop:0:0": {
+        trusted_hash: "sha256:user",
+        enabled: false,
+      },
+      "custom:/hooks.json:prompt:0:0": {
+        trusted_hash: "sha256:top-level-user",
+        enabled: true,
+      },
+    });
+  });
+
+  it("detects legacy top-level hooks.json state presence", () => {
+    assert.equal(
+      hasCodexHooksJsonTopLevelState(
+        JSON.stringify({
+          state: {
+            "custom:/hooks.json:stop:0:0": { trusted_hash: "sha256:user" },
+          },
+        }),
+      ),
+      true,
+    );
+    assert.equal(
+      hasCodexHooksJsonTopLevelState(
+        JSON.stringify({
+          hooks: {
+            state: {
+              "custom:/hooks.json:stop:0:0": { trusted_hash: "sha256:user" },
+            },
+          },
+        }),
+      ),
+      false,
+    );
+    assert.equal(hasCodexHooksJsonTopLevelState("{invalid json"), null);
+  });
+
   it("preserves top-level managed hook state metadata while updating trusted_hash", () => {
     const managedState = buildManagedCodexHookTrustState("/hooks.json", "/repo");
     const managedKey = Object.keys(managedState).find((key) =>
@@ -725,5 +785,65 @@ describe.skip("codex hooks helpers", () => {
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
+  });
+});
+
+describe("codex hooks state migration helpers", () => {
+  it("extracts trust state from both legacy hooks.state and top-level state objects", () => {
+    const extracted = extractCodexHooksJsonTrustState(
+      JSON.stringify({
+        state: {
+          "custom:/hooks.json:prompt:0:0": {
+            trusted_hash: "sha256:top-level-user",
+            enabled: true,
+          },
+        },
+        hooks: {
+          state: {
+            "custom:/hooks.json:stop:0:0": {
+              trusted_hash: "sha256:user",
+              enabled: false,
+            },
+          },
+        },
+      }),
+    );
+
+    assert.deepEqual(extracted, {
+      "custom:/hooks.json:stop:0:0": {
+        trusted_hash: "sha256:user",
+        enabled: false,
+      },
+      "custom:/hooks.json:prompt:0:0": {
+        trusted_hash: "sha256:top-level-user",
+        enabled: true,
+      },
+    });
+  });
+
+  it("detects legacy top-level hooks.json state presence", () => {
+    assert.equal(
+      hasCodexHooksJsonTopLevelState(
+        JSON.stringify({
+          state: {
+            "custom:/hooks.json:stop:0:0": { trusted_hash: "sha256:user" },
+          },
+        }),
+      ),
+      true,
+    );
+    assert.equal(
+      hasCodexHooksJsonTopLevelState(
+        JSON.stringify({
+          hooks: {
+            state: {
+              "custom:/hooks.json:stop:0:0": { trusted_hash: "sha256:user" },
+            },
+          },
+        }),
+      ),
+      false,
+    );
+    assert.equal(hasCodexHooksJsonTopLevelState("{invalid json"), null);
   });
 });

@@ -118,6 +118,60 @@ async function withIsolatedUserHome<T>(
 	}
 }
 
+describe("setup install mode trust-state migration regressions", () => {
+	it("migrates legacy hooks.json top-level trust state into config.toml during plugin setup", async () => {
+		const wd = await mkdtemp(join(tmpdir(), "omx-setup-install-mode-"));
+		try {
+			await withIsolatedUserHome(wd, async (codexHomeDir) => {
+				await withTempCwd(wd, async () => {
+					const hooksPath = join(codexHomeDir, "hooks.json");
+					const configPath = join(codexHomeDir, "config.toml");
+					await writeFile(
+						hooksPath,
+						JSON.stringify(
+							{
+								state: {
+									[`${hooksPath}:post_compact:0:0`]: {
+										trusted_hash: "sha256:user",
+										enabled: false,
+									},
+								},
+								hooks: {
+									PostCompact: [
+										{
+											hooks: [
+												{
+													type: "command",
+													command: "/usr/bin/python3 /tmp/user-hook.py",
+													timeout: 5,
+												},
+											],
+										},
+									],
+								},
+							},
+							null,
+							2,
+						) + "\n",
+					);
+					await writeFile(configPath, 'model = "gpt-5.4"\n');
+
+					await setup({ scope: "user", installMode: "plugin" });
+
+					const config = await readFile(configPath, "utf-8");
+					const hooks = await readFile(hooksPath, "utf-8");
+					assert.match(config, /^\[hooks.state\./m);
+					assert.match(config, /^trusted_hash = "sha256:user"$/m);
+					assert.match(config, /^enabled = false$/m);
+					assert.doesNotMatch(hooks, /^\s*"state"\s*:/m);
+				});
+			});
+		} finally {
+			await rm(wd, { recursive: true, force: true });
+		}
+	});
+});
+
 describe.skip("notify setup scope", () => {
 	it("does not write unsupported project-scope notify", async () => {
 		const wd = await mkdtemp(join(tmpdir(), "omx-project-no-notify-"));
@@ -2338,6 +2392,58 @@ describe.skip("omx setup install mode behavior", () => {
 						"utf-8",
 					);
 					assert.match(config, /^plugin_hooks = true$/m);
+				});
+			});
+		} finally {
+			await rm(wd, { recursive: true, force: true });
+		}
+	});
+
+	it("migrates legacy hooks.json top-level trust state into config.toml during plugin setup", async () => {
+		const wd = await mkdtemp(join(tmpdir(), "omx-setup-install-mode-"));
+		try {
+			await withIsolatedUserHome(wd, async (codexHomeDir) => {
+				await withTempCwd(wd, async () => {
+					const hooksPath = join(codexHomeDir, "hooks.json");
+					const configPath = join(codexHomeDir, "config.toml");
+					await writeFile(
+						hooksPath,
+						JSON.stringify(
+							{
+								state: {
+									[`${hooksPath}:post_compact:0:0`]: {
+										trusted_hash: "sha256:user",
+										enabled: false,
+									},
+								},
+								hooks: {
+									PostCompact: [
+										{
+											hooks: [
+												{
+													type: "command",
+													command: "/usr/bin/python3 /tmp/user-hook.py",
+													timeout: 5,
+												},
+											],
+										},
+									],
+								},
+							},
+							null,
+							2,
+						) + "\n",
+					);
+					await writeFile(configPath, 'model = "gpt-5.4"\n');
+
+					await setup({ scope: "user", installMode: "plugin" });
+
+					const config = await readFile(configPath, "utf-8");
+					const hooks = await readFile(hooksPath, "utf-8");
+					assert.match(config, /^\[hooks.state\./m);
+					assert.match(config, /^trusted_hash = "sha256:user"$/m);
+					assert.match(config, /^enabled = false$/m);
+					assert.doesNotMatch(hooks, /^\s*"state"\s*:/m);
 				});
 			});
 		} finally {

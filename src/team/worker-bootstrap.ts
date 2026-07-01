@@ -178,6 +178,40 @@ async function ensureGitInfoExcludePattern(
   await writeFile(excludePath, next, "utf-8");
 }
 
+async function buildWorkerRootAgentsContent(
+  options: WorkerRootAgentsOptions,
+  projectAgentsContent: string | undefined,
+): Promise<string> {
+  const baseParts: string[] = [];
+  const userAgentsPath = join(codexHome(), "AGENTS.md");
+  const installedSkills = await listInstalledSkillDirectories(options.leaderCwd);
+  const projectSkillNames = new Set(
+    installedSkills
+      .filter((skill) => skill.scope === "project")
+      .map((skill) => skill.name),
+  );
+
+  let userContent = "";
+  try {
+    userContent = await readFile(userAgentsPath, "utf-8");
+  } catch {
+    userContent = "";
+  }
+  userContent = dropShadowedSkillReferenceLines(
+    stripOverlayFromContent(userContent).trim(),
+    projectSkillNames,
+  ).trim();
+  if (userContent) baseParts.push(userContent);
+
+  const projectContent = stripOverlayFromContent(projectAgentsContent ?? "").trim();
+  if (projectContent) baseParts.push(projectContent);
+
+  const runtimeContent = generateWorkerRootAgentsContent(options).trim();
+  return baseParts.length > 0
+    ? `${baseParts.join("\n\n")}\n\n${runtimeContent}\n`
+    : `${runtimeContent}\n`;
+}
+
 export async function writeWorkerWorktreeRootAgentsFile(
   options: WorkerRootAgentsOptions,
 ): Promise<string> {
@@ -221,7 +255,7 @@ export async function writeWorkerWorktreeRootAgentsFile(
   await writeFile(backupPath, JSON.stringify(backup, null, 2), "utf-8");
   await writeFile(
     agentsPath,
-    generateWorkerRootAgentsContent(options),
+    await buildWorkerRootAgentsContent(options, previousContent),
     "utf-8",
   );
   return agentsPath;

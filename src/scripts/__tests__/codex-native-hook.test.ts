@@ -1056,6 +1056,22 @@ describe.skip("codex native hook dispatch", () => {
     }
   });
 
+  it("emits parseable empty JSON for inactive UserPromptSubmit CLI runs with no output payload", async () => {
+    const cwd = await mkdtemp(join(tmpdir(), "omx-native-hook-cli-userprompt-empty-"));
+    try {
+      const stdout = runNativeHookCli({
+        hook_event_name: "UserPromptSubmit",
+        cwd,
+        session_id: "sess-userprompt-empty",
+        prompt: "",
+      }, { cwd });
+
+      assert.deepEqual(parseSingleJsonStdout(stdout), {});
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+
   it("writes SessionStart state against the long-lived session owner pid and injects environment context", async () => {
     const cwd = await mkdtemp(join(tmpdir(), "omx-native-hook-session-start-"));
     try {
@@ -6312,6 +6328,62 @@ exit 0
         systemMessage:
           "Destructive Bash command detected (`rm -rf dist`). Confirm the target and expected side effects before running it.",
       });
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+
+  it("preserves PreToolUse additionalContext in CLI stdout when present", async () => {
+    const cwd = await mkdtemp(join(tmpdir(), "omx-native-hook-pretool-cli-context-"));
+    try {
+      await writeJson(join(cwd, ".omx", "state", "session.json"), {
+        session_id: "sess-pretool-cli-context",
+        cwd,
+      });
+      await mkdir(join(cwd, ".omx", "state", "team", "cli-context-team", "mailbox"), { recursive: true });
+      await mkdir(join(cwd, ".omx", "state", "team", "cli-context-team", "workers", "leader-fixed"), { recursive: true });
+      await writeJson(join(cwd, ".omx", "state", "team", "cli-context-team", "manifest.v2.json"), {
+        team_name: "cli-context-team",
+        leader_pane_id: "%1",
+        workers: [{ name: "worker-1", pane_id: "%2" }],
+      });
+      await writeJson(join(cwd, ".omx", "state", "team", "cli-context-team", "config.json"), {
+        team_name: "cli-context-team",
+        leader_pane_id: "%1",
+        workers: [{ name: "worker-1", pane_id: "%2" }],
+      });
+      await writeJson(join(cwd, ".omx", "state", "team", "cli-context-team", "mailbox", "leader-fixed.json"), {
+        version: 1,
+        messages: [
+          {
+            message_id: "msg-1",
+            from_worker: "worker-1",
+            to_worker: "leader-fixed",
+            body: "Need review",
+            created_at: "2026-07-01T10:00:00.000Z",
+          },
+        ],
+      });
+
+      const output = parseSingleJsonStdout(runNativeHookCli({
+        hook_event_name: "PreToolUse",
+        cwd,
+        session_id: "sess-pretool-cli-context",
+        tool_name: "Bash",
+        tool_use_id: "tool-pretool-cli-context",
+        tool_input: { command: "pwd" },
+      }, {
+        cwd,
+        env: {
+          ...process.env,
+          OMX_TEAM_STATE_ROOT: join(cwd, ".omx", "state"),
+        },
+      })) as {
+        hookSpecificOutput?: { hookEventName?: string; additionalContext?: string };
+      };
+
+      assert.equal(output.hookSpecificOutput?.hookEventName, "PreToolUse");
+      assert.match(String(output.hookSpecificOutput?.additionalContext ?? ""), /\[OMX team leader mailbox\]/);
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -17900,6 +17972,72 @@ describe("native prompt auto-route guidance", () => {
       );
       assert.doesNotMatch(additionalContext, /OMX auto-routing judged this prompt better suited for Team/);
       assert.equal(result.skillState, null);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("codex native hook cli focused regressions", () => {
+  it("emits parseable empty JSON for inactive UserPromptSubmit CLI runs with no output payload", async () => {
+    const cwd = await mkdtemp(join(tmpdir(), "omx-native-hook-cli-userprompt-empty-live-"));
+    try {
+      const stdout = runNativeHookCli({
+        hook_event_name: "UserPromptSubmit",
+        cwd,
+        session_id: "sess-userprompt-empty-live",
+        prompt: "",
+      }, { cwd });
+
+      assert.deepEqual(parseSingleJsonStdout(stdout), {});
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+
+  it("preserves PreToolUse additionalContext in CLI stdout when present", async () => {
+    const cwd = await mkdtemp(join(tmpdir(), "omx-native-hook-pretool-cli-context-live-"));
+    try {
+      const sessionId = "sess-pretool-cli-context-live";
+      const teamName = "cli-context-team";
+      await initTeamState(teamName, "cli pretool context fixture", "executor", 1, cwd);
+      await writeJson(join(cwd, ".omx", "state", "sessions", sessionId, "team-state.json"), {
+        active: true,
+        mode: "team",
+        current_phase: "running",
+        team_name: teamName,
+        session_id: sessionId,
+      });
+      const sendResult = await executeTeamApiOperation("send-message", {
+        team_name: teamName,
+        from_worker: "worker-1",
+        to_worker: "leader-fixed",
+        body: "Need review",
+      }, cwd);
+      if (!sendResult.ok) throw new Error(`send-message failed: ${sendResult.error?.message ?? "unknown"}`);
+
+      const output = parseSingleJsonStdout(runNativeHookCli({
+        hook_event_name: "PreToolUse",
+        cwd,
+        session_id: sessionId,
+        tool_name: "Bash",
+        tool_use_id: "tool-pretool-cli-context-live",
+        tool_input: { command: "pwd" },
+      }, {
+        cwd,
+        env: {
+          ...process.env,
+          OMX_TEAM_STATE_ROOT: join(cwd, ".omx", "state"),
+        },
+      })) as {
+        hookSpecificOutput?: { hookEventName?: string; additionalContext?: string };
+      };
+
+      assert.equal(output.hookSpecificOutput?.hookEventName, "PreToolUse");
+      assert.match(
+        String(output.hookSpecificOutput?.additionalContext ?? ""),
+        /\[OMX team leader mailbox\]/,
+      );
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }

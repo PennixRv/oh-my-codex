@@ -1458,6 +1458,54 @@ describe("worker bootstrap", () => {
     }
   });
 
+  it("writeWorkerWorktreeRootAgentsFile preserves inherited AGENTS guidance ahead of runtime overlay", async () => {
+    const cwd = await mkdtemp(join(tmpdir(), "omx-worker-root-agents-inherited-"));
+    const worktree = join(cwd, "worktree");
+    const priorHome = process.env.HOME;
+    try {
+      process.env.HOME = join(cwd, "home");
+      await mkdir(join(process.env.HOME, ".codex"), { recursive: true });
+      await writeFile(
+        join(process.env.HOME, ".codex", "AGENTS.md"),
+        "# User Instructions\n- help user (file: /tmp/user/.codex/skills/help/SKILL.md)\n",
+        "utf8",
+      );
+      await mkdir(join(cwd, ".omx", "state", "team", "inherit-team", "workers", "worker-1"), { recursive: true });
+      await mkdir(join(worktree, ".codex", "skills", "help"), { recursive: true });
+      await writeFile(join(worktree, ".codex", "skills", "help", "SKILL.md"), "# help\n", "utf8");
+      await writeFile(
+        join(worktree, "AGENTS.md"),
+        "# Project Instructions\n- help project (file: /tmp/project/.codex/skills/help/SKILL.md)\n",
+        "utf8",
+      );
+
+      const outPath = await writeWorkerWorktreeRootAgentsFile({
+        teamName: "inherit-team",
+        workerName: "worker-1",
+        workerRole: "writer",
+        rolePromptContent: "<identity>Writer role prompt</identity>",
+        teamStateRoot: join(cwd, ".omx", "state"),
+        leaderCwd: worktree,
+        worktreePath: worktree,
+      });
+
+      const generated = await readFile(outPath, "utf8");
+      assert.match(generated, /# User Instructions/);
+      assert.match(generated, /# Project Instructions/);
+      assert.match(generated, /# Team Worker Runtime Instructions/);
+      assert.equal((generated.match(/skills\/help\/SKILL\.md/g) || []).length, 1);
+      assert.match(generated, /help project/);
+      assert.doesNotMatch(generated, /help user/);
+      assert.ok(
+        generated.indexOf("# Project Instructions") < generated.indexOf("# Team Worker Runtime Instructions"),
+      );
+    } finally {
+      if (typeof priorHome === "string") process.env.HOME = priorHome;
+      else delete process.env.HOME;
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+
   it("generateInitialInbox omits duplicated specialization when root AGENTS is canonical", () => {
     const tasks: TeamTask[] = [{
       id: "1",

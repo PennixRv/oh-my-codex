@@ -451,24 +451,7 @@ function isTomlTableHeader(line: string): boolean {
 }
 
 export function stripLocalOmxMarketplaceRegistration(config: string): string {
-	const lines = config.split(/\r?\n/);
-	const headerPattern = marketplaceTableHeaderPattern();
-	const start = lines.findIndex((line) => headerPattern.test(line));
-	if (start < 0) return config;
-
-	let end = lines.length;
-	for (let index = start + 1; index < lines.length; index += 1) {
-		if (isTomlTableHeader(lines[index])) {
-			end = index;
-			break;
-		}
-	}
-
-	const nextLines = [...lines.slice(0, start), ...lines.slice(end)];
-	return nextLines
-		.join("\n")
-		.replace(/\n{3,}/g, "\n\n")
-		.trimEnd();
+	return stripTomlTablesByHeaderPattern(config, marketplaceTableHeaderPattern());
 }
 
 export function buildLocalOmxMarketplaceRegistration(
@@ -510,12 +493,21 @@ export function hasLocalOmxPluginMcpServerRegistrations(config: string): boolean
 }
 
 export function stripLocalOmxPluginMcpServerRegistrations(config: string): string {
-	let lines = config.split(/\r?\n/);
+	let next = config;
 	for (const serverName of OMX_FIRST_PARTY_MCP_SERVER_NAMES) {
-		const headerPattern = localPluginMcpServerTableHeaderPattern(serverName);
-		const start = lines.findIndex((line) => headerPattern.test(line));
-		if (start < 0) continue;
+		next = stripTomlTablesByHeaderPattern(
+			next,
+			localPluginMcpServerTableHeaderPattern(serverName),
+		);
+	}
+	return next;
+}
 
+function stripTomlTablesByHeaderPattern(config: string, headerPattern: RegExp): string {
+	let lines = config.split(/\r?\n/);
+	while (true) {
+		const start = lines.findIndex((line) => headerPattern.test(line));
+		if (start < 0) break;
 		let end = lines.length;
 		for (let index = start + 1; index < lines.length; index += 1) {
 			if (isTomlTableHeader(lines[index])) {
@@ -575,42 +567,11 @@ function upsertTomlTableBooleanKey(
 }
 
 export function upsertLocalOmxPluginEnablement(config: string): string {
-	const lines = config.split(/\r?\n/);
-	const headerPattern = localPluginTableHeaderPattern();
-	const start = lines.findIndex((line) => headerPattern.test(line));
-
-	if (start < 0) {
-		const base = config.trimEnd();
-		return `${base ? `${base}\n\n` : ""}[plugins.${JSON.stringify(OMX_LOCAL_PLUGIN_CONFIG_KEY)}]\nenabled = true\n`;
-	}
-
-	let end = lines.length;
-	for (let index = start + 1; index < lines.length; index += 1) {
-		if (isTomlTableHeader(lines[index])) {
-			end = index;
-			break;
-		}
-	}
-
-	let enabledIndex = -1;
-	for (let index = start + 1; index < end; index += 1) {
-		if (/^\s*enabled\s*=/.test(lines[index])) {
-			if (enabledIndex < 0) {
-				enabledIndex = index;
-				lines[index] = "enabled = true";
-			} else {
-				lines.splice(index, 1);
-				index -= 1;
-				end -= 1;
-			}
-		}
-	}
-
-	if (enabledIndex < 0) {
-		lines.splice(start + 1, 0, "enabled = true");
-	}
-
-	return lines.join("\n").replace(/\n*$/, "\n");
+	const stripped = stripTomlTablesByHeaderPattern(
+		config,
+		localPluginTableHeaderPattern(),
+	).trimEnd();
+	return `${stripped ? `${stripped}\n\n` : ""}[plugins.${JSON.stringify(OMX_LOCAL_PLUGIN_CONFIG_KEY)}]\nenabled = true\n`;
 }
 
 export function upsertLocalOmxPluginMcpServerEnablement(
@@ -625,7 +586,7 @@ export function upsertLocalOmxPluginMcpServerEnablement(
 	if (!enabled) {
 		return config;
 	}
-	let next = config;
+	let next = stripLocalOmxPluginMcpServerRegistrations(config);
 	for (const serverName of OMX_FIRST_PARTY_MCP_SERVER_NAMES) {
 		const header = `[plugins.${JSON.stringify(OMX_LOCAL_PLUGIN_CONFIG_KEY)}.mcp_servers.${serverName}]`;
 		const headerPattern = localPluginMcpServerTableHeaderPattern(serverName);

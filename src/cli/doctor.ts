@@ -39,6 +39,7 @@ import {
 	discoverCodexHookConfigPaths,
 	getManagedCodexHookCommandsForEvent,
 	getMissingManagedCodexHookEvents,
+	hasCodexHooksJsonTopLevelState,
 } from "../config/codex-hooks.js";
 import { OMX_FIRST_PARTY_MCP_SERVER_NAMES } from "../config/omx-first-party-mcp.js";
 import { getDefaultBridge, isBridgeEnabled } from "../runtime/bridge.js";
@@ -1452,6 +1453,15 @@ async function checkNativeHooks(
 
 	try {
 		const content = await readFile(hooksPath, "utf-8");
+		const hasLegacyTopLevelState = hasCodexHooksJsonTopLevelState(content);
+		if (hasLegacyTopLevelState === true) {
+			return {
+				name: "Native hooks",
+				status: "fail",
+				message:
+					`hooks.json still contains a legacy top-level state object; migrate trust state into config.toml [hooks.state] and run "omx setup --force" to repair native hook compatibility`,
+			};
+		}
 		const missingEvents = getMissingManagedCodexHookEvents(content);
 		if (missingEvents === null) {
 			return {

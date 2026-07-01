@@ -12,6 +12,8 @@ import {
   OMX_PLUGIN_NAME,
   omxLocalPluginCacheDir,
   resolvePackagedOmxMarketplace,
+  upsertLocalOmxPluginEnablement,
+  upsertLocalOmxPluginMcpServerEnablement,
 } from "../plugin-marketplace.js";
 
 function repoRoot(): string {
@@ -144,5 +146,46 @@ describe("plugin marketplace cache lifecycle", () => {
     } finally {
       await rm(wd, { recursive: true, force: true });
     }
+  });
+
+  it("dedupes repeated local plugin enablement tables into one canonical table", () => {
+    const next = upsertLocalOmxPluginEnablement(
+      [
+        '[plugins."oh-my-codex@oh-my-codex-local"]',
+        "enabled = false",
+        "",
+        '[plugins."oh-my-codex@oh-my-codex-local"]',
+        "enabled = true",
+        "",
+      ].join("\n"),
+    );
+
+    assert.equal(
+      next.split(/\r?\n/).filter((line) => /\[plugins\."oh-my-codex@oh-my-codex-local"\]/.test(line)).length,
+      1,
+    );
+    assert.equal(next.split(/\r?\n/).filter((line) => /^\s*enabled\s*=/.test(line)).length, 1);
+    assert.match(next, /enabled = true/);
+  });
+
+  it("dedupes repeated first-party MCP server tables before rewriting plugin compat enablement", () => {
+    const next = upsertLocalOmxPluginMcpServerEnablement(
+      [
+        '[plugins."oh-my-codex@oh-my-codex-local".mcp_servers.omx_state]',
+        "enabled = false",
+        "",
+        '[plugins."oh-my-codex@oh-my-codex-local".mcp_servers.omx_state]',
+        "enabled = true",
+        "",
+      ].join("\n"),
+      true,
+    );
+
+    assert.equal(
+      next.split(/\r?\n/).filter((line) => /mcp_servers\.omx_state\]/.test(line)).length,
+      1,
+    );
+    assert.equal(next.split(/\r?\n/).filter((line) => /^\s*enabled\s*=/.test(line)).length >= 1, true);
+    assert.match(next, /enabled = true/);
   });
 });

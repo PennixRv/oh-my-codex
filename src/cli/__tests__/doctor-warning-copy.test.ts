@@ -1651,6 +1651,55 @@ command = "node"
 		}
 	});
 
+	it("fails when hooks.json still contains a legacy top-level state object", async () => {
+		const wd = await mkdtemp(join(tmpdir(), "omx-doctor-hooks-top-level-state-"));
+		try {
+			const home = join(wd, "home");
+			const codexDir = join(home, ".codex");
+			await mkdir(codexDir, { recursive: true });
+			await writeFile(
+				join(codexDir, "hooks.json"),
+				JSON.stringify(
+					{
+						state: {
+							"/tmp/.codex/hooks.json:pre_tool_use:0:0": {
+								trusted_hash: "sha256:user",
+								enabled: false,
+							},
+						},
+						hooks: {
+							PreToolUse: [
+								{
+									hooks: [
+										{
+											type: "command",
+											command: 'node "/repo/dist/scripts/codex-native-hook.js"',
+										},
+									],
+								},
+							],
+						},
+					},
+					null,
+					2,
+				) + "\n",
+			);
+
+			const res = runOmx(wd, ["doctor"], {
+				HOME: home,
+				CODEX_HOME: codexDir,
+			});
+			if (shouldSkipForSpawnPermissions(res.error)) return;
+			assert.equal(res.status, 0, res.stderr || res.stdout);
+			assert.match(
+				res.stdout,
+				/\[XX\] Native hooks: hooks\.json still contains a legacy top-level state object; migrate trust state into config\.toml \[hooks\.state\] and run "omx setup --force" to repair native hook compatibility/,
+			);
+		} finally {
+			await rm(wd, { recursive: true, force: true });
+		}
+	});
+
 	it("verbose doctor warns instead of executing when the effective PostCompact command is stale", async () => {
 		const wd = await mkdtemp(join(tmpdir(), "omx-doctor-postcompact-stale-"));
 		try {

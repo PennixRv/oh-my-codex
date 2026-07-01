@@ -1,10 +1,11 @@
 # Wiki Index
 
-> 6 pages | Last updated: 2026-06-29T11:54:16.000Z
+> 7 pages | Last updated: 2026-07-01T07:55:48.000Z
 
 ## architecture
 
 - [OMX Role Routing And Model Mapping Analysis 2026-06-29](omx-role-routing-and-model-mapping-analysis-2026-06-29.md) — # OMX Role Routing And Model Mapping Analysis 2026-06-29
+- [Upstream Integration Wave 1 Matrix 2026-07-01](upstream-integration-wave-1-matrix-2026-07-01.md) — # Upstream Integration Wave 1 Matrix 2026-07-01
 
 ## debugging
 

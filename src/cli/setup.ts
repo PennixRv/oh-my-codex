@@ -64,8 +64,11 @@ import {
 	buildManagedCodexHookTrustState,
 	buildManagedCodexNativeHookWindowsShimContent,
 	buildManagedCodexNativeHookWindowsShimPath,
+	extractCodexHooksJsonTrustState,
+	hasCodexHooksJsonTopLevelState,
 	mergeManagedCodexHooksConfig,
 	removeManagedCodexHooks,
+	stripCodexHooksJsonTrustState,
 } from "../config/codex-hooks.js";
 import {
 	getLegacyUnifiedMcpRegistryCandidate,
@@ -1739,7 +1742,9 @@ async function cleanupPluginModeManagedHooksJson(
 	}
 
 	const removed = removeManagedCodexHooks(existingHooksContent);
-	if (removed.removedCount === 0) {
+	const strippedTrustState = stripCodexHooksJsonTrustState(existingHooksContent);
+	const trustStateOnlyChanged = strippedTrustState !== existingHooksContent;
+	if (removed.removedCount === 0 && !trustStateOnlyChanged) {
 		summary.unchanged += 1;
 		return;
 	}
@@ -1748,16 +1753,108 @@ async function cleanupPluginModeManagedHooksJson(
 		summary.backedUp += 1;
 	}
 	if (!options.dryRun) {
-		if (removed.nextContent === null) {
+		const nextContent = removed.removedCount > 0 ? removed.nextContent : strippedTrustState;
+		if (nextContent === null) {
 			await rm(hooksPath, { force: true });
 		} else {
-			await writeFile(hooksPath, removed.nextContent);
+			await writeFile(hooksPath, nextContent);
 		}
 	}
 	summary.removed += removed.removedCount;
 	if (options.verbose) {
 		console.log(
-			`  ${options.dryRun ? "would remove" : "removed"} ${removed.removedCount} legacy setup-managed hook wrapper(s) from ${hooksPath}`,
+			`  ${options.dryRun ? "would clean" : "cleaned"} ${removed.removedCount} legacy setup-managed hook wrapper(s) from ${hooksPath}${trustStateOnlyChanged ? " and stripped legacy hooks.json trust state" : ""}`,
+		);
+	}
+}
+
+function buildTrustStateTomlFromEntries(
+	entries: Record<string, { trusted_hash: string; enabled?: boolean }>,
+): string {
+	return Object.entries(entries)
+		.sort(([left], [right]) => left.localeCompare(right))
+		.flatMap(([key, entry]) => [
+			`[hooks.state."${key.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"]`,
+			`trusted_hash = "${entry.trusted_hash.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`,
+			...(typeof entry.enabled === "boolean"
+				? [`enabled = ${entry.enabled ? "true" : "false"}`]
+				: []),
+			"",
+		])
+		.join("\n")
+		.trimEnd();
+}
+
+function collectExistingHookTrustStateKeys(config: string): Set<string> {
+	const keys = new Set<string>();
+	const pattern = /^\s*\[hooks\.state\."((?:\\.|[^"\\])*)"\]\s*(?:#.*)?$/gm;
+	for (const match of config.matchAll(pattern)) {
+		const raw = match[1];
+		if (!raw) continue;
+		try {
+			const parsed = TOML.parse(`value = "${raw}"`) as { value?: unknown };
+			if (typeof parsed.value === "string") keys.add(parsed.value);
+		} catch {
+			// Ignore malformed user tables here; setup should not rewrite them.
+		}
+	}
+	return keys;
+}
+
+function upsertMigratedHooksJsonTrustStateIntoConfig(
+	config: string,
+	trustState: Record<string, { trusted_hash: string; enabled?: boolean }>,
+): string {
+	if (Object.keys(trustState).length === 0) return config;
+	const existingKeys = collectExistingHookTrustStateKeys(config);
+	const filtered = Object.fromEntries(
+		Object.entries(trustState).filter(([key]) => !existingKeys.has(key)),
+	);
+	if (Object.keys(filtered).length === 0) return config;
+	const trimmed = config.trimEnd();
+	const block = buildTrustStateTomlFromEntries(filtered);
+	return block
+		? `${trimmed}${trimmed ? "\n\n" : ""}${block}\n`
+		: `${trimmed}${trimmed ? "\n" : ""}`;
+}
+
+async function migrateLegacyHooksJsonTrustStateToConfig(
+	configPath: string,
+	hooksPath: string,
+	backupContext: SetupBackupContext,
+	summary: SetupCategorySummary,
+	options: Pick<SetupOptions, "dryRun" | "verbose">,
+): Promise<void> {
+	if (!existsSync(hooksPath)) return;
+	const hooksContent = await readFile(hooksPath, "utf-8").catch(() => null);
+	if (!hooksContent) return;
+	const trustState = extractCodexHooksJsonTrustState(hooksContent);
+	if (Object.keys(trustState).length === 0) return;
+
+	const existingConfig = existsSync(configPath)
+		? await readFile(configPath, "utf-8")
+		: "";
+	const nextConfig = upsertMigratedHooksJsonTrustStateIntoConfig(existingConfig, trustState);
+	if (nextConfig === existingConfig) return;
+
+	if (
+		await ensureBackup(
+			configPath,
+			existsSync(configPath),
+			backupContext,
+			options,
+		)
+	) {
+		summary.backedUp += 1;
+	}
+	if (!options.dryRun) {
+		await mkdir(dirname(configPath), { recursive: true });
+		await writeFile(configPath, nextConfig);
+	}
+	summary.updated += 1;
+	if (options.verbose) {
+		console.log(
+			`  ${options.dryRun ? "would migrate" : "migrated"} ${Object.keys(trustState).length} hooks.json trust-state entr${Object.keys(trustState).length === 1 ? "y" : "ies"} into ${configPath}`,
 		);
 	}
 }
@@ -1774,6 +1871,13 @@ async function applyPluginModeHooksConfig(
 		pluginScopedHooks: boolean;
 	},
 ): Promise<void> {
+	await migrateLegacyHooksJsonTrustStateToConfig(
+		configPath,
+		hooksPath,
+		backupContext,
+		summary,
+		options,
+	);
 	const existingConfig = existsSync(configPath)
 		? await readFile(configPath, "utf-8")
 		: "";
@@ -2581,6 +2685,15 @@ export async function setup(options: SetupOptions = {}): Promise<void> {
 		const existingHooksContent = existsSync(scopeDirs.codexHooksFile)
 			? await readFile(scopeDirs.codexHooksFile, "utf-8")
 			: null;
+		if (existingHooksContent && hasCodexHooksJsonTopLevelState(existingHooksContent)) {
+			await migrateLegacyHooksJsonTrustStateToConfig(
+				scopeDirs.codexConfigFile,
+				scopeDirs.codexHooksFile,
+				backupContext,
+				summary.config,
+				{ dryRun, verbose },
+			);
+		}
 		const hooksConfig = mergeManagedCodexHooksConfig(
 			existingHooksContent,
 			pkgRoot,
