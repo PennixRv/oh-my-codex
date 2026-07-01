@@ -19,6 +19,7 @@ import {
   runImmediateUpdate,
   shouldCheckForUpdates,
   spawnInstalledSetupRefresh,
+  writeCompletedSetupInstallStamp,
   writeUserInstallStamp,
 } from '../update.js';
 
@@ -167,6 +168,36 @@ describe('install stamp helpers', () => {
         setup_completed_version: '0.14.0',
         updated_at: '2026-04-20T00:00:00.000Z',
       });
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it('advances installed_version when explicit setup completes after postinstall was skipped', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'omx-install-stamp-'));
+    const codexHomeDir = join(root, '.codex');
+    const stampPath = join(codexHomeDir, '.omx', 'install-state.json');
+
+    try {
+      await writeUserInstallStamp(
+        {
+          installed_version: '0.14.0',
+          setup_completed_version: '0.14.0',
+          install_channel: 'stable',
+          install_source: 'oh-my-codex-pennix@latest',
+          updated_at: '2026-04-20T00:00:00.000Z',
+        },
+        stampPath,
+      );
+
+      await writeCompletedSetupInstallStamp('0.14.1', { codexHomeDir });
+
+      const parsed = await readUserInstallStamp(stampPath);
+      assert.equal(parsed?.installed_version, '0.14.1');
+      assert.equal(parsed?.setup_completed_version, '0.14.1');
+      assert.equal(parsed?.install_channel, 'stable');
+      assert.equal(parsed?.install_source, 'oh-my-codex-pennix@latest');
+      assert.equal(typeof parsed?.updated_at, 'string');
     } finally {
       await rm(root, { recursive: true, force: true });
     }

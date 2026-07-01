@@ -10,6 +10,7 @@ Patch release for the Pennix fork config-repair line: setup and launch-time conf
 
 - `stripCodexModelAvailabilityNux()` now removes both the normal transient `[tui.model_availability_nux]` table and malformed nested variants such as `[tui.model_availability_nux.gpt-5]`, which Codex may parse as nested maps instead of integer counters.
 - `omx setup` now runs the same NUX cleanup before both plugin-mode legacy-config cleanup and general managed-config refresh, so broken transient Codex NUX state is repaired before setup merges runtime flags, plugin marketplace registration, and developer instructions.
+- Explicit successful setup now advances both `installed_version` and `setup_completed_version` to the active package version, so a postinstall-skipped environment can be healed by `omx setup` without leaving a stale install-stamp mismatch behind.
 - New active regression coverage locks both contracts: malformed nested NUX subtables are scrubbed, and plugin-mode setup still preserves user-owned root/provider config such as `model_provider`, `model_reasoning_summary`, and custom provider tables while repairing the malformed Codex state.
 
 ## [0.18.58] - 2026-07-01

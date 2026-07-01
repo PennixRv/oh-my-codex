@@ -610,8 +610,7 @@ export async function writeCompletedSetupInstallStamp(
   const normalizedVersion = stripLeadingV(installedVersion);
   await writeUserInstallStamp(
     {
-      installed_version:
-        stripLeadingV(existing?.installed_version ?? '') || normalizedVersion,
+      installed_version: normalizedVersion,
       setup_completed_version: normalizedVersion,
       ...(existing?.install_channel ? { install_channel: existing.install_channel } : {}),
       ...(existing?.install_source ? { install_source: existing.install_source } : {}),

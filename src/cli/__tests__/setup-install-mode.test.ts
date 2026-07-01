@@ -1326,9 +1326,14 @@ describe.skip("omx setup install mode behavior", () => {
 						"explicit setup should mark setup_completed_version",
 					);
 					assert.equal(
-						stamp?.setup_completed_version,
 						stamp?.installed_version,
-						"completed setup stamp should match the installed version after setup",
+						"0.18.59",
+						"explicit setup should advance installed_version to the active package version",
+					);
+					assert.equal(
+						stamp?.setup_completed_version,
+						"0.18.59",
+						"completed setup stamp should match the active package version after setup",
 					);
 					assert.equal(stamp?.install_channel, "stable");
 					assert.equal(stamp?.install_source, "oh-my-codex-pennix@latest");

@@ -8,11 +8,12 @@
 
 ## Release scope
 
-`0.18.59` carries a narrow Pennix fork config-repair follow-up:
+`0.18.59` carries a narrow Pennix fork config-repair follow-up plus one explicit setup recovery correction uncovered while validating the branch:
 
 - `src/config/generator.ts` now treats malformed nested `tui.model_availability_nux.*` subtables as transient Codex NUX state and strips them alongside the normal flat NUX counter table
 - `src/cli/setup.ts` now runs that cleanup before plugin-mode legacy cleanup and before managed-config refresh, so setup never merges on top of the malformed transient state
-- focused regression coverage now locks both contracts: malformed nested NUX subtables are scrubbed, and plugin-mode setup still preserves user-owned root/provider config while the repair runs
+- `src/cli/update.ts` now lets explicit successful setup advance `installed_version` as well as `setup_completed_version`, so a postinstall-skipped environment is fully healed by `omx setup`
+- focused regression coverage now locks all three contracts: malformed nested NUX subtables are scrubbed, plugin-mode setup still preserves user-owned root/provider config while the repair runs, and explicit setup converges the install stamp to the active package version
 
 ## PR inventory
 
@@ -28,7 +29,7 @@
 ## Local validation evidence
 
 - [x] `npm run build`
-- [x] `node dist/scripts/run-test-files.js dist/cli/__tests__/setup-install-mode-regression.test.js dist/config/__tests__/generator-root-reasoning-contract.test.js dist/cli/__tests__/index.test.js`
+- [x] `node dist/scripts/run-test-files.js dist/cli/__tests__/setup-install-stamp.test.js dist/cli/__tests__/update.test.js dist/cli/__tests__/setup-install-mode-regression.test.js dist/config/__tests__/generator-root-reasoning-contract.test.js`
 - [x] `npm run lint`
 - [x] `npm run check:no-unused`
 - [x] `node dist/scripts/check-version-sync.js --tag v0.18.59`

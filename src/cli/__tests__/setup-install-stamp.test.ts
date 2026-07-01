@@ -90,7 +90,8 @@ describe("omx setup install stamp", () => {
 
           const stamp = await readUserInstallStamp(stampPath);
           assert.equal(typeof stamp?.setup_completed_version, "string");
-          assert.equal(stamp?.setup_completed_version, stamp?.installed_version);
+          assert.equal(stamp?.installed_version, "0.18.59");
+          assert.equal(stamp?.setup_completed_version, "0.18.59");
           assert.equal(stamp?.install_channel, "stable");
           assert.equal(stamp?.install_source, "oh-my-codex-pennix@latest");
         });
