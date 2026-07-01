@@ -1823,6 +1823,7 @@ export function stripOmxFeatureFlags(config: string): string {
   const omxFlags = [
     "multi_agent",
     "child_agents_md",
+    "plugin_hooks",
     "hooks",
     "codex_hooks",
     "goals",

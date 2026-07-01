@@ -136,6 +136,10 @@ export function omxPluginCacheBase(codexHomeDir: string): string {
 	);
 }
 
+export function omxLocalMarketplaceCacheRoot(codexHomeDir: string): string {
+	return join(codexHomeDir, "plugins", "cache", OMX_LOCAL_MARKETPLACE_NAME);
+}
+
 export function omxLocalPluginCacheDir(codexHomeDir: string): string {
 	return join(omxPluginCacheBase(codexHomeDir), OMX_LOCAL_PLUGIN_CACHE_KEY);
 }
@@ -479,6 +483,12 @@ function localPluginTableHeaderPattern(): RegExp {
 	);
 }
 
+function localPluginTableOrSubtableHeaderPattern(): RegExp {
+	return new RegExp(
+		`^\\s*\\[plugins\\.${JSON.stringify(OMX_LOCAL_PLUGIN_CONFIG_KEY).replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?:\\]|\\.)`,
+	);
+}
+
 function localPluginMcpServerTableHeaderPattern(serverName: string): RegExp {
 	return new RegExp(
 		`^\\s*\\[plugins\\.${JSON.stringify(OMX_LOCAL_PLUGIN_CONFIG_KEY).replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\.mcp_servers\\.${serverName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\]\\s*$`,
@@ -501,6 +511,13 @@ export function stripLocalOmxPluginMcpServerRegistrations(config: string): strin
 		);
 	}
 	return next;
+}
+
+export function stripLocalOmxPluginRegistrations(config: string): string {
+	return stripTomlTablesByHeaderPattern(
+		config,
+		localPluginTableOrSubtableHeaderPattern(),
+	);
 }
 
 function stripTomlTablesByHeaderPattern(config: string, headerPattern: RegExp): string {

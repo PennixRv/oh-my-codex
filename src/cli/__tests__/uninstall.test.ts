@@ -240,6 +240,41 @@ function buildMixedConfig(): string {
   ].join('\n');
 }
 
+function buildPluginModeConfig(): string {
+  return [
+    'model = "gpt-5.4"',
+    'developer_instructions = "<omx version=\\"1\\">You have Pennix OMX installed through Codex plugin mode.</omx>"',
+    '',
+    '[features]',
+    'plugin_hooks = true',
+    'goals = true',
+    '',
+    '[hooks.state."/tmp/custom-hooks.json:stop:0:0"]',
+    'trusted_hash = "sha256:user"',
+    '',
+    '[hooks.state."oh-my-codex@oh-my-codex-local:hooks/hooks.json:post_tool_use:0:0"]',
+    'trusted_hash = "sha256:plugin-post-tool"',
+    '',
+    '[hooks.state."oh-my-codex@oh-my-codex-local:hooks/hooks.json:stop:0:0"]',
+    'trusted_hash = "sha256:plugin-stop"',
+    '',
+    '[plugins."oh-my-codex@oh-my-codex-local"]',
+    'enabled = true',
+    '',
+    '[plugins."oh-my-codex@oh-my-codex-local".mcp_servers.omx_state]',
+    'enabled = true',
+    '',
+    '[marketplaces.oh-my-codex-local]',
+    'source_type = "local"',
+    'source = "/tmp/stale-oh-my-codex"',
+    '',
+    '[marketplaces.other]',
+    'source_type = "local"',
+    'source = "/tmp/other"',
+    '',
+  ].join('\n');
+}
+
 describe('omx uninstall', () => {
   it('removes OMX block from config.toml with --dry-run', async () => {
     const wd = await mkdtemp(join(tmpdir(), 'omx-uninstall-'));
@@ -475,6 +510,88 @@ describe('omx uninstall', () => {
       assert.doesNotMatch(config, /^multi_agent\s*=/m);
       assert.doesNotMatch(config, /^child_agents_md\s*=/m);
       assert.doesNotMatch(config, /^goals\s*=/m);
+    } finally {
+      await rm(wd, { recursive: true, force: true });
+    }
+  });
+
+  it('removes plugin-mode registrations, plugin trust state, and plugin cache during uninstall', async () => {
+    const wd = await mkdtemp(join(tmpdir(), 'omx-uninstall-plugin-mode-'));
+    try {
+      const home = join(wd, 'home');
+      const codexDir = join(home, '.codex');
+      const pluginCacheRoot = join(
+        codexDir,
+        'plugins',
+        'cache',
+        'oh-my-codex-local',
+        'oh-my-codex',
+      );
+      const pluginCacheDir = join(
+        pluginCacheRoot,
+        'local',
+      );
+      const historicalPluginCacheDir = join(
+        pluginCacheRoot,
+        '0.0.0-still-running',
+      );
+      await mkdir(codexDir, { recursive: true });
+      await mkdir(join(pluginCacheDir, '.codex-plugin'), { recursive: true });
+      await mkdir(join(historicalPluginCacheDir, '.codex-plugin'), {
+        recursive: true,
+      });
+      await writeFile(join(codexDir, 'config.toml'), buildPluginModeConfig());
+      await writeFile(
+        join(codexDir, 'hooks.json'),
+        JSON.stringify(
+          {
+            hooks: {
+              Stop: [
+                {
+                  hooks: [{ type: 'command', command: 'echo keep-me' }],
+                },
+              ],
+            },
+            version: 1,
+          },
+          null,
+          2,
+        ) + '\n',
+      );
+      await writeFile(
+        join(pluginCacheDir, '.codex-plugin', 'plugin.json'),
+        JSON.stringify({ name: 'oh-my-codex', version: 'local' }, null, 2) + '\n',
+      );
+      await writeFile(
+        join(historicalPluginCacheDir, '.codex-plugin', 'plugin.json'),
+        JSON.stringify({ name: 'oh-my-codex', version: '0.0.0-still-running' }, null, 2) + '\n',
+      );
+
+      const res = runOmx(wd, ['uninstall'], { HOME: home });
+      if (shouldSkipForSpawnPermissions(res.error)) return;
+      assert.equal(res.status, 0, res.stderr || res.stdout);
+      assert.match(res.stdout, /Codex plugin cache directory/);
+
+      const config = await readFile(join(codexDir, 'config.toml'), 'utf-8');
+      assert.match(config, /^model = "gpt-5\.4"$/m);
+      assert.match(config, /^\[marketplaces\.other\]$/m);
+      assert.match(config, /^source = "\/tmp\/other"$/m);
+      assert.match(config, /^\[hooks.state."\/tmp\/custom-hooks\.json:stop:0:0"\]$/m);
+      assert.match(config, /^trusted_hash = "sha256:user"$/m);
+      assert.match(
+        config,
+        /^\s*hooks\s*=\s*true$/m,
+        'preserved user hooks should keep native Codex hooks enabled after plugin-mode uninstall',
+      );
+      assert.doesNotMatch(config, /^\s*plugin_hooks\s*=\s*true$/m);
+      assert.doesNotMatch(config, /oh-my-codex@oh-my-codex-local:hooks\/hooks\.json/);
+      assert.doesNotMatch(config, /^\[plugins\."oh-my-codex@oh-my-codex-local"/m);
+      assert.doesNotMatch(config, /^\[marketplaces\.oh-my-codex-local\]$/m);
+      assert.equal(
+        existsSync(pluginCacheRoot),
+        false,
+        'default uninstall should remove the entire OMX plugin cache root, including historical version-scoped caches',
+      );
     } finally {
       await rm(wd, { recursive: true, force: true });
     }
@@ -933,6 +1050,7 @@ describe('stripOmxFeatureFlags', () => {
       '[features]',
       'multi_agent = true',
       'child_agents_md = true',
+      'plugin_hooks = true',
       'hooks = true',
       'codex_hooks = true',
       'goals = true',
@@ -944,6 +1062,7 @@ describe('stripOmxFeatureFlags', () => {
     const result = stripOmxFeatureFlags(config);
     assert.doesNotMatch(result, /multi_agent/);
     assert.doesNotMatch(result, /child_agents_md/);
+    assert.doesNotMatch(result, /^plugin_hooks\s*=/m);
     assert.doesNotMatch(result, /^hooks\s*=/m);
     assert.doesNotMatch(result, /^codex_hooks\s*=/m);
     assert.doesNotMatch(result, /^goals\s*=/m);
@@ -959,6 +1078,7 @@ describe('stripOmxFeatureFlags', () => {
       '[features]',
       'multi_agent = true',
       'child_agents_md = true',
+      'plugin_hooks = true',
       'goals = true',
       '',
     ].join('\n');
@@ -966,6 +1086,7 @@ describe('stripOmxFeatureFlags', () => {
     const result = stripOmxFeatureFlags(config);
     assert.doesNotMatch(result, /\[features\]/);
     assert.doesNotMatch(result, /multi_agent/);
+    assert.doesNotMatch(result, /^plugin_hooks\s*=/m);
     assert.doesNotMatch(result, /^goals\s*=/m);
   });
 

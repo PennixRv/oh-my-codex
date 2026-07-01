@@ -18,12 +18,19 @@ import {
   stripOmxFeatureFlags,
   upsertCodexHooksFeatureFlag,
   stripOmxSeededBehavioralDefaults,
+  stripManagedCodexHookTrustState,
 } from "../config/generator.js";
 import {
   hasUserCodexHooksAfterManagedRemoval,
   parseCodexHooksConfig,
   removeManagedCodexHooks,
 } from "../config/codex-hooks.js";
+import {
+  OMX_LOCAL_PLUGIN_CONFIG_KEY,
+  omxPluginCacheBase,
+  stripLocalOmxMarketplaceRegistration,
+  stripLocalOmxPluginRegistrations,
+} from "./plugin-marketplace.js";
 import {
   OMX_DISPLAY_NAME,
   getPackageRoot,
@@ -59,6 +66,7 @@ interface UninstallSummary {
   agentConfigsRemoved: number;
   agentsMdRemoved: boolean;
   cacheDirectoryRemoved: boolean;
+  pluginCacheRemoved: boolean;
   legacySkillRootWarning: string | null;
 }
 
@@ -95,6 +103,7 @@ function detectOmxConfigArtifacts(config: string): {
   const hasFeatureFlags =
     /^\s*multi_agent\s*=\s*true/m.test(config) ||
     /^\s*child_agents_md\s*=\s*true/m.test(config) ||
+    /^\s*plugin_hooks\s*=\s*true/m.test(config) ||
     /^\s*hooks\s*=\s*true/m.test(config) ||
     /^\s*codex_hooks\s*=\s*true/m.test(config) ||
     /^\s*goals\s*=\s*true/m.test(config) ||
@@ -230,7 +239,35 @@ function hasNativeHooksFeatureFlag(config: string): boolean {
 
   return lines
     .slice(featuresStart + 1, sectionEnd)
-    .some((line) => /^\s*(?:hooks|codex_hooks)\s*=\s*true/.test(line));
+    .some((line) => /^\s*(?:plugin_hooks|hooks|codex_hooks)\s*=\s*true/.test(line));
+}
+
+function stripPluginScopedHookTrustState(config: string): string {
+  const lines = config.split(/\r?\n/);
+  const kept: string[] = [];
+  const managedPrefix = `${OMX_LOCAL_PLUGIN_CONFIG_KEY}:`;
+
+  for (let i = 0; i < lines.length;) {
+    const match = lines[i]?.match(
+      /^\s*\[hooks\.state\."((?:\\.|[^"\\])*)"\]\s*(?:#.*)?$/,
+    );
+    if (!match || !(match[1] ?? "").startsWith(managedPrefix)) {
+      kept.push(lines[i] ?? "");
+      i += 1;
+      continue;
+    }
+
+    let tableEnd = lines.length;
+    for (let next = i + 1; next < lines.length; next += 1) {
+      if (/^\s*\[\[?[^\]]+\]?\]\s*(?:#.*)?$/.test(lines[next] ?? "")) {
+        tableEnd = next;
+        break;
+      }
+    }
+    i = tableEnd;
+  }
+
+  return kept.join("\n").replace(/\n{3,}/g, "\n\n").trimEnd();
 }
 
 async function shouldPreserveHooksFeatureFlag(
@@ -346,6 +383,10 @@ async function cleanConfig(
   let config = original;
   const { cleaned } = stripExistingOmxBlocks(config);
   config = cleaned;
+  config = stripManagedCodexHookTrustState(config);
+  config = stripPluginScopedHookTrustState(config);
+  config = stripLocalOmxPluginRegistrations(config);
+  config = stripLocalOmxMarketplaceRegistration(config);
 
   // Strip OMX top-level keys, then restore a pre-existing user notify when
   // setup had wrapped it in the OMX dispatcher.
@@ -560,6 +601,42 @@ async function removeCacheDirectory(
   return true;
 }
 
+async function removePluginCacheDirectory(
+  codexHomeDir: string,
+  options: Pick<UninstallOptions, "dryRun" | "verbose">,
+): Promise<boolean> {
+  const pluginCacheRoot = omxPluginCacheBase(codexHomeDir);
+  if (!existsSync(pluginCacheRoot)) return false;
+
+  if (!options.dryRun) {
+    await rm(pluginCacheRoot, { recursive: true, force: true });
+    const marketplaceRoot = dirname(pluginCacheRoot);
+    const cacheRoot = dirname(marketplaceRoot);
+    try {
+      const remainingMarketplaceEntries = await readdir(marketplaceRoot);
+      if (remainingMarketplaceEntries.length === 0) {
+        await rm(marketplaceRoot, { recursive: true, force: true });
+      }
+    } catch {
+      // Ignore empty-dir cleanup failures.
+    }
+    try {
+      const remainingCacheEntries = await readdir(cacheRoot);
+      if (remainingCacheEntries.length === 0) {
+        await rm(cacheRoot, { recursive: true, force: true });
+      }
+    } catch {
+      // Ignore empty-dir cleanup failures.
+    }
+  }
+  if (options.verbose) {
+    console.log(
+      `  ${options.dryRun ? "Would remove" : "Removed"} ${pluginCacheRoot}`,
+    );
+  }
+  return true;
+}
+
 async function detectLegacySkillRootWarning(
   scope: SetupScope,
 ): Promise<string | null> {
@@ -641,6 +718,9 @@ function printSummary(summary: UninstallSummary, dryRun: boolean): void {
   if (summary.cacheDirectoryRemoved) {
     console.log(`  ${prefix} .omx/ cache directory`);
   }
+  if (summary.pluginCacheRemoved) {
+    console.log(`  ${prefix} Codex plugin cache directory`);
+  }
   if (summary.legacySkillRootWarning) {
     console.log(`  Warning: ${summary.legacySkillRootWarning}`);
   }
@@ -652,7 +732,8 @@ function printSummary(summary: UninstallSummary, dryRun: boolean): void {
     summary.skillsRemoved +
     summary.agentConfigsRemoved +
     (summary.agentsMdRemoved ? 1 : 0) +
-    (summary.cacheDirectoryRemoved ? 1 : 0);
+    (summary.cacheDirectoryRemoved ? 1 : 0) +
+    (summary.pluginCacheRemoved ? 1 : 0);
 
   if (totalActions === 0) {
     console.log(
@@ -696,6 +777,7 @@ export async function uninstall(options: UninstallOptions = {}): Promise<void> {
     agentConfigsRemoved: 0,
     agentsMdRemoved: false,
     cacheDirectoryRemoved: false,
+    pluginCacheRemoved: false,
     legacySkillRootWarning: null,
   };
 
@@ -795,6 +877,10 @@ export async function uninstall(options: UninstallOptions = {}): Promise<void> {
       }
     }
   }
+  summary.pluginCacheRemoved = await removePluginCacheDirectory(
+    scopeDirs.codexHomeDir,
+    { dryRun, verbose },
+  );
   console.log();
 
   printSummary(summary, dryRun);
