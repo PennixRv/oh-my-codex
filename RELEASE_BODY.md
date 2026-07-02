@@ -1,36 +1,36 @@
-# oh-my-codex-pennix v0.18.65
+# oh-my-codex-pennix v0.18.66
 
 > Release notes template for the Pennix fork. The tag workflow regenerates this file into the final GitHub release body.
 
 ## Summary
 
-This release ships a bounded Pennix hotfix for shared-session team shutdown and release-gate stability. It fixes a real tmux socket-selection bug in interactive teardown and aligns the scrollback regression harness with the current safe-paste injection contract so CI reflects real runtime behavior again.
+This release ships a bounded Pennix hotfix for clean uninstall/reinstall safety. It fixes a real plugin-mode uninstall regression that could delete user-authored `developer_instructions` wholesale, especially when the value used multiline TOML strings around the OMX fragment.
 
 ## Highlights
 
-- Shared-session interactive shutdown now reads worker/HUD pane owner tags through the persisted tmux socket identity instead of accidentally falling back to the host default tmux server during synthetic-server cleanup.
-- The real-tmux shutdown regression now deliberately poisons the ambient `TMUX` environment so future default-socket regressions fail deterministically in local and CI runs.
-- The tmux scrollback notify-hook regression harness now speaks the current `set-buffer` / `show-buffer` / `paste-buffer` / `delete-buffer` path used by safe-paste pane injection, eliminating false `send_failed` release-gate failures.
+- `omx uninstall` now parses root `developer_instructions` with the TOML parser, so multiline and triple-quoted user instructions are visible to cleanup instead of being skipped by a single-line JSON-only heuristic.
+- Uninstall now strips only the managed `notify` key during the generic OMX top-level cleanup pass and removes the OMX `developer_instructions` fragment separately, preserving user-authored text around that fragment.
+- Release regression coverage now locks the exact clean reinstall failure we hit in the live environment: multiline custom `developer_instructions` with the current plugin-mode OMX fragment must survive uninstall with only the OMX portion removed.
 
 ## Fixes / compatibility
 
-- Pennix mailbox-boundary team behavior is unchanged; this hotfix does not reintroduce tmux reminder injection or alter leader/worker handoff semantics.
-- The runtime shutdown fix is scoped to shared-session interactive teardown, specifically the pane-owner tag reads used to decide which panes belong to the team.
-- The scrollback change is test-harness alignment only; production safe-paste injection behavior is unchanged.
+- Pennix plugin-mode setup/append semantics are unchanged; this hotfix is specifically about uninstall preserving user-owned text that setup previously appended the OMX fragment to.
+- Team runtime, mailbox-boundary delivery, HUD behavior, and shared-session teardown semantics from `0.18.65` remain unchanged in this cut.
+- The new regression test covers the exact multiline-TOML shape observed in the live environment, reducing the chance of another clean-reinstall data-loss regression.
 
 ## Merged PR inventory
 
-- No merged PRs. `0.18.65` is a direct release-line commit on the Pennix fork.
+- No merged PRs. `0.18.66` is a direct release-line commit on the Pennix fork.
 
 ## Validation
 
 - `npm run build`
 - `npm run verify:native-agents && npm run verify:plugin-bundle`
-- `node dist/scripts/run-test-files.js dist/hooks/__tests__/notify-hook-tmux-scrollback.test.js dist/team/__tests__/runtime.test.js`
-- `node dist/scripts/check-version-sync.js --tag v0.18.65`
+- `node dist/scripts/run-test-files.js dist/cli/__tests__/uninstall.test.js dist/hooks/__tests__/notify-hook-tmux-scrollback.test.js dist/team/__tests__/runtime.test.js`
+- `node dist/scripts/check-version-sync.js --tag v0.18.66`
 
 ## Contributors
 
 Thanks to the contributors who made this release possible.
 
-**Full Changelog**: [`v0.18.64...v0.18.65`](https://github.com/PennixRv/oh-my-codex/compare/v0.18.64...v0.18.65)
+**Full Changelog**: [`v0.18.65...v0.18.66`](https://github.com/PennixRv/oh-my-codex/compare/v0.18.65...v0.18.66)

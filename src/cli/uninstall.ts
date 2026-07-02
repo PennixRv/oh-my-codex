@@ -5,6 +5,7 @@
 import { readFile, writeFile, readdir, rm } from "fs/promises";
 import { existsSync } from "fs";
 import { join, basename, dirname } from "path";
+import TOML from "@iarna/toml";
 import {
   formatTomlStringArray,
   getRootTomlArray,
@@ -140,11 +141,11 @@ function cleanupDeveloperInstructionsRootKey(config: string): string {
 function parseRootDeveloperInstructions(
   config: string,
 ): { value: string } | null {
-  const match = config.match(/^\s*developer_instructions\s*=\s*(.+)$/m);
-  if (!match) return null;
   try {
-    const parsed = JSON.parse(match[1]) as unknown;
-    return typeof parsed === "string" ? { value: parsed } : null;
+    const parsed = TOML.parse(config) as Record<string, unknown>;
+    return typeof parsed.developer_instructions === "string"
+      ? { value: parsed.developer_instructions }
+      : null;
   } catch {
     return null;
   }
@@ -391,8 +392,8 @@ async function cleanConfig(
   // Strip OMX top-level keys, then restore a pre-existing user notify when
   // setup had wrapped it in the OMX dispatcher.
   config = stripManagedLegacyRootReasoning(config);
-  config = stripOmxTopLevelKeys(config);
   config = cleanupDeveloperInstructionsRootKey(config);
+  config = stripOmxTopLevelKeys(config, ["notify"]);
   config = await restorePreviousNotifyIfDispatcher(configPath, config, original);
 
   // Strip OMX-seeded behavioral defaults only when the seeded pair is unchanged.

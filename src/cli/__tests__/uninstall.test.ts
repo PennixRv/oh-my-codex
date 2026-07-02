@@ -6,7 +6,12 @@ import { join, dirname } from 'node:path';
 import { tmpdir } from 'node:os';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import TOML from '@iarna/toml';
 import { buildManagedCodexHooksConfig } from '../../config/codex-hooks.js';
+import {
+  OMX_DEVELOPER_INSTRUCTIONS,
+  OMX_PLUGIN_DEVELOPER_INSTRUCTIONS,
+} from '../../config/generator.js';
 
 function runOmx(
   cwd: string,
@@ -44,7 +49,7 @@ function buildOmxConfig(): string {
     '# oh-my-codex top-level settings (must be before any [table])',
     'notify = ["node", "/path/to/notify-hook.js"]',
     'model_reasoning_effort = "medium"',
-    'developer_instructions = "You have oh-my-codex installed."',
+    `developer_instructions = ${JSON.stringify(OMX_DEVELOPER_INSTRUCTIONS)}`,
     '',
     '[features]',
     'multi_agent = true',
@@ -113,7 +118,7 @@ function buildConfigWithSeededModelContext(): string {
     '# oh-my-codex top-level settings (must be before any [table])',
     'notify = ["node", "/path/to/notify-hook.js"]',
     'model_reasoning_effort = "medium"',
-    'developer_instructions = "You have oh-my-codex installed."',
+    `developer_instructions = ${JSON.stringify(OMX_DEVELOPER_INSTRUCTIONS)}`,
     'model = "gpt-5.5"',
     '# oh-my-codex seeded behavioral defaults (uninstall removes unchanged defaults)',
     'model_context_window = 250000',
@@ -147,7 +152,7 @@ function buildConfigWithEditedSeededModelContext(): string {
     '# oh-my-codex top-level settings (must be before any [table])',
     'notify = ["node", "/path/to/notify-hook.js"]',
     'model_reasoning_effort = "medium"',
-    'developer_instructions = "You have oh-my-codex installed."',
+    `developer_instructions = ${JSON.stringify(OMX_DEVELOPER_INSTRUCTIONS)}`,
     'model = "gpt-5.5"',
     '# oh-my-codex seeded behavioral defaults (uninstall removes unchanged defaults)',
     'model_context_window = 123456',
@@ -184,7 +189,7 @@ function buildMixedConfig(): string {
     '# oh-my-codex top-level settings (must be before any [table])',
     'notify = ["node", "/path/to/notify-hook.js"]',
     'model_reasoning_effort = "medium"',
-    'developer_instructions = "You have oh-my-codex installed."',
+    `developer_instructions = ${JSON.stringify(OMX_DEVELOPER_INSTRUCTIONS)}`,
     '',
     '[features]',
     'multi_agent = true',
@@ -243,7 +248,7 @@ function buildMixedConfig(): string {
 function buildPluginModeConfig(): string {
   return [
     'model = "gpt-5.4"',
-    'developer_instructions = "<omx version=\\"1\\">You have Pennix OMX installed through Codex plugin mode.</omx>"',
+    `developer_instructions = ${JSON.stringify(OMX_PLUGIN_DEVELOPER_INSTRUCTIONS)}`,
     '',
     '[features]',
     'plugin_hooks = true',
@@ -271,6 +276,29 @@ function buildPluginModeConfig(): string {
     '[marketplaces.other]',
     'source_type = "local"',
     'source = "/tmp/other"',
+    '',
+  ].join('\n');
+}
+
+function buildPluginModeConfigWithCustomDeveloperInstructions(): string {
+  return [
+    'model = "gpt-5.4"',
+    'developer_instructions = """你的Voice个性是保持简洁。',
+    '',
+    '你的Code个性是保持可维护。',
+    '',
+    `${OMX_PLUGIN_DEVELOPER_INSTRUCTIONS}"""`,
+    '',
+    '[features]',
+    'plugin_hooks = true',
+    'goals = true',
+    '',
+    '[plugins."oh-my-codex@oh-my-codex-local"]',
+    'enabled = true',
+    '',
+    '[marketplaces.oh-my-codex-local]',
+    'source_type = "local"',
+    'source = "/tmp/stale-oh-my-codex"',
     '',
   ].join('\n');
 }
@@ -632,6 +660,35 @@ describe('omx uninstall', () => {
       assert.doesNotMatch(featuresBlock, /^hooks = true$/m);
       assert.doesNotMatch(featuresBlock, /^codex_hooks = true$/m);
       assert.match(config, /^\[user\.settings\]\nhooks = true$/m);
+    } finally {
+      await rm(wd, { recursive: true, force: true });
+    }
+  });
+
+  it('preserves multiline custom developer_instructions while stripping only the OMX plugin fragment during uninstall', async () => {
+    const wd = await mkdtemp(join(tmpdir(), 'omx-uninstall-plugin-devinstr-'));
+    try {
+      const home = join(wd, 'home');
+      const codexDir = join(home, '.codex');
+      await mkdir(codexDir, { recursive: true });
+      await writeFile(
+        join(codexDir, 'config.toml'),
+        buildPluginModeConfigWithCustomDeveloperInstructions(),
+      );
+
+      const res = runOmx(wd, ['uninstall'], { HOME: home });
+      if (shouldSkipForSpawnPermissions(res.error)) return;
+      assert.equal(res.status, 0, res.stderr || res.stdout);
+
+      const config = await readFile(join(codexDir, 'config.toml'), 'utf-8');
+      const parsed = TOML.parse(config) as Record<string, unknown>;
+      assert.equal(
+        parsed.developer_instructions,
+        '你的Voice个性是保持简洁。\n\n你的Code个性是保持可维护。',
+      );
+      assert.doesNotMatch(config, /<omx version="1">/);
+      assert.doesNotMatch(config, /^\[plugins\."oh-my-codex@oh-my-codex-local"\]$/m);
+      assert.doesNotMatch(config, /^\[marketplaces\.oh-my-codex-local\]$/m);
     } finally {
       await rm(wd, { recursive: true, force: true });
     }

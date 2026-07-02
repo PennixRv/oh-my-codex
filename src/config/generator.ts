@@ -887,8 +887,11 @@ function stripOrphanedManagedNotify(config: string, pkgRoot: string): string {
  * Remove any existing OMX-owned top-level keys so we can re-insert them
  * cleanly. Also removes the comment line that precedes them.
  */
-export function stripOmxTopLevelKeys(config: string): string {
-  return stripRootLevelKeys(config, OMX_TOP_LEVEL_KEYS);
+export function stripOmxTopLevelKeys(
+  config: string,
+  keys: readonly (typeof OMX_TOP_LEVEL_KEYS)[number][] = OMX_TOP_LEVEL_KEYS,
+): string {
+  return stripRootLevelKeys(config, keys);
 }
 
 export function stripManagedLegacyRootReasoning(config: string): string {

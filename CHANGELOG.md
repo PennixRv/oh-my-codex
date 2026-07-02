@@ -4,6 +4,14 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+## [0.18.66] - 2026-07-02
+
+Patch release for the Pennix fork uninstall-preservation hotfix line: plugin-mode uninstall now preserves user-authored `developer_instructions` while stripping only the OMX-managed fragment, including multiline TOML strings that previously fell through the uninstall cleanup path.
+
+- `omx uninstall` now parses root `developer_instructions` through the TOML parser instead of a single-line JSON heuristic, so multiline/triple-quoted user instructions remain visible to cleanup logic.
+- Uninstall now strips only the managed `notify` root key during the generic OMX top-level cleanup pass and handles `developer_instructions` separately, preventing a full-key deletion before OMX-fragment stripping can preserve user content.
+- New regression coverage locks the clean uninstall contract for multiline custom `developer_instructions` that append the current plugin-mode OMX fragment, alongside the previously fixed tmux scrollback and shared-session teardown gates.
+
 ## [0.18.65] - 2026-07-02
 
 Patch release for the Pennix fork CI gate and shared-session shutdown hotfix line: shared-session interactive teardown now honors the persisted tmux socket while reading pane-owner tags, and the release regression harness now matches the current buffer-based safe-paste injection path.
