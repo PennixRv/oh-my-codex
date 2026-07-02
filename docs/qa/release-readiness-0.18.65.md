@@ -31,10 +31,10 @@
 - [x] `node dist/scripts/run-test-files.js dist/hooks/__tests__/notify-hook-tmux-scrollback.test.js dist/team/__tests__/runtime.test.js`
 - [x] `npm run verify:native-agents`
 - [x] `npm run verify:plugin-bundle`
-- [ ] `node dist/scripts/check-version-sync.js --tag v0.18.65`
+- [x] `node dist/scripts/check-version-sync.js --tag v0.18.65`
 - [x] `npm pack --dry-run`
 - [x] `git diff --check`
-- [ ] `node dist/scripts/generate-release-body.js --template RELEASE_BODY.md --out /tmp/RELEASE_BODY.v0.18.65.generated.md --current-tag v0.18.65 --previous-tag v0.18.64 --repo PennixRv/oh-my-codex`
+- [x] `node dist/scripts/generate-release-body.js --template RELEASE_BODY.md --out /tmp/RELEASE_BODY.v0.18.65.generated.md --current-tag v0.18.65 --previous-tag v0.18.64 --repo PennixRv/oh-my-codex`
 
 ## CI / publication evidence
 
@@ -52,4 +52,4 @@
 
 ## Current readiness verdict
 
-The bounded `0.18.65` teardown/gate fixes are locally validated on the exact two release-blocking surfaces from the failed `0.18.64` workflow. Remaining blockers are the standard version-sync/pack hygiene checks, successful tag-triggered CI publication, and the required clean uninstall/reinstall smoke against the published npm artifact.
+The bounded `0.18.65` teardown/gate fixes are locally validated on the exact two release-blocking surfaces from the failed `0.18.64` workflow, and the standard local version-sync/pack/release-body hygiene checks are now green. Remaining blockers are successful tag-triggered CI publication and the required clean uninstall/reinstall smoke against the published npm artifact.
