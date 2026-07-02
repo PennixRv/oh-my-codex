@@ -791,6 +791,38 @@ describe('omx uninstall', () => {
     }
   });
 
+  it('removes CODEX_HOME install artifacts under .omx while preserving unrelated files', async () => {
+    const wd = await mkdtemp(join(tmpdir(), 'omx-uninstall-'));
+    try {
+      const home = join(wd, 'home');
+      const codexDir = join(home, '.codex');
+      const codexOmxDir = join(codexDir, '.omx');
+      await mkdir(codexOmxDir, { recursive: true });
+      await writeFile(join(codexDir, 'config.toml'), buildOmxConfig());
+      await writeFile(
+        join(codexOmxDir, 'install-state.json'),
+        JSON.stringify({ installed_version: '0.18.66', setup_completed_version: '0.18.66' }),
+      );
+      await writeFile(
+        join(codexOmxDir, 'native-agents.json'),
+        JSON.stringify({ version: 1, files: { 'executor.toml': { sha256: 'a'.repeat(64) } } }),
+      );
+      await writeFile(join(codexOmxDir, 'mcp-registry.json'), JSON.stringify({ keep: true }));
+
+      const res = runOmx(wd, ['uninstall'], { HOME: home });
+      if (shouldSkipForSpawnPermissions(res.error)) return;
+      assert.equal(res.status, 0, res.stderr || res.stdout);
+      assert.match(res.stdout, /CODEX_HOME\/\.omx install artifact\(s\)/);
+
+      assert.equal(existsSync(join(codexOmxDir, 'install-state.json')), false);
+      assert.equal(existsSync(join(codexOmxDir, 'native-agents.json')), false);
+      assert.equal(existsSync(join(codexOmxDir, 'mcp-registry.json')), true);
+      assert.equal(existsSync(codexOmxDir), true, 'CODEX_HOME/.omx should remain when unrelated files exist');
+    } finally {
+      await rm(wd, { recursive: true, force: true });
+    }
+  });
+
   it('works with project scope', async () => {
     const wd = await mkdtemp(join(tmpdir(), 'omx-uninstall-'));
     try {

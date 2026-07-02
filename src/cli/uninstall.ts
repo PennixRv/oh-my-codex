@@ -65,6 +65,7 @@ interface UninstallSummary {
   promptsRemoved: number;
   skillsRemoved: number;
   agentConfigsRemoved: number;
+  installArtifactsRemoved: number;
   agentsMdRemoved: boolean;
   cacheDirectoryRemoved: boolean;
   pluginCacheRemoved: boolean;
@@ -602,6 +603,44 @@ async function removeCacheDirectory(
   return true;
 }
 
+async function removeManagedInstallArtifacts(
+  codexHomeDir: string,
+  options: Pick<UninstallOptions, "dryRun" | "verbose">,
+): Promise<number> {
+  const omxRoot = join(codexHomeDir, ".omx");
+  const managedArtifacts = [
+    join(omxRoot, "install-state.json"),
+    join(omxRoot, "native-agents.json"),
+  ];
+
+  let removedCount = 0;
+  for (const artifactPath of managedArtifacts) {
+    if (!existsSync(artifactPath)) continue;
+    if (!options.dryRun) {
+      await rm(artifactPath, { force: true });
+    }
+    removedCount += 1;
+    if (options.verbose) {
+      console.log(
+        `  ${options.dryRun ? "Would remove" : "Removed"} ${artifactPath}`,
+      );
+    }
+  }
+
+  if (!options.dryRun && existsSync(omxRoot)) {
+    try {
+      const remainingEntries = await readdir(omxRoot);
+      if (remainingEntries.length === 0) {
+        await rm(omxRoot, { recursive: true, force: true });
+      }
+    } catch {
+      // Ignore empty-dir cleanup failures.
+    }
+  }
+
+  return removedCount;
+}
+
 async function removePluginCacheDirectory(
   codexHomeDir: string,
   options: Pick<UninstallOptions, "dryRun" | "verbose">,
@@ -713,11 +752,16 @@ function printSummary(summary: UninstallSummary, dryRun: boolean): void {
       `  ${prefix} ${summary.agentConfigsRemoved} native agent config(s)`,
     );
   }
+  if (summary.installArtifactsRemoved > 0) {
+    console.log(
+      `  ${prefix} ${summary.installArtifactsRemoved} CODEX_HOME/.omx install artifact(s)`,
+    );
+  }
   if (summary.agentsMdRemoved) {
     console.log(`  ${prefix} AGENTS.md`);
   }
   if (summary.cacheDirectoryRemoved) {
-    console.log(`  ${prefix} .omx/ cache directory`);
+    console.log(`  ${prefix} project .omx/ cache directory`);
   }
   if (summary.pluginCacheRemoved) {
     console.log(`  ${prefix} Codex plugin cache directory`);
@@ -732,6 +776,7 @@ function printSummary(summary: UninstallSummary, dryRun: boolean): void {
     summary.promptsRemoved +
     summary.skillsRemoved +
     summary.agentConfigsRemoved +
+    summary.installArtifactsRemoved +
     (summary.agentsMdRemoved ? 1 : 0) +
     (summary.cacheDirectoryRemoved ? 1 : 0) +
     (summary.pluginCacheRemoved ? 1 : 0);
@@ -776,6 +821,7 @@ export async function uninstall(options: UninstallOptions = {}): Promise<void> {
     promptsRemoved: 0,
     skillsRemoved: 0,
     agentConfigsRemoved: 0,
+    installArtifactsRemoved: 0,
     agentsMdRemoved: false,
     cacheDirectoryRemoved: false,
     pluginCacheRemoved: false,
@@ -879,6 +925,10 @@ export async function uninstall(options: UninstallOptions = {}): Promise<void> {
     }
   }
   summary.pluginCacheRemoved = await removePluginCacheDirectory(
+    scopeDirs.codexHomeDir,
+    { dryRun, verbose },
+  );
+  summary.installArtifactsRemoved = await removeManagedInstallArtifacts(
     scopeDirs.codexHomeDir,
     { dryRun, verbose },
   );
