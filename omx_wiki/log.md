@@ -1,5 +1,9 @@
 # Wiki Log
 
+## [2026-07-02T00:00:00.000Z] add
+- **Pages:** upstream-integration-wave-4-matrix-2026-07-02.md
+- **Summary:** Added Wave 4 upstream integration matrix covering the remaining small missing correctness fixes, final worthwhile-commit classification, and explicit deferral of larger planning-gate / new-feature upstream work
+
 ## [2026-06-24T01:59:16.727Z] ingest
 - **Pages:** omx-team-lifecycle-restart-smoke-failures-2026-06-24.md
 - **Summary:** Created new page "OMX team lifecycle restart smoke failures 2026-06-24"

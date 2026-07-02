@@ -4,6 +4,15 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+## [0.18.63] - 2026-07-02
+
+Patch release for the Pennix fork bounded upstream-integration wave 4: proxy env fallback resolution now tolerates blank scheme-specific variables, `omx doctor` surfaces and can bounded-repair repo-local `.omx`/`.beads` ownership drift, and ultragoal final-review blocker reconciliation now binds clean completion to the designated resolver story.
+
+- Whitespace-only `https_proxy` / `http_proxy` values no longer mask a valid `ALL_PROXY` fallback; proxy env values are trimmed before selection.
+- `omx doctor` now warns on root-owned, owner-mismatched, or non-writable repo-local runtime artifacts and supports bounded `--force` repair when the repo root belongs to the current user.
+- Review-blocked ultragoal parents now record their designated resolver, only that resolver may carry the parent through the clean final quality gate path, and forged resolver aggregate reconciliation attempts fail closed.
+- This release preserves Pennix mailbox-first team behavior and does not reintroduce tmux inject reminders, HUD-default changes, or broad planning-gate rewrites.
+
 ## [0.18.59] - 2026-07-01
 
 Patch release for the Pennix fork config-repair line: setup and launch-time config repair now proactively scrub malformed Codex `tui.model_availability_nux` subtables before Codex reloads config, preventing `invalid type: map, expected u32` failures while preserving user-owned root/provider settings during plugin-mode setup refreshes.

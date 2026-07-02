@@ -1,38 +1,36 @@
-# oh-my-codex-pennix v0.18.62
+# oh-my-codex-pennix v0.18.63
 
 > Release notes template for the Pennix fork. The tag workflow regenerates this file into the final GitHub release body.
 
 ## Summary
 
-This release fixes the remaining plugin-mode uninstall residue in the Pennix fork. `omx uninstall` now removes OMX-managed plugin registrations, plugin-scoped hook trust state, plugin-only feature flags, and the entire OMX local plugin cache root so a clean uninstall no longer leaves plugin-mode wiring behind.
+This release ships the bounded upstream-integration Wave 4 for the Pennix fork. It fixes proxy env fallback trimming, surfaces repo-local runtime artifact ownership drift through `omx doctor` with bounded repair support, and hardens ultragoal final-review blocker reconciliation so only the designated resolver story may carry a review-blocked parent through the clean final quality gate.
 
 ## Highlights
 
-- `omx uninstall` now strips OMX local plugin registration tables from `config.toml`, including first-party MCP subtables under `plugins."oh-my-codex@oh-my-codex-local"`.
-- Plugin-scoped hook trust state keyed by `oh-my-codex@oh-my-codex-local:...` is now removed alongside the managed trust-state block during uninstall.
-- Plugin-mode feature residue now cleans up correctly: `plugin_hooks = true` is treated as OMX-managed uninstall state and removed unless user-owned hook state still requires canonical `hooks = true`.
-- Default uninstall now removes the full OMX plugin cache root under `~/.codex/plugins/cache/oh-my-codex-local/oh-my-codex/`, including historical version-scoped compatibility caches as well as the active `local/` cache.
+- Whitespace-only `https_proxy` / `http_proxy` values no longer mask a valid `ALL_PROXY`; proxy env values are trimmed before fallback selection.
+- `omx doctor` now warns on root-owned, owner-mismatched, or non-writable repo-local `.omx` / `.beads` artifacts and can bounded-repair ownership drift under `--force` when the repo root belongs to the current user.
+- Review-blocked ultragoal parents now record their designated resolver, only that resolver may reconcile the parent through the clean final quality gate path, and forged resolver aggregate reconciliation attempts fail closed.
 
 ## Fixes / compatibility
 
-- User-owned `hooks.state` entries, unrelated marketplaces, and non-OMX hook trust state remain preserved.
-- The uninstall behavior aligns with clean-removal expectations for plugin mode without changing setup/runtime compatibility behavior for still-installed OMX environments.
-- Historical version-scoped plugin caches remain preserved during normal setup refresh for running older sessions, but uninstall now removes them because cleanup semantics should fully remove OMX-owned plugin residue.
+- Pennix mailbox-first team behavior remains unchanged; this release does not reintroduce synthetic tmux inject reminders, HUD-default changes, or broad planning-gate rewrites.
+- The new `omx doctor` ownership repair is bounded: it only auto-chowns repo-local `.omx` / `.beads` artifacts when the repo root is already owned by the current user.
+- Verbose `omx doctor` PostCompact smoke execution now uses a Windows-safe spawn path instead of assuming a shell-quoted POSIX command path.
 
 ## Merged PR inventory
 
-- No merged PRs. `0.18.62` is a direct release-line commit on the Pennix fork.
+- No merged PRs. `0.18.63` is a direct release-line commit on the Pennix fork.
 
 ## Validation
 
 - `npm run build`
-- `node dist/scripts/run-test-files.js dist/cli/__tests__/uninstall.test.js`
-- `node dist/scripts/run-test-files.js dist/cli/__tests__/plugin-marketplace.test.js`
-- `npm run verify:plugin-bundle`
-- `node dist/scripts/check-version-sync.js --tag v0.18.62`
+- `node dist/scripts/run-test-files.js dist/ultragoal/__tests__/artifacts.test.js dist/cli/__tests__/doctor-artifact-ownership.test.js dist/notifications/__tests__/http-client.test.js`
+- `npm run verify:native-agents && npm run verify:plugin-bundle`
+- `node dist/scripts/check-version-sync.js --tag v0.18.63`
 
 ## Contributors
 
 Thanks to the contributors who made this release possible.
 
-**Full Changelog**: [`v0.18.61...v0.18.62`](https://github.com/PennixRv/oh-my-codex/compare/v0.18.61...v0.18.62)
+**Full Changelog**: [`v0.18.62...v0.18.63`](https://github.com/PennixRv/oh-my-codex/compare/v0.18.62...v0.18.63)
