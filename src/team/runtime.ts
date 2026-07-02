@@ -4256,20 +4256,28 @@ export async function shutdownTeam(teamName: string, cwd: string, options: Shutd
       console.warn(`[team shutdown] ${sanitized}: skipped shared-session ${kind} ${paneId} because team owner tag could not be read: ${error}`);
     };
     const effectiveHudPaneId = sharedSessionTopology
-      ? (sharedSessionTopology.hudPaneIds.find((paneId) => isSharedSessionHudPaneReclaimable({
-        paneId,
-        persistedHudPaneId: hudPaneId,
-        leaderOwnedHudPaneIds: sharedSessionTopology.leaderOwnedHudPaneIds,
-        teamPaneOwnerId: tmuxPaneOwnerId,
-        onOwnerReadError: (reclaimHudPaneId, error) => warnOwnerReadError('HUD pane', reclaimHudPaneId, error),
-      })) ?? null)
+      ? withPersistedTmuxSocket(
+        config,
+        () => (
+          sharedSessionTopology.hudPaneIds.find((paneId) => isSharedSessionHudPaneReclaimable({
+            paneId,
+            persistedHudPaneId: hudPaneId,
+            leaderOwnedHudPaneIds: sharedSessionTopology.leaderOwnedHudPaneIds,
+            teamPaneOwnerId: tmuxPaneOwnerId,
+            onOwnerReadError: (reclaimHudPaneId, error) => warnOwnerReadError('HUD pane', reclaimHudPaneId, error),
+          })) ?? null
+        ),
+      )
       : hudPaneId;
     const shutdownCandidatePaneIds = sharedSessionTopology
-      ? filterSharedSessionShutdownWorkerPaneIdsByOwner(
-        sharedSessionTopology.teamWorkerPaneIds,
-        tmuxPaneOwnerId,
-        legacyPersistedWorkerPaneIds,
-        (paneId, error) => warnOwnerReadError('worker pane', paneId, error),
+      ? withPersistedTmuxSocket(
+        config,
+        () => filterSharedSessionShutdownWorkerPaneIdsByOwner(
+          sharedSessionTopology.teamWorkerPaneIds,
+          tmuxPaneOwnerId,
+          legacyPersistedWorkerPaneIds,
+          (paneId, error) => warnOwnerReadError('worker pane', paneId, error),
+        ),
       )
       : withPersistedTmuxSocket(config, () => listPaneIds(sessionName));
     let shutdownPaneIds = collectShutdownPaneIds({
@@ -4313,11 +4321,14 @@ export async function shutdownTeam(teamName: string, cwd: string, options: Shutd
     shutdownPaneIds = collectShutdownPaneIds({
       config,
       candidatePaneIds: sessionName.includes(':')
-        ? filterSharedSessionShutdownWorkerPaneIdsByOwner(
-          withPersistedTmuxSocket(config, () => resolveSharedSessionShutdownTopology(sessionName, effectiveLeaderPaneId, sanitized).teamWorkerPaneIds),
-          tmuxPaneOwnerId,
-          legacyPersistedWorkerPaneIds,
-          (paneId, error) => warnOwnerReadError('worker pane', paneId, error),
+        ? withPersistedTmuxSocket(
+          config,
+          () => filterSharedSessionShutdownWorkerPaneIdsByOwner(
+            resolveSharedSessionShutdownTopology(sessionName, effectiveLeaderPaneId, sanitized).teamWorkerPaneIds,
+            tmuxPaneOwnerId,
+            legacyPersistedWorkerPaneIds,
+            (paneId, error) => warnOwnerReadError('worker pane', paneId, error),
+          ),
         )
         : withPersistedTmuxSocket(config, () => listPaneIds(sessionName)),
       includePersistedWorkerPaneIds: !sessionName.includes(':'),

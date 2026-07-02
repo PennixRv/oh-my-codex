@@ -7066,7 +7066,7 @@ esac
 
         const previousTmux = process.env.TMUX;
         const previousPane = process.env.TMUX_PANE;
-        delete process.env.TMUX;
+        process.env.TMUX = '/tmp/omx-missing-default-socket,999999,0';
         delete process.env.TMUX_PANE;
         try {
           await shutdownTeam('team-shutdown-socket-identity', cwd, { force: true });

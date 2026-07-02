@@ -68,6 +68,9 @@ function fakeTmuxScript(cwd: string, paneInMode: '0' | '1'): string {
 set -eu
 cmd="$1"
 shift || true
+state_dir="${cwd}/fake-tmux-state"
+buffer_file="$state_dir/buffer"
+mkdir -p "$state_dir"
 if [[ "$cmd" == "list-panes" ]]; then
   echo "%42 1"
   exit 0
@@ -115,7 +118,24 @@ How can I help you today?
 EOF
   exit 0
 fi
+if [[ "$cmd" == "set-buffer" ]]; then
+  printf '%s' "\${@: -1}" > "$buffer_file"
+  exit 0
+fi
+if [[ "$cmd" == "show-buffer" ]]; then
+  if [[ -f "$buffer_file" ]]; then
+    cat "$buffer_file"
+  fi
+  exit 0
+fi
+if [[ "$cmd" == "paste-buffer" ]]; then
+  exit 0
+fi
 if [[ "$cmd" == "send-keys" ]]; then
+  exit 0
+fi
+if [[ "$cmd" == "delete-buffer" ]]; then
+  rm -f "$buffer_file"
   exit 0
 fi
 echo "unsupported cmd: $cmd" >&2

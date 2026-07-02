@@ -4,6 +4,14 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+## [0.18.65] - 2026-07-02
+
+Patch release for the Pennix fork CI gate and shared-session shutdown hotfix line: shared-session interactive teardown now honors the persisted tmux socket while reading pane-owner tags, and the release regression harness now matches the current buffer-based safe-paste injection path.
+
+- Shared-session interactive shutdown now wraps worker/HUD pane owner-tag reads in the persisted tmux socket context, so synthetic-server cleanup still removes team-owned panes even when no default tmux socket exists.
+- The real-tmux shutdown regression now poisons the ambient default `TMUX` socket during the test, making persisted-socket cleanup regressions deterministic in local and CI runs instead of depending on host socket state.
+- The notify-hook tmux scrollback regression harness now implements `set-buffer`, `show-buffer`, `paste-buffer`, and `delete-buffer`, matching the current safe-paste `sendPaneInput()` contract and preventing false `send_failed` release-gate failures.
+
 ## [0.18.64] - 2026-07-02
 
 Patch release for the Pennix fork team/runtime and setup-preservation line: setup refresh now preserves user-owned plugin guidance and native-agent local edits, team startup/runtime hardens Gemini and exact-role routing paths, and session/auth tooling now handles isolated login, invalidated hotswap slots, and project runtime Codex history discovery more safely.
