@@ -31,10 +31,10 @@
 - [x] `node dist/scripts/run-test-files.js dist/cli/__tests__/uninstall.test.js dist/hooks/__tests__/notify-hook-tmux-scrollback.test.js dist/team/__tests__/runtime.test.js`
 - [x] `npm run verify:native-agents`
 - [x] `npm run verify:plugin-bundle`
-- [ ] `node dist/scripts/check-version-sync.js --tag v0.18.66`
+- [x] `node dist/scripts/check-version-sync.js --tag v0.18.66`
 - [x] `npm pack --dry-run`
 - [x] `git diff --check`
-- [ ] `node dist/scripts/generate-release-body.js --template RELEASE_BODY.md --out /tmp/RELEASE_BODY.v0.18.66.generated.md --current-tag v0.18.66 --previous-tag v0.18.65 --repo PennixRv/oh-my-codex`
+- [x] `node dist/scripts/generate-release-body.js --template RELEASE_BODY.md --out /tmp/RELEASE_BODY.v0.18.66.generated.md --current-tag v0.18.66 --previous-tag v0.18.65 --repo PennixRv/oh-my-codex`
 
 ## CI / publication evidence
 
@@ -52,4 +52,4 @@
 
 ## Current readiness verdict
 
-`0.18.66` is a bounded follow-up hotfix to `0.18.65`. The intended local gate is the exact uninstall failure we reproduced in the live environment, plus the two previously fixed release-blocking tmux surfaces. Remaining blockers are the standard version-sync/pack hygiene checks, successful tag-triggered CI publication, and the required clean uninstall/reinstall smoke against the published npm artifact.
+`0.18.66` is a bounded follow-up hotfix to `0.18.65`. The exact uninstall failure reproduced in the live environment is now covered locally, alongside the two previously fixed release-blocking tmux surfaces, and the standard local version-sync/pack hygiene checks are green. Remaining blockers are successful tag-triggered CI publication and the required clean uninstall/reinstall smoke against the published npm artifact.
