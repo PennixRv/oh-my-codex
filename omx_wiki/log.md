@@ -4,6 +4,25 @@
 - **Pages:** upstream-integration-wave-4-matrix-2026-07-02.md
 - **Summary:** Added Wave 4 upstream integration matrix covering the remaining small missing correctness fixes, final worthwhile-commit classification, and explicit deferral of larger planning-gate / new-feature upstream work
 
+## [2026-07-01T13:52:56.000Z] add
+- **Pages:** upstream-integration-wave-2c-matrix-2026-07-01.md
+- **Summary:** Added Wave 2C upstream integration matrix covering owner-aware shared-session shutdown adaptation and fixture root causes
+
+## [2026-07-01T13:55:58.975Z] add
+- **Pages:** upstream-integration-wave-1-matrix-2026-07-01.md, upstream-integration-wave-2a-matrix-2026-07-01.md, upstream-integration-wave-2b-matrix-2026-07-01.md, upstream-integration-wave-2c-matrix-2026-07-01.md
+- **Summary:** Refreshed wiki index and derived metadata surfaces after normalizing upstream integration wave page frontmatter
+
+## [2026-07-01T13:05:00.000Z] add
+- **Pages:** upstream-integration-wave-2b-matrix-2026-07-01.md
+- **Summary:** Added Wave 2B upstream integration matrix covering HUD pane-scoping, team tmux buffer cleanup, and shutdown-safe leader nudge persistence
+
+## [2026-07-01T13:05:00.000Z] add
+- **Pages:** upstream-integration-wave-2a-matrix-2026-07-01.md, upstream-integration-wave-2b-matrix-2026-07-01.md
+- **Summary:** Refreshed wiki index and derived metadata surfaces
+
+## [2026-07-01T11:48:59.000Z] add
+- **Pages:** upstream-integration-wave-2a-matrix-2026-07-01.md
+- **Summary:** Added Wave 2A upstream integration matrix and refreshed wiki index
 ## [2026-06-24T01:59:16.727Z] ingest
 - **Pages:** omx-team-lifecycle-restart-smoke-failures-2026-06-24.md
 - **Summary:** Created new page "OMX team lifecycle restart smoke failures 2026-06-24"
@@ -94,3 +113,18 @@
 ## [2026-06-29T11:54:16.000Z] add
 - **Pages:** omx-role-routing-and-model-mapping-analysis-2026-06-29.md
 - **Summary:** Flattened Pennix role mapping guidance to `role -> model/reasoning`, moved context budgeting out of the role map, and recorded shared `gpt-5.4` context-budget policy as wiki-only guidance
+## [2026-07-01T15:17:40.588Z] add
+- **Pages:** omx-0-18-41-release-prep-block-summary-2026-06-28.md, omx-leader-mailbox-notification-chain-analysis-2026-06-28.md, omx-role-routing-and-model-mapping-analysis-2026-06-29.md, omx-team-lifecycle-restart-smoke-failures-2026-06-24.md, omx-team-smoke-findings-2026-06-28.md, omx-tmux-inject-marker-multisource-analysis-2026-06-26.md, upstream-integration-wave-1-matrix-2026-07-01.md, upstream-integration-wave-2a-matrix-2026-07-01.md, upstream-integration-wave-2b-matrix-2026-07-01.md, upstream-integration-wave-2c-matrix-2026-07-01.md, upstream-integration-wave-3a-matrix-2026-07-01.md
+- **Summary:** Refreshed wiki index and derived metadata surfaces
+
+## [2026-07-01T15:59:00.924Z] add
+- **Pages:** omx-0-18-41-release-prep-block-summary-2026-06-28.md, omx-leader-mailbox-notification-chain-analysis-2026-06-28.md, omx-role-routing-and-model-mapping-analysis-2026-06-29.md, omx-team-lifecycle-restart-smoke-failures-2026-06-24.md, omx-team-smoke-findings-2026-06-28.md, omx-tmux-inject-marker-multisource-analysis-2026-06-26.md, upstream-integration-wave-1-matrix-2026-07-01.md, upstream-integration-wave-2a-matrix-2026-07-01.md, upstream-integration-wave-2b-matrix-2026-07-01.md, upstream-integration-wave-2c-matrix-2026-07-01.md, upstream-integration-wave-3a-matrix-2026-07-01.md, upstream-integration-wave-3b-matrix-2026-07-01.md
+- **Summary:** Refreshed wiki index and derived metadata surfaces
+
+## [2026-07-01T16:07:31.422Z] add
+- **Pages:** omx-0-18-41-release-prep-block-summary-2026-06-28.md, omx-leader-mailbox-notification-chain-analysis-2026-06-28.md, omx-role-routing-and-model-mapping-analysis-2026-06-29.md, omx-team-lifecycle-restart-smoke-failures-2026-06-24.md, omx-team-smoke-findings-2026-06-28.md, omx-tmux-inject-marker-multisource-analysis-2026-06-26.md, upstream-integration-wave-1-matrix-2026-07-01.md, upstream-integration-wave-2a-matrix-2026-07-01.md, upstream-integration-wave-2b-matrix-2026-07-01.md, upstream-integration-wave-2c-matrix-2026-07-01.md, upstream-integration-wave-3a-matrix-2026-07-01.md, upstream-integration-wave-3b-matrix-2026-07-01.md, upstream-integration-wave-3c-matrix-2026-07-01.md
+- **Summary:** Refreshed wiki index and derived metadata surfaces
+
+## [2026-07-01T17:17:54.410Z] add
+- **Pages:** omx-0-18-41-release-prep-block-summary-2026-06-28.md, omx-leader-mailbox-notification-chain-analysis-2026-06-28.md, omx-role-routing-and-model-mapping-analysis-2026-06-29.md, omx-team-lifecycle-restart-smoke-failures-2026-06-24.md, omx-team-smoke-findings-2026-06-28.md, omx-tmux-inject-marker-multisource-analysis-2026-06-26.md, upstream-integration-wave-1-matrix-2026-07-01.md, upstream-integration-wave-2a-matrix-2026-07-01.md, upstream-integration-wave-2b-matrix-2026-07-01.md, upstream-integration-wave-2c-matrix-2026-07-01.md, upstream-integration-wave-3a-matrix-2026-07-01.md, upstream-integration-wave-3b-matrix-2026-07-01.md, upstream-integration-wave-3c-matrix-2026-07-01.md, upstream-integration-wave-3d-matrix-2026-07-01.md
+- **Summary:** Refreshed wiki index and derived metadata surfaces

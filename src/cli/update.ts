@@ -451,6 +451,7 @@ export function runDeferredGlobalUpdate(
       ...process.env,
       OMX_DEFERRED_UPDATE_LOG: logPath,
       OMX_DEFERRED_UPDATE_PARENT_PID: String(parentPid),
+      OMX_SKIP_NATIVE_AGENT_REFRESH: '1',
     };
 
     const command = platform === 'win32' ? 'powershell.exe' : 'sh';

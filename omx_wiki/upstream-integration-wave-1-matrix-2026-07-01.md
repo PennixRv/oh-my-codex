@@ -1,3 +1,15 @@
+---
+title: "Upstream Integration Wave 1 Matrix 2026-07-01"
+tags: ["upstream", "integration", "wave-1", "hooks", "setup", "agents", "team"]
+created: 2026-07-01T08:00:03.000Z
+updated: 2026-07-01T08:00:03.000Z
+sources: []
+links: []
+category: architecture
+confidence: high
+schemaVersion: 1
+---
+
 # Upstream Integration Wave 1 Matrix 2026-07-01
 
 ## Scope

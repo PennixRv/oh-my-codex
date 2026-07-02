@@ -16,6 +16,15 @@
  *   },
  *   "agentReasoning": {
  *     "architect": "xhigh"
+ *   },
+ *   "roleModels": {
+ *     "architect": {
+ *       "model": "gpt-5.4",
+ *       "reasoning": "xhigh"
+ *     }
+ *   },
+ *   "agentModels": {
+ *     "architect": "gpt-5.4"
  *   }
  * }
  *
@@ -44,6 +53,7 @@ export interface ConfiguredRoleModelOverride {
 
 interface OmxConfigFile {
   agentReasoning?: Record<string, unknown>;
+  agentModels?: Record<string, unknown>;
   env?: OmxConfigEnv;
   models?: ModelsConfig;
   roleModels?: Record<string, unknown>;
@@ -181,20 +191,33 @@ export function readRoleModelOverrides(
   codexHomeOverride?: string,
 ): Record<string, ConfiguredRoleModelOverride> {
   const config = readOmxConfigFile(codexHomeOverride);
-  const raw = config?.roleModels;
-  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {};
-
   const resolved: Record<string, ConfiguredRoleModelOverride> = {};
-  for (const [key, value] of Object.entries(raw)) {
-    const role = normalizeAgentName(key);
-    if (!role || !isPlainObject(value)) continue;
-    const model = normalizeConfiguredValue(value.model);
-    const reasoning = normalizeAgentReasoningEffort(value.reasoning);
-    if (!model && !reasoning) continue;
-    resolved[role] = {
-      ...(model ? { model } : {}),
-      ...(reasoning ? { reasoning } : {}),
-    };
+  const raw = config?.roleModels;
+  if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
+    for (const [key, value] of Object.entries(raw)) {
+      const role = normalizeAgentName(key);
+      if (!role || !isPlainObject(value)) continue;
+      const model = normalizeConfiguredValue(value.model);
+      const reasoning = normalizeAgentReasoningEffort(value.reasoning);
+      if (!model && !reasoning) continue;
+      resolved[role] = {
+        ...(model ? { model } : {}),
+        ...(reasoning ? { reasoning } : {}),
+      };
+    }
+  }
+
+  const legacyAgentModels = config?.agentModels;
+  if (legacyAgentModels && typeof legacyAgentModels === 'object' && !Array.isArray(legacyAgentModels)) {
+    for (const [key, value] of Object.entries(legacyAgentModels)) {
+      const role = normalizeAgentName(key);
+      const model = normalizeConfiguredValue(value);
+      if (!role || !model) continue;
+      const existing = resolved[role];
+      resolved[role] = existing
+        ? { ...existing, ...(existing.model ? {} : { model }) }
+        : { model };
+    }
   }
   return resolved;
 }

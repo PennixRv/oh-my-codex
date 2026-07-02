@@ -15,6 +15,8 @@ import {
   OMX_AGENTS_CONTRACT_HEADING,
   OMX_MANAGED_AGENTS_END_MARKER,
   OMX_MANAGED_AGENTS_START_MARKER,
+  OMX_USER_POLICY_END_MARKER,
+  OMX_USER_POLICY_START_MARKER,
 } from '../../utils/agents-md.js';
 import { resolveAgentsModelTableContext, upsertAgentsModelTable } from '../../utils/agents-model-table.js';
 
@@ -879,6 +881,41 @@ describe('omx setup AGENTS refresh behavior', () => {
       await rm(wd, { recursive: true, force: true });
     }
   });
+
+  it('preserves user-owned OMX policy blocks during forced plugin defaults refresh', async () => {
+    const wd = await mkdtemp(join(tmpdir(), 'omx-setup-plugin-agents-policy-'));
+    const restoreTty = setMockTty(false);
+    const home = join(wd, 'home');
+    const restoreHome = setMockHome(home);
+    const codexAgentsPath = join(home, '.codex', 'AGENTS.md');
+    const policyBlock = [
+      OMX_USER_POLICY_START_MARKER,
+      'Durable local operator rule: never drop this.',
+      OMX_USER_POLICY_END_MARKER,
+    ].join('\n');
+    try {
+      await mkdir(join(wd, '.omx', 'state'), { recursive: true });
+      await mkdir(join(home, '.codex'), { recursive: true });
+      await writeFile(codexAgentsPath, `# Local Instructions\n\n${policyBlock}\n`);
+
+      const output = await runSetupWithCapturedLogs(wd, {
+        scope: 'user',
+        installMode: 'plugin',
+        force: true,
+      });
+
+      const agents = await readFile(codexAgentsPath, 'utf-8');
+      assert.match(output, /Generated plugin-mode AGENTS\.md defaults/);
+      assert.match(agents, new RegExp(escapeRegExp(OMX_AGENTS_CONTRACT_HEADING)));
+      assert.match(agents, /Durable local operator rule: never drop this\./);
+      assert.equal(countOccurrences(agents, OMX_USER_POLICY_START_MARKER), 1);
+      assert.equal(countOccurrences(agents, OMX_USER_POLICY_END_MARKER), 1);
+    } finally {
+      restoreHome();
+      restoreTty();
+      await rm(wd, { recursive: true, force: true });
+    }
+  });
 });
 
 describe('omx setup plugin developer_instructions behavior', () => {
@@ -962,6 +999,35 @@ describe('omx setup plugin developer_instructions behavior', () => {
 
       assert.match(config, /custom header/);
       assert.equal(countOccurrences(config, '<omx version=\\"1\\">'), 1);
+    } finally {
+      restoreHome();
+      restoreTty();
+      await rm(wd, { recursive: true, force: true });
+    }
+  });
+
+  it('preserves current plugin developer_instructions during repeated plugin setup runs', async () => {
+    const wd = await mkdtemp(join(tmpdir(), 'omx-setup-plugin-devinst-'));
+    const restoreTty = setMockTty(false);
+    const home = join(wd, 'home');
+    const restoreHome = setMockHome(home);
+    try {
+      await mkdir(join(wd, '.omx', 'state'), { recursive: true });
+      await mkdir(join(home, '.codex'), { recursive: true });
+      await writeFile(
+        join(home, '.codex', 'config.toml'),
+        `developer_instructions = ${JSON.stringify(OMX_PLUGIN_DEVELOPER_INSTRUCTIONS)}\n`,
+      );
+
+      await runSetupWithCapturedLogs(wd, {
+        scope: 'user',
+        installMode: 'plugin',
+      });
+      const config = await readFile(join(home, '.codex', 'config.toml'), 'utf-8');
+
+      assert.match(config, /<omx version=\\"1\\">You have Pennix OMX installed through Codex plugin mode/);
+      assert.equal(countOccurrences(config, '<omx version=\\"1\\">'), 1);
+      assert.equal((config.match(/^developer_instructions\s*=/gm) ?? []).length, 1);
     } finally {
       restoreHome();
       restoreTty();

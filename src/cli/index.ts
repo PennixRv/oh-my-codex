@@ -6,7 +6,7 @@
 import { execFileSync, spawn } from "child_process";
 import { basename, dirname, join, posix, resolve, win32 } from "path";
 import { chmodSync, existsSync, lstatSync, mkdirSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from "fs";
-import { copyFile, cp, lstat, mkdir, readFile, readdir, rm, symlink, writeFile } from "fs/promises";
+import { copyFile, cp, lstat, mkdir, readFile, readdir, rm, stat, symlink, writeFile } from "fs/promises";
 import { constants as osConstants, homedir } from "os";
 import { createHash } from "crypto";
 import {
@@ -76,6 +76,7 @@ import {
   resolveCodexHomeForLaunch,
   resolveProjectLocalCodexHomeForLaunch,
 } from "./codex-home.js";
+import { discoverProjectRuntimeCodexHomes } from "./project-runtime-codex-homes.js";
 import { escapeTomlString, readTopLevelTomlString, upsertTopLevelTomlString } from "../utils/toml.js";
 
 export {
@@ -167,8 +168,10 @@ import { buildHookEvent } from "../hooks/extensibility/events.js";
 import { dispatchHookEvent } from "../hooks/extensibility/dispatcher.js";
 import {
   collectInheritableTeamWorkerArgs as collectInheritableTeamWorkerArgsShared,
+  parseTeamWorkerLaunchArgs,
   resolveTeamWorkerLaunchArgs,
   resolveTeamLowComplexityDefaultModel,
+  TEAM_WORKER_INHERITED_MODEL_ENV,
 } from "../team/model-contract.js";
 import {
   parseWorktreeMode,
@@ -228,10 +231,10 @@ Usage:
   omx auth      Manage Codex OAuth auth slots (add|list|use)
   omx question  OMX-owned blocking question UI entrypoint for agent-invoked user questions
   omx adapt     Scaffold OMX-owned adapter foundations for persistent external targets
-  omx resume    Resume a previous interactive Codex session
+  omx resume    Resume Codex sessions (supports --project and --codex-home <path>)
   omx explore   DEPRECATED compatibility command; use normal repo inspection or omx sparkshell
   omx api       Run native omx-api localhost gateway commands (serve|status|stop|generate)
-  omx session   Search prior local session transcripts and history artifacts
+  omx session   Search prior local session transcripts (--codex-home <path> escape hatch)
   omx agents-init [path]
                 Bootstrap lightweight AGENTS.md files for a repo/subtree
   omx agents    Manage Codex native agent TOML files
@@ -828,14 +831,149 @@ const PROJECT_LAUNCH_PERSISTED_RUNTIME_ENTRY_NAMES = new Set([
   "auth.json",
 ]);
 
+const PROJECT_LAUNCH_DURABLE_HISTORY_ENTRY_NAMES = new Set([
+  "sessions",
+  "history.jsonl",
+  "session_index.jsonl",
+]);
+
 // Mirroring these files into the runtime CODEX_HOME would cause Codex to load
 // them as user-scope config alongside the canonical project-scope copies under
 // <cwd>/.codex, duplicating every native hook and asking the user to re-trust
 // hooks on every launch. See GH issue #2470.
 const PROJECT_LAUNCH_RUNTIME_SKIPPED_ENTRY_NAMES = new Set(["hooks.json"]);
 
+function shouldMirrorProjectLaunchRuntimeEntry(entryName: string, includeHistoryArtifacts: boolean): boolean {
+  if (PROJECT_LAUNCH_DURABLE_HISTORY_ENTRY_NAMES.has(entryName)) return true;
+  if (isCodexSqliteArtifact(entryName)) return includeHistoryArtifacts;
+  return true;
+}
+
 function shouldPersistProjectLaunchRuntimeEntry(entryName: string): boolean {
   return PROJECT_LAUNCH_PERSISTED_RUNTIME_ENTRY_NAMES.has(entryName);
+}
+
+function uniqueJsonlLines(contents: string): string[] {
+  const seen = new Set<string>();
+  const lines: string[] = [];
+  for (const line of contents.split(/\r?\n/)) {
+    if (line === "" || seen.has(line)) continue;
+    seen.add(line);
+    lines.push(line);
+  }
+  return lines;
+}
+
+async function persistProjectLaunchRuntimeJsonlArtifact(source: string, destination: string): Promise<void> {
+  const existing = existsSync(destination) ? await readFile(destination, "utf-8").catch(() => "") : "";
+  const sourceContents = await readFile(source, "utf-8");
+  const separator = existing === "" || existing.endsWith("\n") || sourceContents === "" ? "" : "\n";
+  const lines = uniqueJsonlLines(`${existing}${separator}${sourceContents}`);
+  await writeFile(destination, lines.length > 0 ? `${lines.join("\n")}\n` : "", "utf-8");
+}
+
+async function persistProjectLaunchRuntimeHistoryArtifacts(
+  runtimeCodexHome: string | undefined,
+  projectCodexHome: string | undefined,
+): Promise<void> {
+  if (!runtimeCodexHome || !projectCodexHome) return;
+  if (!existsSync(runtimeCodexHome)) return;
+  await mkdir(projectCodexHome, { recursive: true });
+
+  for (const entryName of PROJECT_LAUNCH_DURABLE_HISTORY_ENTRY_NAMES) {
+    const source = join(runtimeCodexHome, entryName);
+    if (!existsSync(source)) continue;
+    const sourceStat = await lstat(source);
+    if (sourceStat.isSymbolicLink()) continue;
+    const destination = join(projectCodexHome, entryName);
+    if (sourceStat.isDirectory()) {
+      await cp(source, destination, { recursive: true, force: true, verbatimSymlinks: true });
+      continue;
+    }
+    if (entryName === "history.jsonl" || entryName === "session_index.jsonl") {
+      await persistProjectLaunchRuntimeJsonlArtifact(source, destination);
+      continue;
+    }
+    if (sourceStat.isFile()) {
+      await copyFile(source, destination);
+    }
+  }
+}
+
+async function ensureProjectLaunchRuntimeHistoryLinks(
+  runtimeCodexHome: string,
+  projectCodexHome: string,
+): Promise<void> {
+  await mkdir(projectCodexHome, { recursive: true });
+  for (const entryName of PROJECT_LAUNCH_DURABLE_HISTORY_ENTRY_NAMES) {
+    const runtimeEntry = join(runtimeCodexHome, entryName);
+    if (existsSync(runtimeEntry)) continue;
+    const projectEntry = join(projectCodexHome, entryName);
+    if (entryName === "sessions") {
+      await mkdir(projectEntry, { recursive: true });
+    } else if (!existsSync(projectEntry)) {
+      await writeFile(projectEntry, "");
+    }
+    await linkOrCopyCodexHomeEntry(projectEntry, runtimeEntry);
+  }
+}
+
+async function materializeProjectLaunchRuntimeHistoryEntries(
+  runtimeCodexHome: string,
+  sourceCodexHome: string,
+): Promise<void> {
+  for (const entryName of PROJECT_LAUNCH_DURABLE_HISTORY_ENTRY_NAMES) {
+    const source = join(sourceCodexHome, entryName);
+    if (!existsSync(source)) continue;
+    const destination = join(runtimeCodexHome, entryName);
+    await rm(destination, { recursive: true, force: true });
+    const sourceStat = await lstat(source);
+    if (sourceStat.isDirectory()) {
+      await cp(source, destination, { recursive: true, force: true, dereference: true });
+      continue;
+    }
+    await copyFile(source, destination);
+  }
+}
+
+async function mergeProjectLaunchRuntimeHistoryEntries(
+  runtimeCodexHome: string,
+  sourceCodexHome: string,
+  mergedHistorySourceRealpaths: Set<string>,
+): Promise<void> {
+  for (const entryName of PROJECT_LAUNCH_DURABLE_HISTORY_ENTRY_NAMES) {
+    const source = join(sourceCodexHome, entryName);
+    if (!existsSync(source)) continue;
+    const sourceRealpath = realpathSync(source);
+    if (mergedHistorySourceRealpaths.has(sourceRealpath)) continue;
+    const destination = join(runtimeCodexHome, entryName);
+    const sourceStat = await stat(source);
+    if (sourceStat.isDirectory()) {
+      await mkdir(destination, { recursive: true });
+      await cp(source, destination, { recursive: true, force: true, dereference: true });
+      mergedHistorySourceRealpaths.add(sourceRealpath);
+      continue;
+    }
+    if (entryName === "sessions") continue;
+    if (!sourceStat.isFile()) continue;
+    if (existsSync(destination)) {
+      const destinationStat = await stat(destination);
+      if (!destinationStat.isFile()) {
+        await rm(destination, { recursive: true, force: true });
+        await copyFile(source, destination);
+        mergedHistorySourceRealpaths.add(sourceRealpath);
+        continue;
+      }
+      const existing = await readFile(destination, "utf-8").catch(() => "");
+      const addition = await readFile(source, "utf-8");
+      const separator = existing === "" || existing.endsWith("\n") || addition === "" ? "" : "\n";
+      await writeFile(destination, `${existing}${separator}${addition}`, "utf-8");
+      mergedHistorySourceRealpaths.add(sourceRealpath);
+      continue;
+    }
+    await copyFile(source, destination);
+    mergedHistorySourceRealpaths.add(sourceRealpath);
+  }
 }
 
 export async function persistProjectLaunchRuntimeAuthState(
@@ -860,6 +998,7 @@ export async function persistProjectLaunchRuntimeAuthState(
  */
 export interface PrepareRuntimeCodexHomeForProjectLaunchOptions {
   includeHistoryArtifacts?: boolean;
+  extraHistoryCodexHomes?: string[];
 }
 
 export async function prepareRuntimeCodexHomeForProjectLaunch(
@@ -872,10 +1011,13 @@ export async function prepareRuntimeCodexHomeForProjectLaunch(
   await rm(runtimeCodexHome, { recursive: true, force: true });
   await mkdir(runtimeCodexHome, { recursive: true });
 
-  if (!existsSync(projectCodexHome)) return runtimeCodexHome;
+  if (!existsSync(projectCodexHome)) {
+    await ensureProjectLaunchRuntimeHistoryLinks(runtimeCodexHome, projectCodexHome);
+    return runtimeCodexHome;
+  }
 
   for (const entry of await readdir(projectCodexHome, { withFileTypes: true })) {
-    if (isCodexSqliteArtifact(entry.name) && !options.includeHistoryArtifacts) continue;
+    if (!shouldMirrorProjectLaunchRuntimeEntry(entry.name, options.includeHistoryArtifacts === true)) continue;
     if (PROJECT_LAUNCH_RUNTIME_SKIPPED_ENTRY_NAMES.has(entry.name)) continue;
     const source = join(projectCodexHome, entry.name);
     const destination = join(runtimeCodexHome, entry.name);
@@ -895,6 +1037,19 @@ export async function prepareRuntimeCodexHomeForProjectLaunch(
     await linkOrCopyCodexHomeEntry(source, destination);
   }
 
+  await ensureProjectLaunchRuntimeHistoryLinks(runtimeCodexHome, projectCodexHome);
+  if (options.includeHistoryArtifacts === true && (options.extraHistoryCodexHomes?.length ?? 0) > 0) {
+    await materializeProjectLaunchRuntimeHistoryEntries(runtimeCodexHome, projectCodexHome);
+    const mergedHistorySourceRealpaths = new Set<string>();
+    for (const entryName of PROJECT_LAUNCH_DURABLE_HISTORY_ENTRY_NAMES) {
+      const source = join(projectCodexHome, entryName);
+      if (existsSync(source)) mergedHistorySourceRealpaths.add(realpathSync(source));
+    }
+    for (const extraCodexHome of options.extraHistoryCodexHomes ?? []) {
+      await mergeProjectLaunchRuntimeHistoryEntries(runtimeCodexHome, extraCodexHome, mergedHistorySourceRealpaths);
+    }
+  }
+
   return runtimeCodexHome;
 }
 
@@ -909,6 +1064,7 @@ function resolveProjectSqliteHomeForLaunch(
 
 export interface PrepareCodexHomeForLaunchOptions {
   includeHistoryArtifacts?: boolean;
+  extraHistoryCodexHomes?: string[];
 }
 
 export async function prepareCodexHomeForLaunch(
@@ -923,7 +1079,10 @@ export async function prepareCodexHomeForLaunch(
       cwd,
       sessionId,
       projectLocalCodexHomeForCleanup,
-      { includeHistoryArtifacts: options.includeHistoryArtifacts },
+      {
+        includeHistoryArtifacts: options.includeHistoryArtifacts,
+        extraHistoryCodexHomes: options.extraHistoryCodexHomes,
+      },
     );
     return {
       codexHomeOverride: runtimeCodexHome,
@@ -937,6 +1096,98 @@ export async function prepareCodexHomeForLaunch(
     codexHomeOverride: resolveCodexHomeForLaunch(cwd, env),
     projectLocalCodexHomeForCleanup,
   };
+}
+
+export interface ResumeCodexHomeSelection {
+  args: string[];
+  explicitCodexHome?: string;
+  projectOnly: boolean;
+}
+
+export function parseResumeCodexHomeSelection(args: string[]): ResumeCodexHomeSelection {
+  const nextArgs: string[] = [];
+  let explicitCodexHome: string | undefined;
+  let projectOnly = false;
+
+  for (let index = 0; index < args.length; index += 1) {
+    const arg = args[index];
+    if (arg === "--codex-home") {
+      const value = args[index + 1];
+      if (!value || value.startsWith("-")) {
+        throw new Error("Missing value after --codex-home.");
+      }
+      explicitCodexHome = value;
+      index += 1;
+      continue;
+    }
+    if (arg.startsWith("--codex-home=")) {
+      explicitCodexHome = arg.slice("--codex-home=".length);
+      if (explicitCodexHome.trim() === "") {
+        throw new Error("Missing value after --codex-home.");
+      }
+      continue;
+    }
+    if (arg === "--project") {
+      projectOnly = true;
+      continue;
+    }
+    nextArgs.push(arg);
+  }
+
+  return {
+    args: nextArgs,
+    explicitCodexHome,
+    projectOnly,
+  };
+}
+
+async function prepareResumeCodexHomeForLaunch(
+  cwd: string,
+  sessionId: string,
+  args: string[],
+  env: NodeJS.ProcessEnv = process.env,
+): Promise<{ args: string[]; prepared: PreparedCodexHomeForLaunch }> {
+  const selection = parseResumeCodexHomeSelection(args);
+  if (selection.explicitCodexHome) {
+    return {
+      args: selection.args,
+      prepared: {
+        codexHomeOverride: resolve(selection.explicitCodexHome),
+      },
+    };
+  }
+
+  const projectHomes = await discoverProjectRuntimeCodexHomes(cwd);
+  if (selection.projectOnly) {
+    if (projectHomes.length === 0) {
+      const emptyRuntimeCodexHome = runtimeCodexHomePath(cwd, sessionId);
+      await rm(emptyRuntimeCodexHome, { recursive: true, force: true });
+      await mkdir(join(emptyRuntimeCodexHome, "sessions"), { recursive: true });
+      return {
+        args: selection.args,
+        prepared: {
+          codexHomeOverride: emptyRuntimeCodexHome,
+          runtimeCodexHomeForCleanup: emptyRuntimeCodexHome,
+        },
+      };
+    }
+    const runtimeCodexHome = await prepareRuntimeCodexHomeForProjectLaunch(cwd, sessionId, projectHomes[0].path, {
+      includeHistoryArtifacts: true,
+      extraHistoryCodexHomes: projectHomes.slice(1).map((home) => home.path),
+    });
+    return {
+      args: selection.args,
+      prepared: {
+        codexHomeOverride: runtimeCodexHome,
+      },
+    };
+  }
+
+  const prepared = await prepareCodexHomeForLaunch(cwd, sessionId, env, {
+    includeHistoryArtifacts: true,
+    extraHistoryCodexHomes: projectHomes.map((home) => home.path),
+  });
+  return { args: selection.args, prepared };
 }
 
 export async function persistProjectLaunchRuntimeProjectTrustState(
@@ -969,6 +1220,10 @@ export async function cleanupRuntimeCodexHome(
 ): Promise<void> {
   if (!runtimeCodexHomeForCleanup) return;
   await persistProjectLaunchRuntimeAuthState(
+    runtimeCodexHomeForCleanup,
+    projectCodexHomeForPersistence,
+  );
+  await persistProjectLaunchRuntimeHistoryArtifacts(
     runtimeCodexHomeForCleanup,
     projectCodexHomeForPersistence,
   );
@@ -1755,15 +2010,50 @@ function applyDisposableWorktreeOmxRootForLaunch(
   env.OMX_ROOT = omxRootOverride;
 }
 
+function launchArgRequestsDisposableWorktree(arg: string): boolean {
+  return arg === "--worktree" ||
+    arg === "-w" ||
+    arg.startsWith("--worktree=") ||
+    arg.startsWith("-w=") ||
+    (arg.startsWith("-w") && arg.length > 2);
+}
+
+function launchArgsRequestMadmaxIsolation(launchArgs: readonly string[]): boolean {
+  return launchArgs.some((arg) => arg === MADMAX_FLAG || arg === MADMAX_SPARK_FLAG);
+}
+
+function launchArgsRequestDisposableWorktree(launchArgs: readonly string[]): boolean {
+  return launchArgs.some((arg) => launchArgRequestsDisposableWorktree(arg));
+}
+
+function clearInheritedMadmaxRootForDisposableWorktreeLaunch(
+  launchArgs: readonly string[],
+  env: NodeJS.ProcessEnv = process.env,
+): void {
+  if (!launchArgsRequestDisposableWorktree(launchArgs)) return;
+  if (env.OMXBOX_ACTIVE !== "1") return;
+  delete env.OMX_ROOT;
+  delete env.OMX_STATE_ROOT;
+  delete env.OMXBOX_ACTIVE;
+  delete env.OMX_SOURCE_CWD;
+  delete env[OMX_MADMAX_DETACHED_CONTEXT_ENV];
+}
+
 export function shouldAutoIsolateMadmaxLaunch(
   command: string,
   launchArgs: string[],
   env: NodeJS.ProcessEnv = process.env,
+  cwd: string = process.cwd(),
 ): boolean {
   if (command !== "launch" && command !== "exec") return false;
-  if (env.OMX_NO_BOX === "1" || env.OMXBOX_ACTIVE === "1") return false;
-  if (env.OMX_ROOT || env.OMX_STATE_ROOT) return false;
-  return launchArgs.some((arg) => arg === MADMAX_FLAG || arg === MADMAX_SPARK_FLAG);
+  if (env.OMX_NO_BOX === "1") return false;
+  if (!launchArgsRequestMadmaxIsolation(launchArgs)) return false;
+  const inheritedContext = env[OMX_MADMAX_DETACHED_CONTEXT_ENV]?.trim();
+  if (env.OMXBOX_ACTIVE === "1" && inheritedContext && !resolveInheritedMadmaxRoot(env)) {
+    return false;
+  }
+  if (madmaxInheritedContextMatchesLaunch(cwd, launchArgs, env)) return false;
+  return true;
 }
 
 function sanitizeRunIdSegment(value: string): string {
@@ -2055,6 +2345,48 @@ export function withMadmaxDetachedContextLock<T>(
   );
 }
 
+function readMadmaxRunMetadata(
+  runRoot: string,
+): { cwd?: string; detached_launch_context?: string } | null {
+  try {
+    const parsed = JSON.parse(readFileSync(join(runRoot, ".omxbox-run.json"), "utf-8")) as {
+      cwd?: unknown;
+      detached_launch_context?: unknown;
+    };
+    return {
+      ...(typeof parsed.cwd === "string" ? { cwd: parsed.cwd } : {}),
+      ...(typeof parsed.detached_launch_context === "string"
+        ? { detached_launch_context: parsed.detached_launch_context }
+        : {}),
+    };
+  } catch {
+    return null;
+  }
+}
+
+function resolveInheritedMadmaxRoot(env: NodeJS.ProcessEnv): string | undefined {
+  const root = env.OMX_ROOT?.trim() || env.OMX_STATE_ROOT?.trim();
+  return root || undefined;
+}
+
+function madmaxInheritedContextMatchesLaunch(
+  cwd: string,
+  launchArgs: readonly string[],
+  env: NodeJS.ProcessEnv,
+): boolean {
+  if (env.OMXBOX_ACTIVE !== "1") return false;
+  const context = env[OMX_MADMAX_DETACHED_CONTEXT_ENV]?.trim();
+  if (!context) return false;
+  const inheritedRoot = resolveInheritedMadmaxRoot(env);
+  if (!inheritedRoot) return false;
+  const metadata = readMadmaxRunMetadata(inheritedRoot);
+  if (!metadata) return false;
+  if (metadata.cwd && metadata.cwd !== inheritedRoot) return false;
+  if (metadata.detached_launch_context !== context) return false;
+  const expectedContext = buildMadmaxDetachedLaunchContextKey(cwd, [...launchArgs], inheritedRoot);
+  return expectedContext === context;
+}
+
 function isMadmaxDetachedGuardEnabled(env: NodeJS.ProcessEnv): boolean {
   return env.OMXBOX_ACTIVE === "1" && typeof env[OMX_MADMAX_DETACHED_CONTEXT_ENV] === "string";
 }
@@ -2116,7 +2448,7 @@ function activateMadmaxIsolationIfNeeded(
   cwd: string,
   env: NodeJS.ProcessEnv = process.env,
 ): void {
-  if (!shouldAutoIsolateMadmaxLaunch(command, launchArgs, env)) return;
+  if (!shouldAutoIsolateMadmaxLaunch(command, launchArgs, env, cwd)) return;
   const runDir = createMadmaxIsolatedRoot(cwd, launchArgs, env);
   env.OMX_ROOT = runDir;
   env.OMXBOX_ACTIVE = "1";
@@ -2500,6 +2832,7 @@ export async function launchWithAuthHotswap(args: string[]): Promise<void> {
       }
     }
   }
+  clearInheritedMadmaxRootForDisposableWorktreeLaunch(args);
   applyDisposableWorktreeOmxRootForLaunch(ensuredLaunchWorktree);
 
   try {
@@ -2585,7 +2918,7 @@ export async function launchWithHud(args: string[]): Promise<void> {
     notifyTempResult.passthroughArgs,
     persistentCodexHomeForLaunch,
   );
-  const normalizedArgs = normalizeCodexLaunchArgs(
+  let normalizedArgs = normalizeCodexLaunchArgs(
     notifyTempResult.passthroughArgs,
   );
   let cwd = launchCwd;
@@ -2616,6 +2949,7 @@ export async function launchWithHud(args: string[]): Promise<void> {
       }
     }
   }
+  clearInheritedMadmaxRootForDisposableWorktreeLaunch(args);
   applyDisposableWorktreeOmxRootForLaunch(ensuredLaunchWorktree);
 
   const sessionId = `omx-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -2644,7 +2978,13 @@ export async function launchWithHud(args: string[]): Promise<void> {
     // Non-fatal: repair failure must not block launch
   }
 
-  const preparedCodexHome = await prepareCodexHomeForLaunch(launchCwd, sessionId, process.env, {
+  const resumePrepared = normalizedArgs[0] === "resume"
+    ? await prepareResumeCodexHomeForLaunch(launchCwd, sessionId, normalizedArgs, process.env)
+    : null;
+  if (resumePrepared) {
+    normalizedArgs = resumePrepared.args;
+  }
+  const preparedCodexHome = resumePrepared?.prepared ?? await prepareCodexHomeForLaunch(launchCwd, sessionId, process.env, {
     includeHistoryArtifacts: normalizedArgs[0] === "resume",
   });
   const codexHomeOverride = preparedCodexHome.codexHomeOverride;
@@ -2729,6 +3069,7 @@ export async function execWithOverlay(args: string[]): Promise<void> {
     }
   }
 
+  clearInheritedMadmaxRootForDisposableWorktreeLaunch(args);
   applyDisposableWorktreeOmxRootForLaunch(ensuredLaunchWorktree);
 
   const sessionId = `omx-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -3675,6 +4016,7 @@ export function buildDetachedSessionBootstrapSteps(
   sqliteHomeOverride?: string,
   parentEnvFilePath?: string,
   automaticHudEnabled = true,
+  inheritedWorkerModel?: string | null,
 ): DetachedSessionTmuxStep[] {
   const detachedLeaderCmd = nativeWindows
     ? "powershell.exe"
@@ -3729,6 +4071,7 @@ export function buildDetachedSessionBootstrapSteps(
     ...(notifyTempContractRaw
       ? ["-e", `${OMX_NOTIFY_TEMP_CONTRACT_ENV}=${notifyTempContractRaw}`]
       : []),
+    ...(inheritedWorkerModel ? ["-e", `${TEAM_WORKER_INHERITED_MODEL_ENV}=${inheritedWorkerModel}`] : []),
     detachedLeaderCmd,
   ];
   return [
@@ -4520,6 +4863,10 @@ function runCodex(
   const automaticHudEnabled = isAutomaticHudEnabled(cwd);
   const hudRuntimeRoot = resolveHudRuntimeRootForLaunch(cwd, process.env);
   const inheritLeaderFlags = process.env[TEAM_INHERIT_LEADER_FLAGS_ENV] !== "0";
+  const inheritedWorkerLaunchArgs = inheritLeaderFlags
+    ? collectInheritableTeamWorkerArgsShared(launchArgs)
+    : [];
+  const inheritedWorkerModel = parseTeamWorkerLaunchArgs(inheritedWorkerLaunchArgs).modelOverride ?? undefined;
   const workerLaunchArgs = resolveTeamWorkerLaunchArgsEnv(
     process.env[TEAM_WORKER_LAUNCH_ARGS_ENV],
     launchArgs,
@@ -4541,7 +4888,11 @@ function runCodex(
     ...(sessionId ? { OMX_SESSION_ID: sessionId } : {}),
   };
   const codexEnv = workerLaunchArgs
-    ? { ...codexEnvWithSession, [TEAM_WORKER_LAUNCH_ARGS_ENV]: workerLaunchArgs }
+    ? {
+        ...codexEnvWithSession,
+        [TEAM_WORKER_LAUNCH_ARGS_ENV]: workerLaunchArgs,
+        ...(inheritedWorkerModel ? { [TEAM_WORKER_INHERITED_MODEL_ENV]: inheritedWorkerModel } : {}),
+      }
     : codexEnvWithSession;
   const codexEnvWithNotify = notifyTempContractRaw
     ? { ...codexEnv, [OMX_NOTIFY_TEMP_CONTRACT_ENV]: notifyTempContractRaw }
@@ -4810,6 +5161,7 @@ function runCodex(
           sqliteHomeOverride,
           detachedParentEnvFilePath,
           automaticHudEnabled,
+          inheritedWorkerModel,
         );
         for (const step of bootstrapSteps) {
           const output = execTmuxFileSync(step.args, {

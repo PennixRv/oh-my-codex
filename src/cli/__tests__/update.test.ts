@@ -1208,6 +1208,7 @@ describe('runDeferredGlobalUpdate', () => {
       assert.equal(calls[0].options.cwd, cwd);
       assert.equal((calls[0].options.env as NodeJS.ProcessEnv | undefined)?.OMX_DEFERRED_UPDATE_PARENT_PID, '12345');
       assert.equal((calls[0].options.env as NodeJS.ProcessEnv | undefined)?.OMX_DEFERRED_UPDATE_LOG, result.logPath);
+      assert.equal((calls[0].options.env as NodeJS.ProcessEnv | undefined)?.OMX_SKIP_NATIVE_AGENT_REFRESH, '1');
       assert.match(calls[0].args[4], /Get-Process -Id \$parentPid/);
       assert.match(calls[0].args[4], new RegExp(`npm install -g ${PACKAGE_NAME}@latest`));
       assert.match(calls[0].args[4], /& 'omx' 'setup'/);
@@ -1218,7 +1219,7 @@ describe('runDeferredGlobalUpdate', () => {
 
   it('preserves plugin setup delivery mode for deferred post-update refreshes', async () => {
     const cwd = await mkdtemp(join(tmpdir(), 'omx-deferred-update-plugin-'));
-    const calls: Array<{ command: string; args: string[] }> = [];
+    const calls: Array<{ command: string; args: string[]; options: Record<string, unknown> }> = [];
 
     try {
       await mkdir(join(cwd, '.omx'), { recursive: true });
@@ -1229,8 +1230,8 @@ describe('runDeferredGlobalUpdate', () => {
 
       const result = runDeferredGlobalUpdate(
         cwd,
-        ((command, args) => {
-          calls.push({ command, args: args as string[] });
+        ((command, args, options) => {
+          calls.push({ command, args: args as string[], options: (options ?? {}) as Record<string, unknown> });
           return {
             once() {
               return this;
@@ -1245,6 +1246,7 @@ describe('runDeferredGlobalUpdate', () => {
       assert.equal(result.ok, true);
       assert.equal(calls.length, 1);
       assert.match(calls[0].args[1], /'omx' 'setup' '--scope' 'user' '--plugin' '--mcp' 'none' '--disable-team'/);
+      assert.equal((calls[0].options as { env?: NodeJS.ProcessEnv } | undefined)?.env?.OMX_SKIP_NATIVE_AGENT_REFRESH, '1');
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }

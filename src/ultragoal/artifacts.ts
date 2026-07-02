@@ -1328,7 +1328,7 @@ export async function checkpointUltragoal(cwd: string, options: CheckpointOption
       });
       return plan;
     }
-    if (!snapshot?.available) {
+  if (!snapshot?.available) {
       throw new UltragoalError('Blocked ultragoal checkpoints require either a get_goal snapshot for the completed legacy Codex goal that blocked create_goal, or an unavailable get_goal error JSON for a Codex DB/schema/context failure; pass --codex-goal-json.');
     }
     if (snapshot.status !== 'complete') {

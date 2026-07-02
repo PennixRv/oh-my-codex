@@ -4,6 +4,18 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+## [0.18.64] - 2026-07-02
+
+Patch release for the Pennix fork team/runtime and setup-preservation line: setup refresh now preserves user-owned plugin guidance and native-agent local edits, team startup/runtime hardens Gemini and exact-role routing paths, and session/auth tooling now handles isolated login, invalidated hotswap slots, and project runtime Codex history discovery more safely.
+
+- `omx setup` now preserves the current plugin `developer_instructions` fragment, preserves user-owned OMX policy blocks inside regenerated `AGENTS.md`, can skip native-agent refresh during background update-check runs, and tracks native-agent content hashes so repeated setup overwrites only OMX-managed TOMLs while preserving local edits unless forced.
+- Spark-lane default native agents no longer inherit an incompatible root `model_provider` when they stay on the default Spark model, avoiding broken fast-lane agent generation in custom-provider environments.
+- Team runtime now correctly seeds Gemini prompt-mode startup prompts, keeps HUD-disabled relaunch stable, tags scaled panes with team ownership for safer lifecycle cleanup, and surfaces clearer per-role worker launch diagnostics including inherited-parent-model vs exact-role-default resolution.
+- `codex-native-hook` now continues the mailbox-boundary handoff line, hardens planning/root-pointer and ultragoal goal-snapshot guards, records bounded native subagent capacity blockers, and keeps the plugin launcher Windows-safe for script-based hook entrypoints.
+- `omx auth add` now performs Codex login inside an isolated temporary `CODEX_HOME`, supports bounded login flags, and `--hotswap` rotates invalidated slots without requiring a resumable rollout session.
+- `omx session search` and `omx resume` now discover project runtime Codex homes and associated madmax boxed-run histories, support an explicit `--codex-home` escape hatch, and avoid leaking raw boxed-run paths in search output.
+- Notification config resolution now lets event-level platform enablement inherit top-level credentials, and `OMX_DISCORD_MENTION` now fills missing Discord mentions across profiles/events without overriding explicit mentions.
+
 ## [0.18.63] - 2026-07-02
 
 Patch release for the Pennix fork bounded upstream-integration wave 4: proxy env fallback resolution now tolerates blank scheme-specific variables, `omx doctor` surfaces and can bounded-repair repo-local `.omx`/`.beads` ownership drift, and ultragoal final-review blocker reconciliation now binds clean completion to the designated resolver story.

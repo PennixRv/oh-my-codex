@@ -1,5 +1,8 @@
 import { describe, it, beforeEach, afterEach, mock } from "node:test";
 import assert from "node:assert/strict";
+import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 /**
  * Notification Profiles Tests
@@ -278,6 +281,121 @@ describe("getNotificationConfig with profiles", () => {
     const config = getNotificationConfig("nonexistent");
     assert.ok(config);
     assert.equal(config.telegram!.botToken, "123:abc");
+  });
+
+  it("applies a valid env Discord mention to the selected profile", async () => {
+    const codexHome = await mkdtemp(join(tmpdir(), "omx-notify-profile-"));
+    try {
+      process.env.CODEX_HOME = codexHome;
+      process.env.OMX_DISCORD_MENTION = "<@12345678901234567>";
+      await mkdir(codexHome, { recursive: true });
+      await writeFile(join(codexHome, ".omx-config.json"), JSON.stringify({
+        notifications: {
+          enabled: true,
+          profiles: {
+            work: {
+              enabled: true,
+              discord: {
+                enabled: true,
+                webhookUrl: "https://discord.com/api/webhooks/work",
+              },
+              "discord-bot": {
+                enabled: true,
+                botToken: "bot-token",
+                channelId: "channel-id",
+              },
+            },
+          },
+        },
+      }, null, 2));
+
+      const { getNotificationConfig } = await import("../config.js");
+      const config = getNotificationConfig("work");
+
+      assert.ok(config);
+      assert.equal(config.discord?.mention, "<@12345678901234567>");
+      assert.equal(config["discord-bot"]?.mention, "<@12345678901234567>");
+    } finally {
+      await rm(codexHome, { recursive: true, force: true });
+      delete process.env.CODEX_HOME;
+    }
+  });
+
+  it("applies env Discord mention without overriding explicit profile or event mentions", async () => {
+    const codexHome = await mkdtemp(join(tmpdir(), "omx-notify-profile-"));
+    try {
+      process.env.CODEX_HOME = codexHome;
+      process.env.OMX_DISCORD_MENTION = "<@12345678901234567>";
+      await mkdir(codexHome, { recursive: true });
+      await writeFile(join(codexHome, ".omx-config.json"), JSON.stringify({
+        notifications: {
+          enabled: true,
+          profiles: {
+            work: {
+              enabled: true,
+              discord: {
+                enabled: true,
+                webhookUrl: "https://discord.com/api/webhooks/work",
+                mention: "<@76543210987654321>",
+              },
+              events: {
+                "session-end": {
+                  enabled: true,
+                  discord: {
+                    enabled: true,
+                    webhookUrl: "https://discord.com/api/webhooks/end",
+                  },
+                },
+                "session-start": {
+                  enabled: true,
+                  discord: {
+                    enabled: true,
+                    webhookUrl: "https://discord.com/api/webhooks/start",
+                    mention: "<@22222222222222222>",
+                  },
+                },
+                "ask-user-question": {
+                  enabled: true,
+                  "discord-bot": {
+                    enabled: true,
+                    botToken: "event-bot-token",
+                    channelId: "event-channel-id",
+                  },
+                },
+              },
+              "discord-bot": {
+                enabled: true,
+                botToken: "bot-token",
+                channelId: "channel-id",
+                mention: "<@99999999999999999>",
+              },
+            },
+          },
+        },
+      }, null, 2));
+
+      const { getNotificationConfig } = await import("../config.js");
+      const config = getNotificationConfig("work");
+
+      assert.ok(config);
+      assert.equal(config.discord?.mention, "<@76543210987654321>");
+      assert.equal(config["discord-bot"]?.mention, "<@99999999999999999>");
+      assert.equal(
+        config.events?.["session-end"]?.discord?.mention,
+        "<@12345678901234567>",
+      );
+      assert.equal(
+        config.events?.["session-start"]?.discord?.mention,
+        "<@22222222222222222>",
+      );
+      assert.equal(
+        config.events?.["ask-user-question"]?.["discord-bot"]?.mention,
+        "<@12345678901234567>",
+      );
+    } finally {
+      await rm(codexHome, { recursive: true, force: true });
+      delete process.env.CODEX_HOME;
+    }
   });
 });
 

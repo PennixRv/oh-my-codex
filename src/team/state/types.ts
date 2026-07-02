@@ -22,6 +22,7 @@ export interface TeamConfig {
   tmux_socket_path?: string | null;
   leader_pane_id: string | null;
   hud_pane_id: string | null;
+  tmux_pane_owner_id?: string;
   resize_hook_name: string | null;
   resize_hook_target: string | null;
   next_worker_index?: number;
@@ -238,6 +239,7 @@ export interface TeamManifestV2 {
   tmux_socket_path?: string | null;
   leader_pane_id: string | null;
   hud_pane_id: string | null;
+  tmux_pane_owner_id?: string;
   resize_hook_name: string | null;
   resize_hook_target: string | null;
   next_worker_index?: number;

@@ -204,6 +204,16 @@ function isExactMiniModel(resolvedModel?: string | null): boolean {
   return resolvedModel?.trim() === EXACT_GPT_5_4_MINI_MODEL;
 }
 
+function shouldInheritRootModelProvider(
+  agent: AgentDefinition,
+  resolvedModel: string,
+  options: AgentModelResolutionOptions = {},
+): boolean {
+  if (agent.modelClass !== "fast") return true;
+  if (getRoleModelOverride(agent.name, options.codexHomeOverride)?.model) return true;
+  return resolvedModel !== getSparkDefaultModel(options.codexHomeOverride);
+}
+
 export function composeRoleInstructions(
   promptContent: string,
   metadata: RoleInstructionMetadata | null,
@@ -341,7 +351,9 @@ export function generateAgentToml(
   options: AgentModelResolutionOptions = {},
 ): string {
   const resolvedModel = resolveAgentModel(agent, options);
-  const resolvedModelProvider = getCodexConfigRootModelProvider(options.codexHomeOverride);
+  const resolvedModelProvider = shouldInheritRootModelProvider(agent, resolvedModel, options)
+    ? getCodexConfigRootModelProvider(options.codexHomeOverride)
+    : undefined;
   return generateStandaloneAgentToml({
     name: agent.name,
     description: agent.description,

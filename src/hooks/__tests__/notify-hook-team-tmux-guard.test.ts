@@ -97,6 +97,7 @@ set -eu
 echo "$@" >> "${tmuxLogPath}"
 state_dir="$(dirname "${tmuxLogPath}")"
 stage_file="$state_dir/stage"
+buffer_file="$state_dir/buffer"
 case "$1" in
   capture-pane)
     stage=0
@@ -116,6 +117,19 @@ EOF
 ${SESSION_START_HOOK_REVIEW_CAPTURE}
 EOF
     fi
+    ;;
+  set-buffer)
+    printf '%s' "\${@: -1}" > "$buffer_file"
+    ;;
+  show-buffer)
+    if [ -f "$buffer_file" ]; then
+      cat "$buffer_file"
+    fi
+    ;;
+  paste-buffer)
+    ;;
+  delete-buffer)
+    rm -f "$buffer_file"
     ;;
   send-keys)
     if [ "\${4:-}" = "Escape" ]; then
@@ -152,8 +166,129 @@ exit 0
       assert.equal(lines.filter((line) => /send-keys -t %42 Escape/.test(line)).length, 2);
       assert.match(
         lines.join('\n'),
-        /capture-pane -t %42 -p\nsend-keys -t %42 Escape\ncapture-pane -t %42 -p\nsend-keys -t %42 Escape\nsend-keys -t %42 -l hello bridge\nsend-keys -t %42 C-m\nsend-keys -t %42 C-m/,
+        /capture-pane -t %42 -p\nsend-keys -t %42 Escape\ncapture-pane -t %42 -p\nsend-keys -t %42 Escape\nset-buffer -b omx-pane-input-[^\n]+\nshow-buffer -b omx-pane-input-[^\n]+\nsend-keys -t %42 C-u\npaste-buffer -t %42 -b omx-pane-input-[^\n]+ -p -d\nsend-keys -t %42 C-m\nsend-keys -t %42 C-m\ndelete-buffer -b omx-pane-input-[^\n]+/,
       );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+
+  it('deletes the named buffer when verification fails after setup', async () => {
+    const cwd = await mkdtemp(join(tmpdir(), 'omx-team-tmux-guard-'));
+    const fakeBinDir = join(cwd, 'fake-bin');
+    const tmuxLogPath = join(cwd, 'tmux.log');
+
+    try {
+      await mkdir(fakeBinDir, { recursive: true });
+      await writeFile(
+        join(fakeBinDir, 'tmux'),
+        `#!/usr/bin/env bash
+set -eu
+printf '[%s]' "$@" >> "${tmuxLogPath}"
+printf '\n' >> "${tmuxLogPath}"
+cmd="$1"
+shift || true
+if [[ "$cmd" == "set-buffer" ]]; then
+  exit 0
+fi
+if [[ "$cmd" == "show-buffer" ]]; then
+  echo "cannot read buffer" >&2
+  exit 1
+fi
+exit 0
+`,
+      );
+      await chmod(join(fakeBinDir, 'tmux'), 0o755);
+
+      const moduleUrl = new URL('../../../dist/scripts/notify-hook/team-tmux-guard.js', import.meta.url).href;
+      const result = runSendPaneInputInChild({
+        fakeBinDir,
+        moduleUrl,
+        paneTarget: '%42',
+        prompt: 'supervisor handoff after setup',
+        submitKeyPresses: 1,
+        typePrompt: true,
+      });
+
+      assert.equal(result.status, 0, result.stderr);
+      const parsed = JSON.parse(result.stdout);
+      assert.equal(parsed.ok, false);
+      assert.equal(parsed.reason, 'buffer_show_failed');
+
+      const lines = (await readFile(tmuxLogPath, 'utf-8')).trim().split('\n').filter(Boolean);
+      assert.match(lines[0] ?? '', /\[capture-pane\]\[-t\]\[%42\]\[-p\]/);
+      assert.match(lines[1] ?? '', /\[set-buffer\]\[-b\]\[omx-pane-input-/);
+      assert.match(lines[2] ?? '', /\[show-buffer\]\[-b\]\[omx-pane-input-/);
+      assert.match(lines[3] ?? '', /\[delete-buffer\]\[-b\]\[omx-pane-input-/);
+      assert.equal(lines.length, 4);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+
+  it('deletes the named buffer when paste fails after verification', async () => {
+    const cwd = await mkdtemp(join(tmpdir(), 'omx-team-tmux-guard-'));
+    const fakeBinDir = join(cwd, 'fake-bin');
+    const tmuxLogPath = join(cwd, 'tmux.log');
+    const bufferPath = `${tmuxLogPath}.buffer`;
+
+    try {
+      await mkdir(fakeBinDir, { recursive: true });
+      await writeFile(
+        join(fakeBinDir, 'tmux'),
+        `#!/usr/bin/env bash
+set -eu
+printf '[%s]' "$@" >> "${tmuxLogPath}"
+printf '\n' >> "${tmuxLogPath}"
+cmd="$1"
+shift || true
+if [[ "$cmd" == "capture-pane" ]]; then
+  echo "How can I help you today?"
+  exit 0
+fi
+if [[ "$cmd" == "set-buffer" ]]; then
+  printf '%s' "\${@: -1}" > "${bufferPath}"
+  exit 0
+fi
+if [[ "$cmd" == "show-buffer" ]]; then
+  cat "${bufferPath}"
+  exit 0
+fi
+if [[ "$cmd" == "paste-buffer" ]]; then
+  echo "paste failed" >&2
+  exit 1
+fi
+if [[ "$cmd" == "delete-buffer" ]]; then
+  rm -f "${bufferPath}"
+fi
+exit 0
+`,
+      );
+      await chmod(join(fakeBinDir, 'tmux'), 0o755);
+
+      const moduleUrl = new URL('../../../dist/scripts/notify-hook/team-tmux-guard.js', import.meta.url).href;
+      const result = runSendPaneInputInChild({
+        fakeBinDir,
+        moduleUrl,
+        paneTarget: '%42',
+        prompt: 'supervisor handoff after verify',
+        submitKeyPresses: 1,
+        typePrompt: true,
+      });
+
+      assert.equal(result.status, 0, result.stderr);
+      const parsed = JSON.parse(result.stdout);
+      assert.equal(parsed.ok, false);
+      assert.equal(parsed.reason, 'buffer_paste_failed');
+
+      const lines = (await readFile(tmuxLogPath, 'utf-8')).trim().split('\n').filter(Boolean);
+      assert.match(lines[0] ?? '', /\[capture-pane\]\[-t\]\[%42\]\[-p\]/);
+      assert.match(lines[1] ?? '', /\[set-buffer\]\[-b\]\[omx-pane-input-/);
+      assert.match(lines[2] ?? '', /\[show-buffer\]\[-b\]\[omx-pane-input-/);
+      assert.match(lines[3] ?? '', /\[send-keys\]\[-t\]\[%42\]\[C-u\]/);
+      assert.match(lines[4] ?? '', /\[paste-buffer\]\[-t\]\[%42\]\[-b\]\[omx-pane-input-.*\]\[-p\]\[-d\]/);
+      assert.match(lines[5] ?? '', /\[delete-buffer\]\[-b\]\[omx-pane-input-/);
+      assert.equal(lines.length, 6);
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }

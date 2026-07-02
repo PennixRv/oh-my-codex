@@ -13,6 +13,7 @@ import {
 } from '../state/workflow-transition.js';
 import { reconcileWorkflowTransition } from '../state/workflow-transition-reconcile.js';
 import { syncCanonicalSkillStateForMode } from '../state/skill-active.js';
+import { completeRalplanSession } from '../state/operations.js';
 import { validateAndNormalizeRalphState } from '../ralph/contract.js';
 import { applyRunOutcomeContract } from '../runtime/run-outcome.js';
 import { validateAutopilotCompletionTransition } from '../autopilot/completion-gate.js';
@@ -357,15 +358,24 @@ export async function updateModeState(
   await writeFile(getStatePath(mode, projectRoot, scope.sessionId), JSON.stringify(updated, null, 2));
   await syncRunStateFromModeState(updated, projectRoot, scope.sessionId);
   if (isTrackedWorkflowMode(mode)) {
-    await syncCanonicalSkillStateForMode({
-      cwd: projectRoot ?? process.cwd(),
+    const cwd = projectRoot ?? process.cwd();
+    const ralplanCompletionHandled = mode === 'ralplan' && await completeRalplanSession({
+      cwd,
       baseStateDir,
-      mode,
-      active: updated.active === true,
-      currentPhase: typeof updated.current_phase === 'string' ? updated.current_phase : undefined,
-      sessionId: scope.sessionId,
-      source: 'updateModeState',
+      state: updated as Record<string, unknown>,
+      explicitSessionId: scope.sessionId,
     });
+    if (!ralplanCompletionHandled) {
+      await syncCanonicalSkillStateForMode({
+        cwd,
+        baseStateDir,
+        mode,
+        active: updated.active === true,
+        currentPhase: typeof updated.current_phase === 'string' ? updated.current_phase : undefined,
+        sessionId: scope.sessionId,
+        source: 'updateModeState',
+      });
+    }
   }
   return updated;
 }

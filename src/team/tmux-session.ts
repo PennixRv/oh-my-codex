@@ -1,6 +1,6 @@
 import { spawnSync, execFile } from 'child_process';
 import { promisify } from 'util';
-import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs';
+import { chmodSync, existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'fs';
 import { homedir } from 'os';
 import { dirname, isAbsolute, join, resolve } from 'path';
 import {
@@ -36,11 +36,12 @@ import { resolveOmxCliEntryPath } from '../utils/paths.js';
 const execFileAsync = promisify(execFile);
 import { HUD_RESIZE_RECONCILE_DELAY_SECONDS, HUD_TMUX_TEAM_HEIGHT_LINES } from '../hud/constants.js';
 import { OMX_TMUX_HUD_OWNER_ENV } from '../hud/reconcile.js';
-import { findHudWatchPaneIds, OMX_TMUX_HUD_LEADER_PANE_ENV } from '../hud/tmux.js';
+import { findHudWatchPaneIds, hudPaneMatchesOwner, OMX_TMUX_HUD_LEADER_PANE_ENV } from '../hud/tmux.js';
 import { DEFAULT_HUD_CONFIG } from '../hud/types.js';
 
 const OMX_INSTANCE_OPTION = '@omx_instance_id';
 const OMX_PANE_INSTANCE_OPTION = '@omx_pane_instance_id';
+const OMX_TEAM_PANE_OWNER_OPTION = '@omx_team_pane_owner_id';
 
 export interface TeamSession {
   name: string; // tmux target in "session:window" form
@@ -56,6 +57,27 @@ export interface TeamSession {
   resizeHookName: string | null;
   /** Registered tmux resize hook target in "<session>:<window>" form, or null. */
   resizeHookTarget: string | null;
+  /** Team-scoped tmux pane ownership token used by shutdown safety checks. */
+  teamPaneOwnerId: string;
+}
+
+export interface CreateTeamSessionOptions {
+  /**
+   * Stable logical leader id forwarded to HUD/hook runtime and the generic
+   * tmux pane instance tag. Team shutdown must not rely on this value because
+   * environment session ids can be stale when a user starts OMX from another
+   * tmux pane in the same shell/session.
+   */
+  ownerSessionId?: string | null;
+  /** Team-scoped pane owner token used only for Team shutdown/teardown. */
+  teamPaneOwnerId?: string | null;
+}
+
+export interface RestoreStandaloneHudPaneOptions {
+  /** Session id that prompt-submit HUD reconciliation should use to dedupe the restored HUD. */
+  sessionId?: string | null;
+  /** Explicit HUD cwd override. When omitted, the live leader pane cwd is preferred over team launch cwd. */
+  cwd?: string | null;
 }
 
 const INJECTION_MARKER = '[OMX_TMUX_INJECT]';
@@ -185,6 +207,16 @@ function tagPaneInstance(paneTarget: string, instanceId: string): void {
   }
 }
 
+export function tagPaneTeamOwner(paneTarget: string, teamOwnerId: string): void {
+  const target = paneTarget.trim();
+  const sanitized = teamOwnerId.trim();
+  if (!target || !sanitized) return;
+  const result = runTmux(['set-option', '-p', '-t', target, OMX_TEAM_PANE_OWNER_OPTION, sanitized]);
+  if (!result.ok) {
+    throw new Error(`failed to tag tmux pane ${target}: ${result.stderr}`);
+  }
+}
+
 export function mitigateCopyModeUnderlineArtifacts(sessionTarget: string): boolean {
   const normalizedTarget = sessionTarget.trim();
   if (normalizedTarget === '') return false;
@@ -305,6 +337,10 @@ function isHudWatchPane(pane: TmuxPaneInfo): boolean {
   return /\bomx\b.*\bhud\b.*--watch/i.test(start);
 }
 
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 export function chooseTeamLeaderPaneId(panes: TmuxPaneInfo[], preferredPaneId: string): string {
   const preferred = panes.find((pane) => pane.paneId === preferredPaneId);
   if (preferred && !isHudWatchPane(preferred)) return preferred.paneId;
@@ -325,6 +361,228 @@ function findHudPaneIds(target: string, leaderPaneId: string): string[] {
 
 function findOwnedHudPaneIds(target: string, leaderPaneId: string): string[] {
   return findHudWatchPaneIds(listPanes(target), leaderPaneId, { leaderPaneId });
+}
+
+function readPaneCurrentPath(paneId: string): string | null {
+  const result = runTmux(['display-message', '-p', '-t', paneId, '#{pane_current_path}']);
+  if (!result.ok) return null;
+  const currentPath = result.stdout.split('\n')[0]?.trim() || '';
+  return currentPath === '' ? null : currentPath;
+}
+
+function resolveStandaloneHudRestoreCwdCandidates(
+  leaderPaneId: string,
+  teamLaunchCwd: string,
+  explicitCwd?: string | null,
+): Array<{ rawPath: string; trustedByStat: boolean }> {
+  const candidates = [
+    typeof explicitCwd === 'string' ? explicitCwd.trim() : '',
+    readPaneCurrentPath(leaderPaneId) ?? '',
+    teamLaunchCwd.trim(),
+  ].filter((value, index, values) => value !== '' && values.indexOf(value) === index);
+
+  return candidates
+    .map((rawPath) => {
+      const msysDrivePath = process.platform === 'win32' && /^\/[A-Za-z]\//.test(rawPath);
+      if (msysDrivePath) {
+        return { rawPath, trustedByStat: false };
+      }
+      try {
+        return { rawPath, trustedByStat: statSync(rawPath).isDirectory() };
+      } catch {
+        return { rawPath, trustedByStat: false };
+      }
+    })
+    .filter((candidate, index, all) => {
+      if (candidate.trustedByStat) return true;
+      const isLiveLeaderCwd = candidate.rawPath === (readPaneCurrentPath(leaderPaneId) ?? '');
+      return isLiveLeaderCwd || index === all.length - 1;
+    });
+}
+
+export function paneHasOmxInstanceTag(paneId: string | null | undefined, instanceId: string | null | undefined): boolean {
+  const normalizedPaneId = normalizePaneTarget(paneId);
+  const expectedInstanceId = typeof instanceId === 'string' ? instanceId.trim() : '';
+  if (!normalizedPaneId || !expectedInstanceId) return false;
+  const result = runTmux(['show-option', '-qv', '-p', '-t', normalizedPaneId, OMX_PANE_INSTANCE_OPTION]);
+  if (!result.ok) return false;
+  return result.stdout.trim() === expectedInstanceId;
+}
+
+export type PaneTeamOwnerTagReadResult =
+  | { status: 'value'; value: string }
+  | { status: 'missing' }
+  | { status: 'error'; error: string };
+
+export function readPaneTeamOwnerTagResult(paneId: string | null | undefined): PaneTeamOwnerTagReadResult {
+  const normalizedPaneId = normalizePaneTarget(paneId);
+  if (!normalizedPaneId) return { status: 'error', error: 'invalid pane target' };
+  const { result } = spawnPlatformCommandSync('tmux', [
+    'show-option',
+    '-qv',
+    '-p',
+    '-t',
+    normalizedPaneId,
+    OMX_TEAM_PANE_OWNER_OPTION,
+  ], { encoding: 'utf-8' });
+  if (result.error) {
+    return { status: 'error', error: result.error.message };
+  }
+  const stdout = typeof result.stdout === 'string' ? result.stdout.trim() : '';
+  if (result.status === 0) {
+    return stdout === '' ? { status: 'missing' } : { status: 'value', value: stdout };
+  }
+  const stderr = typeof result.stderr === 'string' ? result.stderr.trim() : '';
+  if (result.status === 1 && stderr === '') return { status: 'missing' };
+  return { status: 'error', error: stderr || `tmux show-option exited ${result.status ?? 'unknown'}` };
+}
+
+export function readPaneTeamOwnerTag(paneId: string | null | undefined): string | null {
+  const result = readPaneTeamOwnerTagResult(paneId);
+  return result.status === 'value' ? result.value : null;
+}
+
+export function paneHasOmxTeamOwnerTag(paneId: string | null | undefined, teamOwnerId: string | null | undefined): boolean {
+  const expectedTeamOwnerId = typeof teamOwnerId === 'string' ? teamOwnerId.trim() : '';
+  if (!expectedTeamOwnerId) return false;
+  const result = readPaneTeamOwnerTagResult(paneId);
+  return result.status === 'value' && result.value === expectedTeamOwnerId;
+}
+
+function decodePowerShellEncodedCommands(command: string): string[] {
+  const encodedMatches = [...command.matchAll(/-EncodedCommand\s+([A-Za-z0-9+/=]+)/gi)];
+  const decoded: string[] = [];
+  for (const match of encodedMatches) {
+    const encoded = match[1]?.trim();
+    if (!encoded) continue;
+    try {
+      decoded.push(Buffer.from(encoded, 'base64').toString('utf16le'));
+    } catch {
+      // best effort
+    }
+  }
+  return decoded;
+}
+
+function stripShellAssignmentTailPrefix(tail: string): string {
+  let value = tail.trimStart();
+  while (value.startsWith("'") || value.startsWith('"')) {
+    value = value.slice(1).trimStart();
+  }
+  const envAssignmentPattern = /^[A-Za-z_][A-Za-z0-9_]*=(?:'[^']*'|"[^"]*"|\S+)\s+/;
+  let changed = true;
+  while (changed) {
+    changed = false;
+    const match = value.match(envAssignmentPattern);
+    if (match) {
+      value = value.slice(match[0].length).trimStart();
+      changed = true;
+    }
+  }
+  return value;
+}
+
+const WORKER_CLI_TOKEN_PATTERN = String.raw`(?:"[^"]*(?:^|[\/\\])?(?:codex|claude|gemini)(?:\.(?:js|mjs|cjs|cmd|exe|bat|ps1))?"|'[^']*(?:^|[\/\\])?(?:codex|claude|gemini)(?:\.(?:js|mjs|cjs|cmd|exe|bat|ps1))?'|(?:\S*[\/\\])?(?:codex|claude|gemini)(?:\.(?:js|mjs|cjs|cmd|exe|bat|ps1))?)`;
+
+function shellTailInvokesWorkerCli(tail: string): boolean {
+  const directTail = stripShellAssignmentTailPrefix(tail);
+  const directCliPattern = new RegExp(`^(?:exec\\s+)?${WORKER_CLI_TOKEN_PATTERN}(?:[\\s;"'\`]|$)`, 'i');
+  if (directCliPattern.test(directTail)) return true;
+
+  const shellCommandPattern = /(?:^|\s)-(?:c|lc)\s+(?:"([^"]*)"|'([^']*)'|(\S+))/gi;
+  for (const match of directTail.matchAll(shellCommandPattern)) {
+    const commandText = match[1] ?? match[2] ?? match[3] ?? '';
+    const execCliPattern = new RegExp(`(?:^|[\\s;&|])exec\\s+${WORKER_CLI_TOKEN_PATTERN}(?:[\\s;"'\`]|$)`, 'i');
+    if (execCliPattern.test(commandText)) return true;
+  }
+  return false;
+}
+
+function powerShellTailInvokesWorkerCli(tail: string): boolean {
+  return new RegExp(`(?:^|[;\\s&])(?:&\\s+)?${WORKER_CLI_TOKEN_PATTERN}(?:[\\s;"'\`]|$)`, 'i').test(tail);
+}
+
+function hasSafeShellEnvAssignmentContext(command: string, matchIndex: number): boolean {
+  const prefix = command.slice(0, matchIndex);
+  let quote: "'" | '"' | null = null;
+  let escaped = false;
+  for (const char of prefix) {
+    if (quote === "'") {
+      if (char === "'") quote = null;
+      continue;
+    }
+    if (quote === '"') {
+      if (escaped) {
+        escaped = false;
+        continue;
+      }
+      if (char === '\\') {
+        escaped = true;
+        continue;
+      }
+      if (char === '"') quote = null;
+      continue;
+    }
+    if (char === "'" || char === '"') {
+      quote = char;
+      escaped = false;
+    }
+  }
+  return quote === null;
+}
+
+function hasWorkerCliAfterEnvAssignment(
+  command: string,
+  assignmentPattern: RegExp,
+  contextIsSafe: (command: string, matchIndex: number) => boolean = () => true,
+  tailInvokesWorkerCli: (tail: string) => boolean = shellTailInvokesWorkerCli,
+): boolean {
+  assignmentPattern.lastIndex = 0;
+  for (const match of command.matchAll(assignmentPattern)) {
+    const matchIndex = match.index ?? 0;
+    if (!contextIsSafe(command, matchIndex)) continue;
+    const afterAssignment = command.slice(matchIndex + match[0].length);
+    if (tailInvokesWorkerCli(afterAssignment)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function commandHasTeamWorkerEnvMarker(command: string, envName: string, teamName: string): boolean {
+  const normalized = command.replace(/\\/g, '/');
+  const key = escapeRegExp(envName);
+  const workerValue = `${escapeRegExp(teamName)}/worker-[A-Za-z0-9_-]+`;
+  const shellAssignment = new RegExp(
+    `(?:^|[\\s;])(?:export\\s+)?(?:["']${key}=${workerValue}|${key}=(?:["']?${workerValue}))`,
+    'g',
+  );
+  const powerShellAssignment = new RegExp(`(?:^|;)\\s*\\$env:${key}\\s*=\\s*["']?${workerValue}`, 'gi');
+  return hasWorkerCliAfterEnvAssignment(
+    normalized,
+    shellAssignment,
+    hasSafeShellEnvAssignmentContext,
+    shellTailInvokesWorkerCli,
+  )
+    || hasWorkerCliAfterEnvAssignment(
+      normalized,
+      powerShellAssignment,
+      () => true,
+      powerShellTailInvokesWorkerCli,
+    );
+}
+
+function paneLooksLikeTeamWorkerPane(pane: TmuxPaneInfo, teamName: string): boolean {
+  const command = `${pane.startCommand || ''} ${pane.currentCommand || ''}`.replace(/\\/g, '/');
+  if (!command.trim() || !teamName) return false;
+  if (command.includes(`/team/${teamName}/runtime/worker-`) && command.includes('-startup.sh')) {
+    return true;
+  }
+  const commandVariants = [command, ...decodePowerShellEncodedCommands(command)];
+  return commandVariants.some((candidate) => (
+    commandHasTeamWorkerEnvMarker(candidate, 'OMX_TEAM_INTERNAL_WORKER', teamName)
+    || commandHasTeamWorkerEnvMarker(candidate, 'OMX_TEAM_WORKER', teamName)
+  ));
 }
 
 const MAX_FRACTIONAL_SLEEP_MS = 60_000;
@@ -840,6 +1098,67 @@ export function resolveTeamWorkerCliPlan(
   });
 }
 
+export function resolveTeamWorkerCliForResolvedLaunchArgs(
+  workerIndex: number,
+  workerCount: number,
+  resolvedLaunchArgs: string[],
+  env: NodeJS.ProcessEnv = process.env,
+): TeamWorkerCli {
+  if (!Number.isInteger(workerCount) || workerCount < 1) {
+    throw new Error(`workerCount must be >= 1 (got ${workerCount})`);
+  }
+  if (!Number.isInteger(workerIndex) || workerIndex < 1 || workerIndex > workerCount) {
+    throw new Error(`workerIndex must be within 1..${workerCount} (got ${workerIndex})`);
+  }
+
+  const rawMap = String(env.OMX_TEAM_WORKER_CLI_MAP ?? '').trim();
+  const autoCli = resolveTeamWorkerCli(resolvedLaunchArgs, {
+    ...env,
+    OMX_TEAM_WORKER_CLI: 'auto',
+  });
+  const normalizeEntry = (entry: string): TeamWorkerCli | 'auto' | null => {
+    const normalized = entry.trim().toLowerCase();
+    if (normalized === 'auto' || normalized === 'codex' || normalized === 'claude' || normalized === 'gemini') {
+      return normalized;
+    }
+    return null;
+  };
+  const invalidMapError = () => new Error(
+    `Invalid ${OMX_TEAM_WORKER_CLI_MAP_ENV} value "${env[OMX_TEAM_WORKER_CLI_MAP_ENV]}". `
+      + 'Expected comma-separated values: auto|codex|claude|gemini.',
+  );
+
+  if (rawMap === '') {
+    return resolveTeamWorkerCli(resolvedLaunchArgs, env);
+  }
+
+  const entries = rawMap.split(',').map((part) => part.trim());
+  if (entries.length === 0 || entries.every((part) => part.length === 0)) {
+    throw invalidMapError();
+  }
+  if (entries.some((part) => part.length === 0)) {
+    throw new Error(
+      `Invalid ${OMX_TEAM_WORKER_CLI_MAP_ENV} value "${env[OMX_TEAM_WORKER_CLI_MAP_ENV]}". `
+        + 'Empty entries are not allowed.',
+    );
+  }
+  if (entries.length !== 1 && entries.length !== workerCount) {
+    throw new Error(
+      `Invalid ${OMX_TEAM_WORKER_CLI_MAP_ENV} length ${entries.length}; `
+        + `expected 1 or ${workerCount} comma-separated values.`,
+    );
+  }
+
+  const expanded = entries.length === 1
+    ? Array.from({ length: workerCount }, () => entries[0] as string)
+    : entries;
+  const selected = normalizeEntry(expanded[workerIndex - 1] ?? '');
+  if (!selected) {
+    throw invalidMapError();
+  }
+  return selected === 'auto' ? autoCli : selected;
+}
+
 function shouldGrantExecutionBypassForRole(workerRole?: string): boolean {
   const normalizedRole = workerRole?.trim().toLowerCase();
   if (!normalizedRole) return true;
@@ -1030,7 +1349,7 @@ export function buildWorkerStartupCommand(
   initialPrompt?: string,
   workerRole?: string,
 ): string {
-  const processSpec = buildWorkerProcessLaunchSpec(
+  const processSpec = buildWorkerStartupProcessLaunchSpec(
     teamName,
     workerIndex,
     launchArgs,
@@ -1050,7 +1369,7 @@ export function buildWorkerStartupCommand(
   }
   const resolvedLeaderNodePath = processSpec.env[OMX_LEADER_NODE_PATH_ENV]?.trim() || resolveLeaderNodePath();
   const leaderNodeDir = /[\\/]/.test(resolvedLeaderNodePath)
-    ? resolvedLeaderNodePath.replace(/[\\/][^\\/]+$/, '')
+    ? translatePathForMsys(resolvedLeaderNodePath.replace(/[\\/][^\\/]+$/, ''))
     : '';
   if (isNativeWindows()) {
     const powershellPath = resolveNativeWindowsPowerShellPath();
@@ -1078,8 +1397,8 @@ export function buildWorkerStartupCommand(
 
   const launchSpec = buildWorkerLaunchSpec(process.env.SHELL);
   const pathPrefix = leaderNodeDir ? `export PATH=${shellQuoteSingle(leaderNodeDir)}:$PATH; ` : '';
-  const quotedArgs = startupArgs.map(shellQuoteSingle).join(' ');
-  const quotedCommand = shellQuoteSingle(processSpec.command);
+  const quotedArgs = startupArgs.map((arg) => shellQuoteSingle(translatePathForMsys(arg))).join(' ');
+  const quotedCommand = shellQuoteSingle(translatePathForMsys(processSpec.command));
   const cliInvocation = quotedArgs.length > 0 ? `exec ${quotedCommand} ${quotedArgs}` : `exec ${quotedCommand}`;
   // Keep worker tmux panes non-interactive and rc-free by default. PR #2283
   // blocked rc sourcing for detached leader/HUD panes, but team workers still
@@ -1112,12 +1431,12 @@ function buildWorkerStartupScriptContent(
 ): string {
   const resolvedLeaderNodePath = processSpec.env[OMX_LEADER_NODE_PATH_ENV]?.trim() || resolveLeaderNodePath();
   const leaderNodeDir = /[\\/]/.test(resolvedLeaderNodePath)
-    ? resolvedLeaderNodePath.replace(/[\\/][^\\/]+$/, '')
+    ? translatePathForMsys(resolvedLeaderNodePath.replace(/[\\/][^\\/]+$/, ''))
     : '';
   const launchSpec = buildWorkerLaunchSpec(process.env.SHELL);
   const pathPrefix = leaderNodeDir ? `export PATH=${shellQuoteSingle(leaderNodeDir)}:$PATH\n` : '';
-  const quotedArgs = startupArgs.map(shellQuoteSingle).join(' ');
-  const quotedCommand = shellQuoteSingle(processSpec.command);
+  const quotedArgs = startupArgs.map((arg) => shellQuoteSingle(translatePathForMsys(arg))).join(' ');
+  const quotedCommand = shellQuoteSingle(translatePathForMsys(processSpec.command));
   const cliInvocation = quotedArgs.length > 0 ? `exec ${quotedCommand} ${quotedArgs}` : `exec ${quotedCommand}`;
   const rcPrefix = shouldSourceTeamWorkerShellRc({ ...process.env, ...extraEnv }) && launchSpec.rcFile
     ? `if [ -f ${launchSpec.rcFile} ]; then . ${launchSpec.rcFile}; fi\n`
@@ -1133,7 +1452,7 @@ function buildWorkerStartupScriptContent(
     '#!/bin/sh',
     'set -eu',
     `unset ${OMX_TMUX_HUD_OWNER_ENV} ${OMX_TMUX_HUD_LEADER_PANE_ENV}`,
-    `cd ${shellQuoteSingle(cwd)}`,
+    `cd ${shellQuoteSingle(translatePathForMsys(cwd))}`,
     envExports,
     `exec ${shellQuoteSingle(launchSpec.shell)} -c ${shellQuoteSingle(`${rcPrefix}${pathPrefix}${cliInvocation}`)}`,
     '',
@@ -1150,11 +1469,11 @@ export function writeWorkerStartupScriptCommand(
   initialPrompt?: string,
   workerRole?: string,
 ): string | null {
-  if (process.platform === 'win32') return null;
+  if (process.platform === 'win32' && !isMsysOrGitBash()) return null;
   const stateRoot = extraEnv[OMX_TEAM_STATE_ROOT_ENV]?.trim();
   if (!stateRoot) return null;
 
-  const processSpec = buildWorkerProcessLaunchSpec(
+  const processSpec = buildWorkerStartupProcessLaunchSpec(
     teamName,
     workerIndex,
     launchArgs,
@@ -1177,10 +1496,59 @@ export function writeWorkerStartupScriptCommand(
   mkdirSync(dirname(scriptPath), { recursive: true });
   writeFileSync(scriptPath, buildWorkerStartupScriptContent(processSpec, startupEnv, startupArgs, cwd, extraEnv), 'utf-8');
   chmodSync(scriptPath, 0o700);
-  return `exec /bin/sh ${shellQuoteSingle(scriptPath)}`;
+  return `exec /bin/sh ${shellQuoteSingle(translatePathForMsys(scriptPath))}`;
 }
 
+type WorkerProcessLaunchMode = 'direct-spawn' | 'posix-startup-script';
+
 export function buildWorkerProcessLaunchSpec(
+  teamName: string,
+  workerIndex: number,
+  launchArgs: string[] = [],
+  cwd: string = process.cwd(),
+  extraEnv: Record<string, string> = {},
+  workerCliOverride?: TeamWorkerCli,
+  initialPrompt?: string,
+  workerRole?: string,
+): WorkerProcessLaunchSpec {
+  return buildWorkerProcessLaunchSpecForMode(
+    'direct-spawn',
+    teamName,
+    workerIndex,
+    launchArgs,
+    cwd,
+    extraEnv,
+    workerCliOverride,
+    initialPrompt,
+    workerRole,
+  );
+}
+
+function buildWorkerStartupProcessLaunchSpec(
+  teamName: string,
+  workerIndex: number,
+  launchArgs: string[] = [],
+  cwd: string = process.cwd(),
+  extraEnv: Record<string, string> = {},
+  workerCliOverride?: TeamWorkerCli,
+  initialPrompt?: string,
+  workerRole?: string,
+): WorkerProcessLaunchSpec {
+  return buildWorkerProcessLaunchSpecForMode(
+    'posix-startup-script',
+    teamName,
+    workerIndex,
+    launchArgs,
+    cwd,
+    extraEnv,
+    workerCliOverride,
+    initialPrompt,
+    workerRole,
+  );
+}
+
+function buildWorkerProcessLaunchSpecForMode(
+  mode: WorkerProcessLaunchMode,
   teamName: string,
   workerIndex: number,
   launchArgs: string[] = [],
@@ -1210,9 +1578,11 @@ export function buildWorkerProcessLaunchSpec(
     : undefined;
 
   const resolvedCliPath = resolveAbsoluteBinaryPath(workerCli);
-  const platformSpec = isNativeWindows()
+  const shouldUseNativeWindowsLaunchSpec = process.platform === 'win32'
+    && (mode === 'direct-spawn' || !isMsysOrGitBash(effectiveEnv, process.platform));
+  const platformSpec = shouldUseNativeWindowsLaunchSpec
     ? buildPlatformCommandSpec(workerCli, effectiveCliLaunchArgs, process.platform, effectiveEnv)
-    : { command: resolvedCliPath, args: effectiveCliLaunchArgs };
+    : { command: resolvedCliPath, args: effectiveCliLaunchArgs, resolvedPath: resolvedCliPath };
   const resolvedLauncherPath = platformSpec.resolvedPath || resolvedCliPath;
   const modelProviderOverride = workerCli === 'codex'
     ? extractModelProviderOverrideValue(effectiveCliLaunchArgs)
@@ -1335,6 +1705,7 @@ export function createTeamSession(
     workerCli?: TeamWorkerCli;
     workerRole?: string;
   }> = [],
+  options: CreateTeamSessionOptions = {},
 ): TeamSession {
   if (!isTmuxAvailable()) {
     throw new Error('tmux is not available');
@@ -1374,16 +1745,18 @@ export function createTeamSession(
       throw new Error(`failed to parse current tmux target: ${context.stdout}`);
     }
     const teamTarget = `${sessionName}:${windowIndex}`;
-    const instanceId = (process.env.OMX_SESSION_ID || '').trim();
-    if (instanceId) {
-      const tagResult = runTmux(['set-option', '-t', sessionName, OMX_INSTANCE_OPTION, instanceId]);
+    const ownerSessionId = (options.ownerSessionId ?? process.env.OMX_SESSION_ID ?? '').trim();
+    const teamPaneOwnerId = (options.teamPaneOwnerId ?? `team:${safeTeamName}`).trim();
+    if (ownerSessionId) {
+      const tagResult = runTmux(['set-option', '-t', sessionName, OMX_INSTANCE_OPTION, ownerSessionId]);
       if (!tagResult.ok) {
         throw new Error(`failed to tag tmux session ${sessionName}: ${tagResult.stderr}`);
       }
     }
     const panes = listPanes(teamTarget);
     const leaderPaneId = chooseTeamLeaderPaneId(panes, detectedLeaderPaneId);
-    tagPaneInstance(leaderPaneId, instanceId);
+    tagPaneInstance(leaderPaneId, ownerSessionId);
+    tagPaneTeamOwner(leaderPaneId, teamPaneOwnerId);
     const automaticHudEnabled = isAutomaticTeamHudEnabled(cwd);
     const initialHudPaneIds = findHudPaneIds(teamTarget, leaderPaneId);
     const omxEntry = resolveOmxCliEntryPath();
@@ -1449,7 +1822,8 @@ export function createTeamSession(
       if (isNativeWindows() && !waitForPaneToRemainPresent(teamTarget, paneId)) {
         throw new Error(`worker pane ${i} did not remain present after tmux split-window returned ${paneId}`);
       }
-      tagPaneInstance(paneId, instanceId);
+      tagPaneInstance(paneId, ownerSessionId);
+      tagPaneTeamOwner(paneId, teamPaneOwnerId);
       workerPaneIds.push(paneId);
       if (i === 1) rightStackRootPaneId = paneId;
     }
@@ -1472,7 +1846,7 @@ export function createTeamSession(
     let resizeHookName: string | null = null;
     let resizeHookTarget: string | null = null;
     if (canRecreateTeamHud && omxEntry) {
-      const hudCmd = `exec env ${formatHudEnvAssignments(process.env, { sessionId: instanceId, leaderPaneId })} node ${shellQuoteSingle(translatePathForMsys(omxEntry))} hud --watch`;
+      const hudCmd = `exec env ${formatHudEnvAssignments(process.env, { sessionId: ownerSessionId, leaderPaneId })} node ${shellQuoteSingle(translatePathForMsys(omxEntry))} hud --watch`;
       const hudCwd = translatePathForMsys(cwd);
       const hudResult = runTmux([
         'split-window', '-v', '-f', '-l', String(HUD_TMUX_TEAM_HEIGHT_LINES), '-t', teamTarget, '-d', '-P', '-F', '#{pane_id}', '-c', hudCwd, hudCmd,
@@ -1484,7 +1858,8 @@ export function createTeamSession(
           if (isNativeWindows() && !waitForPaneToRemainPresent(teamTarget, id)) {
             throw new Error(`HUD pane did not remain present after tmux split-window returned ${id}`);
           }
-          tagPaneInstance(id, instanceId);
+          tagPaneInstance(id, ownerSessionId);
+          tagPaneTeamOwner(id, teamPaneOwnerId);
           hudPaneId = id;
 
           if (isNativeWindows()) {
@@ -1559,6 +1934,7 @@ export function createTeamSession(
       hudPaneId,
       resizeHookName,
       resizeHookTarget,
+      teamPaneOwnerId,
     };
   } catch (error) {
     if (registeredClientAttachedHook) {
@@ -1582,6 +1958,7 @@ export function createTeamSession(
 export function restoreStandaloneHudPane(
   leaderPaneId: string | null | undefined,
   cwd: string,
+  options: RestoreStandaloneHudPaneOptions = {},
 ): string | null {
   const normalizedLeaderPaneId = normalizePaneTarget(leaderPaneId);
   if (!normalizedLeaderPaneId) return null;
@@ -1608,24 +1985,34 @@ export function restoreStandaloneHudPane(
     return existingHudPaneId;
   }
 
-  const hudCmd = `exec env ${formatHudEnvAssignments(process.env, { leaderPaneId: normalizedLeaderPaneId })} ${shellQuoteSingle(translatePathForMsys(resolveLeaderNodePath()))} ${shellQuoteSingle(translatePathForMsys(omxEntry))} hud --watch`;
-  const hudCwd = translatePathForMsys(cwd);
-  const hudResult = runTmux([
-    'split-window',
-    '-v',
-    '-l',
-    String(HUD_TMUX_TEAM_HEIGHT_LINES),
-    '-t',
+  const hudCmd = `exec env ${formatHudEnvAssignments(process.env, { sessionId: options.sessionId, leaderPaneId: normalizedLeaderPaneId })} ${shellQuoteSingle(translatePathForMsys(resolveLeaderNodePath()))} ${shellQuoteSingle(translatePathForMsys(omxEntry))} hud --watch`;
+  let hudResult: ReturnType<typeof runTmux> | null = null;
+  for (const restoreCwd of resolveStandaloneHudRestoreCwdCandidates(
     normalizedLeaderPaneId,
-    '-d',
-    '-P',
-    '-F',
-    '#{pane_id}',
-    '-c',
-    hudCwd,
-    hudCmd,
-  ]);
-  if (!hudResult.ok) return null;
+    cwd,
+    options.cwd,
+  )) {
+    const candidateResult = runTmux([
+      'split-window',
+      '-v',
+      '-l',
+      String(HUD_TMUX_TEAM_HEIGHT_LINES),
+      '-t',
+      normalizedLeaderPaneId,
+      '-d',
+      '-P',
+      '-F',
+      '#{pane_id}',
+      '-c',
+      translatePathForMsys(restoreCwd.rawPath),
+      hudCmd,
+    ]);
+    if (candidateResult.ok) {
+      hudResult = candidateResult;
+      break;
+    }
+  }
+  if (!hudResult?.ok) return null;
 
   const paneId = hudResult.stdout.split('\n')[0]?.trim() ?? '';
   if (!paneId.startsWith('%')) return null;
@@ -2399,8 +2786,10 @@ export interface PaneTeardownOptions {
 
 export interface SharedSessionShutdownTopology {
   livePaneIds: string[];
+  teamWorkerPaneIds: string[];
   leaderPaneId: string | null;
   hudPaneIds: string[];
+  leaderOwnedHudPaneIds: string[];
 }
 
 function normalizePaneTarget(value: string | null | undefined): string | null {
@@ -2452,6 +2841,7 @@ function isIgnorablePaneTeardownFailure(stderr: string): boolean {
 export function resolveSharedSessionShutdownTopology(
   sessionName: string,
   preferredLeaderPaneId?: string | null,
+  teamName?: string | null,
 ): SharedSessionShutdownTopology {
   const panes = listPanes(sessionName);
   const livePaneIds = panes
@@ -2461,25 +2851,59 @@ export function resolveSharedSessionShutdownTopology(
   if (panes.length === 0) {
     return {
       livePaneIds,
+      teamWorkerPaneIds: [],
       leaderPaneId: fallbackLeaderPaneId,
       hudPaneIds: [],
+      leaderOwnedHudPaneIds: [],
     };
   }
 
-  const resolvedLeaderPaneId = normalizePaneTarget(
-    chooseTeamLeaderPaneId(panes, fallbackLeaderPaneId ?? ''),
-  ) ?? fallbackLeaderPaneId;
+  const normalizedTeamName = typeof teamName === 'string' ? teamName.trim() : '';
+  const normalizedTeamWorkerPaneIds = normalizedTeamName
+    ? panes
+      .filter((pane) => !isHudWatchPane(pane))
+      .filter((pane) => paneLooksLikeTeamWorkerPane(pane, normalizedTeamName))
+      .map((pane) => pane.paneId)
+      .filter((paneId) => paneId.startsWith('%'))
+    : [];
+  const workerPaneIdSet = new Set(normalizedTeamWorkerPaneIds);
+  const resolvedLeaderPaneId = chooseSharedSessionShutdownLeaderPaneId(
+    panes,
+    fallbackLeaderPaneId,
+    workerPaneIdSet,
+  );
   const hudPaneIds = panes
     .filter((pane) => pane.paneId !== resolvedLeaderPaneId)
     .filter((pane) => isHudWatchPane(pane))
     .map((pane) => pane.paneId)
     .filter((paneId) => paneId.startsWith('%'));
+  const leaderOwnedHudPaneIds = resolvedLeaderPaneId
+    ? panes
+      .filter((pane) => pane.paneId !== resolvedLeaderPaneId)
+      .filter((pane) => hudPaneMatchesOwner(pane, { leaderPaneId: resolvedLeaderPaneId }))
+      .map((pane) => pane.paneId)
+      .filter((paneId) => paneId.startsWith('%'))
+    : [];
 
   return {
     livePaneIds,
+    teamWorkerPaneIds: normalizedTeamWorkerPaneIds,
     leaderPaneId: resolvedLeaderPaneId,
     hudPaneIds,
+    leaderOwnedHudPaneIds,
   };
+}
+
+function chooseSharedSessionShutdownLeaderPaneId(
+  panes: TmuxPaneInfo[],
+  preferredLeaderPaneId: string | null,
+  teamWorkerPaneIds: ReadonlySet<string>,
+): string | null {
+  const preferred = panes.find((pane) => pane.paneId === preferredLeaderPaneId);
+  if (preferred && !isHudWatchPane(preferred) && !teamWorkerPaneIds.has(preferred.paneId)) {
+    return preferred.paneId;
+  }
+  return null;
 }
 
 /**

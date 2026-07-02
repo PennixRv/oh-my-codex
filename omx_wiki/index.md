@@ -1,11 +1,18 @@
 # Wiki Index
 
-> 8 pages | Last updated: 2026-07-02T00:00:00.000Z
+> 15 pages | Last updated: 2026-07-02T00:00:00.000Z
 
 ## architecture
 
 - [OMX Role Routing And Model Mapping Analysis 2026-06-29](omx-role-routing-and-model-mapping-analysis-2026-06-29.md) — # OMX Role Routing And Model Mapping Analysis 2026-06-29
 - [Upstream Integration Wave 1 Matrix 2026-07-01](upstream-integration-wave-1-matrix-2026-07-01.md) — # Upstream Integration Wave 1 Matrix 2026-07-01
+- [Upstream Integration Wave 2A Matrix 2026-07-01](upstream-integration-wave-2a-matrix-2026-07-01.md) — # Upstream Integration Wave 2A Matrix 2026-07-01
+- [Upstream Integration Wave 2B Matrix 2026-07-01](upstream-integration-wave-2b-matrix-2026-07-01.md) — # Upstream Integration Wave 2B Matrix 2026-07-01
+- [Upstream Integration Wave 2C Matrix 2026-07-01](upstream-integration-wave-2c-matrix-2026-07-01.md) — # Upstream Integration Wave 2C Matrix 2026-07-01
+- [Upstream Integration Wave 3A Matrix 2026-07-01](upstream-integration-wave-3a-matrix-2026-07-01.md) — # Upstream Integration Wave 3A Matrix 2026-07-01
+- [Upstream Integration Wave 3B Matrix 2026-07-01](upstream-integration-wave-3b-matrix-2026-07-01.md) — # Upstream Integration Wave 3B Matrix 2026-07-01
+- [Upstream Integration Wave 3C Matrix 2026-07-01](upstream-integration-wave-3c-matrix-2026-07-01.md) — # Upstream Integration Wave 3C Matrix 2026-07-01
+- [Upstream Integration Wave 3D Matrix 2026-07-01](upstream-integration-wave-3d-matrix-2026-07-01.md) — # Upstream Integration Wave 3D Matrix 2026-07-01
 - [Upstream Integration Wave 4 Matrix 2026-07-02](upstream-integration-wave-4-matrix-2026-07-02.md) — # Upstream Integration Wave 4 Matrix 2026-07-02
 
 ## debugging

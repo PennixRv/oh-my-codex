@@ -288,6 +288,27 @@ describe('getModelForMode', () => {
     assert.equal(getAgentReasoningOverride('planner'), 'high');
   });
 
+  it('supports upstream agentModels aliases while keeping roleModels authoritative', async () => {
+    await writeConfig({
+      agentModels: {
+        Planner: ' gpt-5.4-mini ',
+        debugger: 'gpt-5.4',
+      },
+      roleModels: {
+        planner: { reasoning: 'high' },
+        debugger: { model: 'gpt-5.5' },
+      },
+    });
+
+    assert.deepEqual(getRoleModelOverride('planner'), {
+      model: 'gpt-5.4-mini',
+      reasoning: 'high',
+    });
+    assert.deepEqual(getRoleModelOverride('debugger'), {
+      model: 'gpt-5.5',
+    });
+  });
+
   it('keeps explicit low-complexity config ahead of OMX_DEFAULT_SPARK_MODEL', async () => {
     process.env.OMX_DEFAULT_SPARK_MODEL = 'gpt-5.3-codex-spark-fast';
     await writeConfig({ models: { team_low_complexity: 'gpt-4.1-mini' } });

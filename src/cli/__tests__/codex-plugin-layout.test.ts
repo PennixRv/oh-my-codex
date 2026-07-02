@@ -210,6 +210,26 @@ async function assertPluginHookEventsAlignWithLauncher(): Promise<void> {
   );
 }
 
+async function assertPluginHookLauncherWindowsSpawnContract(): Promise<void> {
+  const launcher = await readFile(pluginHookLauncherPath, 'utf-8');
+
+  assert.match(
+    launcher,
+    /function buildSpawnOptions\(command\)/,
+    'plugin hook launcher should centralize Windows spawn policy in buildSpawnOptions()',
+  );
+  assert.match(
+    launcher,
+    /extension === '\.exe' \|\| extension === '\.com'/,
+    'plugin hook launcher should bypass shell wrapping for native Windows executables',
+  );
+  assert.doesNotMatch(
+    launcher,
+    /shell:\s*process\.platform === 'win32'/,
+    'plugin hook launcher should not unconditionally shell-wrap all Windows launches',
+  );
+}
+
 async function assertPluginHookLaunchesPostCompactFromCache(): Promise<void> {
   const cacheRoot = await mkdtemp(join(tmpdir(), 'omx-plugin-hook-cache-'));
   const cachePluginRoot = join(cacheRoot, pluginName, 'local');
@@ -403,6 +423,10 @@ describe('official Codex plugin layout', () => {
 
   it('keeps generated plugin hook events aligned with the launcher allowlist', async () => {
     await assertPluginHookEventsAlignWithLauncher();
+  });
+
+  it('keeps the plugin hook launcher Windows spawn contract aligned with the executable bypass rule', async () => {
+    await assertPluginHookLauncherWindowsSpawnContract();
   });
 
   it('ships plugin-scoped hooks and disabled-by-default MCP compatibility metadata', async () => {

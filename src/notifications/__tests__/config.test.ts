@@ -317,4 +317,37 @@ describe('getReplyListenerPlatformConfig', () => {
     assert.equal(platformConfig.discordEnabled, false);
     assert.equal(platformConfig.discordBotToken, undefined);
   });
+
+  it('inherits top-level credentials for event-level enabled reply platforms', () => {
+    const config = {
+      enabled: true,
+      telegram: {
+        enabled: true,
+        botToken: 'tg-token',
+        chatId: 'tg-chat',
+      },
+      'discord-bot': {
+        enabled: true,
+        botToken: 'dc-token',
+        channelId: 'dc-channel',
+        mention: '<@12345678901234567>',
+      },
+      events: {
+        'ask-user-question': {
+          enabled: true,
+          'discord-bot': {
+            enabled: true,
+          },
+        },
+      },
+    };
+
+    const platformConfig = getReplyListenerPlatformConfig(config);
+    assert.equal(platformConfig.telegramEnabled, true);
+    assert.equal(platformConfig.telegramBotToken, 'tg-token');
+    assert.equal(platformConfig.discordEnabled, true);
+    assert.equal(platformConfig.discordBotToken, 'dc-token');
+    assert.equal(platformConfig.discordChannelId, 'dc-channel');
+    assert.equal(platformConfig.discordMention, '<@12345678901234567>');
+  });
 });

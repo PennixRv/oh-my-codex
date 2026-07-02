@@ -9,8 +9,10 @@ import {
   resolveAgentDefaultModel,
   resolveAgentReasoningEffort,
   resolveTeamWorkerLaunchArgs,
+  resolveTeamWorkerLaunchDiagnostics,
   TEAM_LOW_COMPLEXITY_DEFAULT_MODEL,
   resolveTeamLowComplexityDefaultModel,
+  shouldHonorAgentExactModel,
 } from '../model-contract.js';
 
 function expectedLowComplexityModel(): string {
@@ -187,8 +189,19 @@ describe('team model contract', () => {
       assert.equal(resolveAgentDefaultModel('explore'), expectedLowComplexityModel());
       assert.equal(resolveAgentDefaultModel('writer'), 'gpt-5.5');
       assert.equal(resolveAgentDefaultModel('executor'), 'gpt-5.5');
-      assert.equal(resolveAgentDefaultModel('architect'), 'gpt-5.5');
+      assert.equal(resolveAgentDefaultModel('architect'), 'gpt-5.4-mini');
       assert.equal(resolveAgentDefaultModel('does-not-exist'), undefined);
+    });
+  });
+
+  it('honors exact model pins before frontier fallback routing', () => {
+    withIsolatedDefaultModelEnv(() => {
+      process.env.OMX_DEFAULT_FRONTIER_MODEL = 'gpt-5.2-frontier';
+
+      assert.equal(resolveAgentDefaultModel('planner'), 'gpt-5.4-mini');
+      assert.equal(resolveAgentDefaultModel('architect'), 'gpt-5.4-mini');
+      assert.equal(resolveAgentDefaultModel('researcher'), 'gpt-5.4-mini');
+      assert.equal(resolveAgentDefaultModel('critic'), 'gpt-5.2-frontier');
     });
   });
 
@@ -216,6 +229,121 @@ describe('team model contract', () => {
     } finally {
       await rm(codexHome, { recursive: true, force: true });
     }
+  });
+
+  it('treats exact models and explicit roleModels as protected exact-role defaults', async () => {
+    const codexHome = await mkdtemp(join(tmpdir(), 'omx-model-contract-exact-role-'));
+    try {
+      await writeFile(join(codexHome, '.omx-config.json'), JSON.stringify({
+        roleModels: {
+          writer: {
+            model: 'gpt-5.4-custom',
+          },
+        },
+      }));
+
+      assert.equal(shouldHonorAgentExactModel('planner'), true);
+      assert.equal(shouldHonorAgentExactModel('writer', codexHome), true);
+      assert.equal(shouldHonorAgentExactModel('executor', codexHome), false);
+    } finally {
+      await rm(codexHome, { recursive: true, force: true });
+    }
+  });
+
+  it('lets exact role model defaults override inherited leader models when requested', () => {
+    withIsolatedDefaultModelEnv(() => {
+      assert.deepEqual(
+        resolveTeamWorkerLaunchArgs({
+          inheritedArgs: ['--dangerously-bypass-approvals-and-sandbox', '--model', 'gpt-5.5'],
+          fallbackModel: resolveAgentDefaultModel('planner'),
+          preferredReasoning: resolveAgentReasoningEffort('planner'),
+          honorExactRoleModel: true,
+        }),
+        [
+          '--dangerously-bypass-approvals-and-sandbox',
+          '-c',
+          'model_reasoning_effort="high"',
+          '--model',
+          'gpt-5.4-mini',
+        ],
+      );
+    });
+  });
+
+  it('preserves explicit worker model overrides before exact role defaults', () => {
+    withIsolatedDefaultModelEnv(() => {
+      assert.deepEqual(
+        resolveTeamWorkerLaunchArgs({
+          existingRaw: '--model explicit-worker-model',
+          inheritedArgs: ['--dangerously-bypass-approvals-and-sandbox', '--model', 'gpt-5.5'],
+          fallbackModel: resolveAgentDefaultModel('planner'),
+          preferredReasoning: resolveAgentReasoningEffort('planner'),
+          honorExactRoleModel: true,
+        }),
+        [
+          '--dangerously-bypass-approvals-and-sandbox',
+          '-c',
+          'model_reasoning_effort="high"',
+          '--model',
+          'explicit-worker-model',
+        ],
+      );
+
+      const diagnostics = resolveTeamWorkerLaunchDiagnostics({
+        requestedAgentType: 'planner',
+        existingRaw: '--model explicit-worker-model',
+        inheritedArgs: ['--model', 'gpt-5.5'],
+        fallbackModel: resolveAgentDefaultModel('planner'),
+        preferredReasoning: resolveAgentReasoningEffort('planner'),
+        honorExactRoleModel: true,
+      });
+
+      assert.equal(diagnostics.actualModel, 'explicit-worker-model');
+      assert.equal(diagnostics.modelSource, 'env');
+      assert.equal(diagnostics.inheritedParentModel, false);
+    });
+  });
+
+  it('reports requested and actual launch resolution including inherited parent models', () => {
+    withIsolatedDefaultModelEnv(() => {
+      assert.deepEqual(
+        resolveTeamWorkerLaunchDiagnostics({
+          requestedAgentType: 'architect',
+          fallbackModel: resolveAgentDefaultModel('architect'),
+          preferredReasoning: resolveAgentReasoningEffort('architect'),
+        }),
+        {
+          requestedAgentType: 'architect',
+          requestedDefaultModel: 'gpt-5.4-mini',
+          requestedDefaultReasoning: 'high',
+          actualModel: 'gpt-5.4-mini',
+          actualReasoning: 'high',
+          modelSource: 'fallback',
+          reasoningSource: 'role-default',
+          inheritedParentModel: false,
+          actualLaunchArgs: ['-c', 'model_reasoning_effort="high"', '--model', 'gpt-5.4-mini'],
+        },
+      );
+
+      const inheritedDiagnostics = resolveTeamWorkerLaunchDiagnostics({
+        requestedAgentType: 'explore',
+        inheritedArgs: ['--model', 'parent-session-model'],
+        fallbackModel: resolveAgentDefaultModel('explore'),
+        preferredReasoning: resolveAgentReasoningEffort('explore'),
+      });
+
+      assert.equal(inheritedDiagnostics.requestedDefaultModel, expectedLowComplexityModel());
+      assert.equal(inheritedDiagnostics.actualModel, 'parent-session-model');
+      assert.equal(inheritedDiagnostics.modelSource, 'inherited');
+      assert.equal(inheritedDiagnostics.reasoningSource, 'role-default');
+      assert.equal(inheritedDiagnostics.inheritedParentModel, true);
+      assert.deepEqual(inheritedDiagnostics.actualLaunchArgs, [
+        '-c',
+        'model_reasoning_effort="low"',
+        '--model',
+        'parent-session-model',
+      ]);
+    });
   });
 });
 

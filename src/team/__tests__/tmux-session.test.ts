@@ -57,6 +57,7 @@ import {
   dismissTrustPromptIfPresent,
   evaluateStartupDirectTriggerSafetyCapture,
   mitigateCopyModeUnderlineArtifacts,
+  resolveSharedSessionShutdownTopology,
 } from '../tmux-session.js';
 import { HUD_RESIZE_RECONCILE_DELAY_SECONDS, HUD_TMUX_TEAM_HEIGHT_LINES } from '../../hud/constants.js';
 import * as tmuxSessionModule from '../tmux-session.js';
@@ -224,6 +225,32 @@ describe('chooseTeamLeaderPaneId', () => {
       { paneId: '%3', currentCommand: 'node', startCommand: "node omx hud --watch" },
     ];
     assert.equal(chooseTeamLeaderPaneId(panes, '%2'), '%2');
+  });
+});
+
+describe('resolveSharedSessionShutdownTopology', () => {
+  it('recognizes env-prefixed team worker panes in shared sessions', async () => {
+    await withMockTmuxFixture(
+      'omx-tmux-shared-session-topology-',
+      () => `#!/bin/sh
+set -eu
+case "$1" in
+  list-panes)
+    printf "%%11\\tzsh\\tzsh\\n%%12\\tnode\\tnode /tmp/bin/omx.js hud --watch\\n%%13\\tcodex\\tenv OMX_TEAM_INTERNAL_WORKER=shared-shutdown-cli/worker-1 codex\\n%%14\\tcodex\\tenv OMX_TEAM_INTERNAL_WORKER=shared-shutdown-cli/worker-2 codex\\n%%15\\tcodex\\tcodex unrelated-not-worker\\n"
+    exit 0
+    ;;
+  *)
+    exit 0
+    ;;
+esac
+`,
+      async () => {
+        const topology = resolveSharedSessionShutdownTopology('leader:0', '%11', 'shared-shutdown-cli');
+        assert.equal(topology.leaderPaneId, '%11');
+        assert.deepEqual(topology.hudPaneIds, ['%12']);
+        assert.deepEqual(topology.teamWorkerPaneIds, ['%13', '%14']);
+      },
+    );
   });
 });
 
@@ -1394,26 +1421,138 @@ describe('buildWorkerStartupCommand', () => {
     }
   });
 
-  it('does not use startup scripts on win32/MSYS so existing tmux path translation remains in force', () => {
+  it('uses a generated startup script with MSYS paths on win32/MSYS', async () => {
     const originalPlatform = Object.getOwnPropertyDescriptor(process, 'platform');
     const prevMsystem = process.env.MSYSTEM;
+    const prevBypass = process.env.OMX_BYPASS_DEFAULT_SYSTEM_PROMPT;
+    const stateRoot = 'C:\\omx-state';
     try {
       Object.defineProperty(process, 'platform', { value: 'win32', configurable: true });
       process.env.MSYSTEM = 'MINGW64';
-      assert.equal(
-        writeWorkerStartupScriptCommand(
-          'alpha',
-          1,
-          ['--model', 'gpt-5'],
-          'C:\\repo',
-          { OMX_TEAM_STATE_ROOT: 'C:\\repo\\.omx\\state' },
-        ),
-        null,
+      process.env.OMX_BYPASS_DEFAULT_SYSTEM_PROMPT = '0';
+      const cmd = writeWorkerStartupScriptCommand(
+        'alpha',
+        1,
+        ['--model', 'gpt-5'],
+        'C:\\repo',
+        { OMX_TEAM_STATE_ROOT: stateRoot },
+        'gemini',
       );
+      assert.equal(cmd, `exec /bin/sh '/c/omx-state/team/alpha/runtime/worker-1-startup.sh'`);
+      const script = await readFile(join(stateRoot, 'team', 'alpha', 'runtime', 'worker-1-startup.sh'), 'utf-8');
+      assert.match(script, /^cd '\/c\/repo'$/m);
+      assert.match(script, /^exec '\/bin\/sh' -c /m);
     } finally {
+      await rm(stateRoot, { recursive: true, force: true });
       if (originalPlatform) Object.defineProperty(process, 'platform', originalPlatform);
       if (typeof prevMsystem === 'string') process.env.MSYSTEM = prevMsystem;
       else delete process.env.MSYSTEM;
+      if (typeof prevBypass === 'string') process.env.OMX_BYPASS_DEFAULT_SYSTEM_PROMPT = prevBypass;
+      else delete process.env.OMX_BYPASS_DEFAULT_SYSTEM_PROMPT;
+    }
+  });
+
+  it('does not emit cmd.exe flag wrappers for MSYS startup scripts with cmd shims', async () => {
+    const fakeRoot = await mkdtemp(join(tmpdir(), 'omx-worker-startup-msys-cmd-shim-'));
+    const fakeBin = join(fakeRoot, 'bin dir');
+    const stateRoot = join(fakeRoot, 'state root');
+    const startupScriptPath = join(stateRoot, 'team', 'alpha', 'runtime', 'worker-1-startup.sh');
+    const originalPlatform = Object.getOwnPropertyDescriptor(process, 'platform');
+    const prevPath = process.env.PATH;
+    const prevPathext = process.env.PATHEXT;
+    const prevMsystem = process.env.MSYSTEM;
+    const prevBypass = process.env.OMX_BYPASS_DEFAULT_SYSTEM_PROMPT;
+    try {
+      await mkdir(fakeBin, { recursive: true });
+      const geminiCmdPath = join(fakeBin, 'gemini.cmd');
+      await writeFile(geminiCmdPath, '@echo off\r\n');
+      Object.defineProperty(process, 'platform', { value: 'win32', configurable: true });
+      process.env.PATH = fakeBin;
+      process.env.PATHEXT = '.CMD';
+      process.env.MSYSTEM = 'MINGW64';
+      process.env.OMX_BYPASS_DEFAULT_SYSTEM_PROMPT = '0';
+
+      const cmd = writeWorkerStartupScriptCommand(
+        'alpha',
+        1,
+        ['--model', 'gemini-2.5-pro'],
+        'C:\\repo with space',
+        { OMX_TEAM_STATE_ROOT: stateRoot },
+        'gemini',
+      );
+
+      assert.equal(cmd, `exec /bin/sh '${startupScriptPath}'`);
+      const script = await readFile(startupScriptPath, 'utf-8');
+      assert.doesNotMatch(script, /cmd\.exe/i);
+      assert.doesNotMatch(script, /'\/d'|'\/s'|'\/c'|\s\/d\s|\s\/s\s|\s\/c\s/i);
+      assert.match(script, /^cd '\/c\/repo with space'$/m);
+      assert.match(script, /^exec '\/bin\/sh' -c /m);
+      assert.match(script, new RegExp(escapeRegExp(geminiCmdPath)));
+      assert.match(script, /--approval-mode/);
+      assert.match(script, /yolo/);
+    } finally {
+      await rm(fakeRoot, { recursive: true, force: true });
+      if (originalPlatform) Object.defineProperty(process, 'platform', originalPlatform);
+      if (typeof prevPath === 'string') process.env.PATH = prevPath;
+      else delete process.env.PATH;
+      if (typeof prevPathext === 'string') process.env.PATHEXT = prevPathext;
+      else delete process.env.PATHEXT;
+      if (typeof prevMsystem === 'string') process.env.MSYSTEM = prevMsystem;
+      else delete process.env.MSYSTEM;
+      if (typeof prevBypass === 'string') process.env.OMX_BYPASS_DEFAULT_SYSTEM_PROMPT = prevBypass;
+      else delete process.env.OMX_BYPASS_DEFAULT_SYSTEM_PROMPT;
+    }
+  });
+
+  it('wraps MSYS prompt worker cmd shims for shell-free Windows spawn', async () => {
+    const fakeRoot = await mkdtemp(join(tmpdir(), 'omx-worker-process-msys-bat-shim-'));
+    const fakeBin = join(fakeRoot, 'bin dir');
+    const originalPlatform = Object.getOwnPropertyDescriptor(process, 'platform');
+    const prevPath = process.env.PATH;
+    const prevPathext = process.env.PATHEXT;
+    const prevMsystem = process.env.MSYSTEM;
+    const prevBypass = process.env.OMX_BYPASS_DEFAULT_SYSTEM_PROMPT;
+    const prevComSpec = process.env.ComSpec;
+    try {
+      await mkdir(fakeBin, { recursive: true });
+      const geminiBatPath = join(fakeBin, 'gemini.bat');
+      await writeFile(geminiBatPath, '@echo off\r\n');
+      Object.defineProperty(process, 'platform', { value: 'win32', configurable: true });
+      process.env.PATH = fakeBin;
+      process.env.PATHEXT = '.BAT';
+      process.env.MSYSTEM = 'MINGW64';
+      process.env.OMX_BYPASS_DEFAULT_SYSTEM_PROMPT = '0';
+      process.env.ComSpec = 'C:\\Windows\\System32\\cmd.exe';
+
+      const spec = buildWorkerProcessLaunchSpec(
+        'alpha',
+        1,
+        ['--model', 'gemini-2.5-pro'],
+        'C:\\repo with space',
+        {},
+        'gemini',
+      );
+
+      assert.equal(spec.command, 'C:\\Windows\\System32\\cmd.exe');
+      assert.deepEqual(spec.args.slice(0, 3), ['/d', '/s', '/c']);
+      assert.match(spec.args[3] ?? '', new RegExp(escapeRegExp(geminiBatPath)));
+      assert.match(spec.args[3] ?? '', /--approval-mode/);
+      assert.match(spec.args[3] ?? '', /yolo/);
+      assert.equal(spec.env.OMX_LEADER_CLI_PATH, geminiBatPath);
+      assert.notEqual(spec.command, geminiBatPath);
+    } finally {
+      await rm(fakeRoot, { recursive: true, force: true });
+      if (originalPlatform) Object.defineProperty(process, 'platform', originalPlatform);
+      if (typeof prevPath === 'string') process.env.PATH = prevPath;
+      else delete process.env.PATH;
+      if (typeof prevPathext === 'string') process.env.PATHEXT = prevPathext;
+      else delete process.env.PATHEXT;
+      if (typeof prevMsystem === 'string') process.env.MSYSTEM = prevMsystem;
+      else delete process.env.MSYSTEM;
+      if (typeof prevBypass === 'string') process.env.OMX_BYPASS_DEFAULT_SYSTEM_PROMPT = prevBypass;
+      else delete process.env.OMX_BYPASS_DEFAULT_SYSTEM_PROMPT;
+      if (typeof prevComSpec === 'string') process.env.ComSpec = prevComSpec;
+      else delete process.env.ComSpec;
     }
   });
 
