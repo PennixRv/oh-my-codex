@@ -1,36 +1,36 @@
-# oh-my-codex-pennix v0.18.66
+# oh-my-codex-pennix v0.18.67
 
 > Release notes template for the Pennix fork. The tag workflow regenerates this file into the final GitHub release body.
 
 ## Summary
 
-This release ships a bounded Pennix hotfix for clean uninstall/reinstall safety. It fixes a real plugin-mode uninstall regression that could delete user-authored `developer_instructions` wholesale, especially when the value used multiline TOML strings around the OMX fragment.
+This release ships a bounded Pennix follow-up hotfix for clean uninstall/reinstall safety. It fixes the remaining uninstall residue discovered immediately after `0.18.66`: OMX was still leaving managed install-state files behind under `CODEX_HOME/.omx`, and the summary text overstated what had actually been removed.
 
 ## Highlights
 
-- `omx uninstall` now parses root `developer_instructions` with the TOML parser, so multiline and triple-quoted user instructions are visible to cleanup instead of being skipped by a single-line JSON-only heuristic.
-- Uninstall now strips only the managed `notify` key during the generic OMX top-level cleanup pass and removes the OMX `developer_instructions` fragment separately, preserving user-authored text around that fragment.
-- Release regression coverage now locks the exact clean reinstall failure we hit in the live environment: multiline custom `developer_instructions` with the current plugin-mode OMX fragment must survive uninstall with only the OMX portion removed.
+- `omx uninstall` now removes managed `install-state.json` and `native-agents.json` from `CODEX_HOME/.omx`, so uninstall no longer leaves behind stale installed/setup version markers or native-agent manifests after a clean teardown.
+- The new cleanup is intentionally narrow: unrelated `CODEX_HOME/.omx` files are preserved, and the directory is pruned only when those managed install artifacts were the last remaining entries.
+- Uninstall summary output now distinguishes managed `CODEX_HOME/.omx` install artifacts from the separate project `.omx/` purge path, and regression coverage locks the precise preservation contract.
 
 ## Fixes / compatibility
 
-- Pennix plugin-mode setup/append semantics are unchanged; this hotfix is specifically about uninstall preserving user-owned text that setup previously appended the OMX fragment to.
-- Team runtime, mailbox-boundary delivery, HUD behavior, and shared-session teardown semantics from `0.18.65` remain unchanged in this cut.
-- The new regression test covers the exact multiline-TOML shape observed in the live environment, reducing the chance of another clean-reinstall data-loss regression.
+- The `0.18.66` `developer_instructions` preservation hotfix remains intact; this cut only closes the remaining uninstall residue gap that appeared during published-artifact smoke.
+- Team/runtime, mailbox-boundary delivery, HUD behavior, and prior tmux/session fixes remain unchanged in this cut.
+- The new regression test covers mixed `CODEX_HOME/.omx` contents, proving that managed install artifacts are removed while unrelated files remain.
 
 ## Merged PR inventory
 
-- No merged PRs. `0.18.66` is a direct release-line commit on the Pennix fork.
+- No merged PRs. `0.18.67` is a direct release-line commit on the Pennix fork.
 
 ## Validation
 
 - `npm run build`
 - `npm run verify:native-agents && npm run verify:plugin-bundle`
-- `node dist/scripts/run-test-files.js dist/cli/__tests__/uninstall.test.js dist/hooks/__tests__/notify-hook-tmux-scrollback.test.js dist/team/__tests__/runtime.test.js`
-- `node dist/scripts/check-version-sync.js --tag v0.18.66`
+- `node dist/scripts/run-test-files.js dist/cli/__tests__/uninstall.test.js`
+- `node dist/scripts/check-version-sync.js --tag v0.18.67`
 
 ## Contributors
 
 Thanks to the contributors who made this release possible.
 
-**Full Changelog**: [`v0.18.65...v0.18.66`](https://github.com/PennixRv/oh-my-codex/compare/v0.18.65...v0.18.66)
+**Full Changelog**: [`v0.18.66...v0.18.67`](https://github.com/PennixRv/oh-my-codex/compare/v0.18.66...v0.18.67)

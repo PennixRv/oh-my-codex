@@ -4,6 +4,14 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+## [0.18.67] - 2026-07-02
+
+Patch release for the Pennix fork uninstall-cleanliness line: `omx uninstall` now removes its own install-state residue from `CODEX_HOME/.omx` without touching unrelated user files, and the uninstall summary now describes project `.omx/` purge behavior accurately.
+
+- `omx uninstall` now removes managed `install-state.json` and `native-agents.json` under `CODEX_HOME/.omx`, and prunes the directory when those managed files were the only remaining entries.
+- The cleanup stays narrow: unrelated `CODEX_HOME/.omx` files such as registry/config/auth-owned state are preserved instead of being swept by a broad directory delete.
+- Uninstall summary output now distinguishes `CODEX_HOME/.omx` install artifacts from the project `.omx/` purge path, and regression coverage locks the new contract.
+
 ## [0.18.66] - 2026-07-02
 
 Patch release for the Pennix fork uninstall-preservation hotfix line: plugin-mode uninstall now preserves user-authored `developer_instructions` while stripping only the OMX-managed fragment, including multiline TOML strings that previously fell through the uninstall cleanup path.
