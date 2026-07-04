@@ -4,6 +4,7 @@
 
 import { readFile, writeFile, readdir, rm } from "fs/promises";
 import { existsSync } from "fs";
+import { homedir } from "os";
 import { join, basename, dirname } from "path";
 import TOML from "@iarna/toml";
 import {
@@ -949,6 +950,7 @@ export async function uninstall(options: UninstallOptions = {}): Promise<void> {
     scope,
     scopeDirs.codexHomeDir,
     { dryRun, verbose },
+    homedir(),
   );
   summary.tmuxConfigCleaned = tmuxStatusRemoval.tmuxConfigCleaned;
   summary.tmuxStatusArtifactsRemoved = tmuxStatusRemoval.assetEntriesRemoved;

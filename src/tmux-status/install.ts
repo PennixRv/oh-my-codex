@@ -1,6 +1,6 @@
 import { execFileSync } from 'child_process';
 import { existsSync } from 'fs';
-import { homedir } from 'os';
+import { homedir, userInfo } from 'os';
 import { dirname, join } from 'path';
 import { chmod, mkdir, readFile, readdir, rm, writeFile } from 'fs/promises';
 import { resolveTmuxBinaryForPlatform } from '../utils/platform-command.js';
@@ -51,6 +51,14 @@ function compactManagedWhitespace(value: string): string {
     .replace(/\n{3,}/g, '\n\n')
     .replace(/^\n+/, '')
     .replace(/\n+$/, '\n');
+}
+
+function tryResolveAccountHomeDir(): string | null {
+  try {
+    return userInfo().homedir;
+  } catch {
+    return null;
+  }
 }
 
 export function resolveManagedTmuxConfigPath(
@@ -269,9 +277,11 @@ export interface InstallTmuxStatusOptions {
   scope: 'user' | 'project';
   scopeCodexHomeDir: string;
   packageRoot: string;
+  homeDir?: string;
   backupContext: SetupBackupContextLike;
   summary: SetupCategorySummaryLike;
   options: SyncOptionsLike;
+  sourceLiveTmux?: boolean;
 }
 
 export interface InstallTmuxStatusResult {
@@ -281,12 +291,38 @@ export interface InstallTmuxStatusResult {
   tmuxConfigPath: string;
 }
 
+export function shouldSourceLiveTmuxStatusForCurrentProcess(
+  scope: 'user' | 'project',
+  scopeCodexHomeDir: string,
+  effectiveHomeDir: string = homedir(),
+  accountHomeDir: string | null = tryResolveAccountHomeDir(),
+  env: NodeJS.ProcessEnv = process.env,
+): boolean {
+  if (!env.TMUX) return false;
+  if (!accountHomeDir) return false;
+  if (
+    resolveManagedTmuxConfigPath(effectiveHomeDir)
+    !== resolveManagedTmuxConfigPath(accountHomeDir)
+  ) {
+    return false;
+  }
+  const installCodexHome = resolveTmuxStatusInstallCodexHome(
+    scope,
+    scopeCodexHomeDir,
+    effectiveHomeDir,
+  );
+  return scope === 'user'
+    || installCodexHome === resolveUserLevelCodexHome(effectiveHomeDir);
+}
+
 export async function installManagedTmuxStatusArtifacts(
   input: InstallTmuxStatusOptions,
 ): Promise<InstallTmuxStatusResult> {
+  const effectiveHomeDir = input.homeDir ?? homedir();
   const installCodexHome = resolveTmuxStatusInstallCodexHome(
     input.scope,
     input.scopeCodexHomeDir,
+    effectiveHomeDir,
   );
   await seedTmuxStatusOmxConfig(
     installCodexHome,
@@ -297,7 +333,7 @@ export async function installManagedTmuxStatusArtifacts(
   const assetRoot = resolveTmuxStatusAssetRoot(installCodexHome);
   const renderScriptPath = join(assetRoot, OMX_TMUX_STATUS_RENDER_SCRIPT_NAME);
   const tmuxStatusConfPath = join(assetRoot, OMX_TMUX_STATUS_CONF_NAME);
-  const tmuxConfigPath = resolveManagedTmuxConfigPath();
+  const tmuxConfigPath = resolveManagedTmuxConfigPath(effectiveHomeDir);
   const config = readTmuxStatusBarConfig(installCodexHome);
 
   await syncManagedContent(
@@ -332,7 +368,7 @@ export async function installManagedTmuxStatusArtifacts(
     `tmux managed block ${tmuxConfigPath}`,
   );
 
-  if (!input.options.dryRun) {
+  if (!input.options.dryRun && input.sourceLiveTmux) {
     sourceLiveTmuxStatusConfig(tmuxStatusConfPath);
   }
 
@@ -364,13 +400,15 @@ export async function removeManagedTmuxStatusArtifacts(
   scope: 'user' | 'project',
   scopeCodexHomeDir: string,
   options: SyncOptionsLike,
+  homeDir: string = homedir(),
 ): Promise<RemoveTmuxStatusResult> {
   const installCodexHome = resolveTmuxStatusInstallCodexHome(
     scope,
     scopeCodexHomeDir,
+    homeDir,
   );
   const assetRoot = resolveTmuxStatusAssetRoot(installCodexHome);
-  const tmuxConfigPath = resolveManagedTmuxConfigPath();
+  const tmuxConfigPath = resolveManagedTmuxConfigPath(homeDir);
 
   let assetEntriesRemoved = 0;
   if (await removeIfExists(join(assetRoot, OMX_TMUX_STATUS_RENDER_SCRIPT_NAME), options)) {

@@ -136,6 +136,7 @@ import {
 	OMX_FORK_REPO_SLUG,
 } from "../utils/package.js";
 import { installManagedTmuxStatusArtifacts } from "../tmux-status/install.js";
+import { shouldSourceLiveTmuxStatusForCurrentProcess } from "../tmux-status/install.js";
 
 async function resolveStatusLinePresetForSetup(
 	projectRoot: string,
@@ -2834,9 +2835,14 @@ export async function setup(options: SetupOptions = {}): Promise<void> {
 		scope: resolvedScope.scope,
 		scopeCodexHomeDir: scopeDirs.codexHomeDir,
 		packageRoot: pkgRoot,
+		homeDir: homedir(),
 		backupContext,
 		summary: summary.config,
 		options: { dryRun, verbose },
+		sourceLiveTmux: shouldSourceLiveTmuxStatusForCurrentProcess(
+			resolvedScope.scope,
+			scopeDirs.codexHomeDir,
+		),
 	});
 	console.log(
 		`  Managed tmux status assets ready (${tmuxStatusInstall.assetRoot}).`,

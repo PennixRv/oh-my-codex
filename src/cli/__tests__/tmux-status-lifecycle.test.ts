@@ -28,6 +28,7 @@ function runOmx(
   delete env.OMX_ROOT;
   delete env.OMX_STATE_ROOT;
   delete env.TMUX_PANE;
+  delete env.TMUX;
 
   const result = spawnSync(process.execPath, [omxBin, ...argv], {
     cwd,

@@ -8,6 +8,7 @@ import {
   buildTmuxStatusConf,
   installManagedTmuxStatusArtifacts,
   resolveTmuxStatusInstallCodexHome,
+  shouldSourceLiveTmuxStatusForCurrentProcess,
   stripManagedTmuxConfBlock,
   upsertManagedTmuxConfBlock,
 } from '../install.js';
@@ -81,17 +82,52 @@ describe('tmux status asset generation', () => {
     );
   });
 
+  it('sources live tmux only for the current real user home inside tmux', () => {
+    assert.equal(
+      shouldSourceLiveTmuxStatusForCurrentProcess(
+        'user',
+        '/home/penn/.codex',
+        '/home/penn',
+        '/home/penn',
+        { TMUX: '/tmp/tmux-1000/default,1,0' },
+      ),
+      true,
+    );
+    assert.equal(
+      shouldSourceLiveTmuxStatusForCurrentProcess(
+        'user',
+        '/tmp/omx-test/home/.codex',
+        '/tmp/omx-test/home',
+        '/home/penn',
+        { TMUX: '/tmp/tmux-1000/default,1,0' },
+      ),
+      false,
+    );
+    assert.equal(
+      shouldSourceLiveTmuxStatusForCurrentProcess(
+        'user',
+        '/home/penn/.codex',
+        '/home/penn',
+        '/home/penn',
+        {},
+      ),
+      false,
+    );
+  });
+
   it('seeds tmux status cache ttl into .omx-config.json when missing', async () => {
     const wd = await mkdtemp(join(tmpdir(), 'omx-tmux-install-'));
     try {
       const home = join(wd, 'home');
       const codexHome = join(home, '.codex');
       await mkdir(codexHome, { recursive: true });
+      await writeFile(join(home, '.tmux.conf'), 'set -g mouse on\n');
 
-      await installManagedTmuxStatusArtifacts({
+      const result = await installManagedTmuxStatusArtifacts({
         scope: 'user',
         scopeCodexHomeDir: codexHome,
         packageRoot: wd,
+        homeDir: home,
         backupContext: {
           backupRoot: join(wd, 'backups'),
           baseRoot: home,
@@ -105,6 +141,7 @@ describe('tmux status asset generation', () => {
         },
         options: {},
       });
+      assert.equal(result.tmuxConfigPath, join(home, '.tmux.conf'));
 
       const config = JSON.parse(
         await readFile(join(codexHome, '.omx-config.json'), 'utf-8'),
@@ -112,6 +149,8 @@ describe('tmux status asset generation', () => {
         tmuxStatusBar?: { cch?: { sessionsCacheSeconds?: number } };
       };
       assert.equal(config.tmuxStatusBar?.cch?.sessionsCacheSeconds, 5);
+      const tmuxConfig = await readFile(join(home, '.tmux.conf'), 'utf-8');
+      assert.match(tmuxConfig, /OMX managed tmux status start/);
     } finally {
       await rm(wd, { recursive: true, force: true });
     }
@@ -138,6 +177,7 @@ describe('tmux status asset generation', () => {
         scope: 'user',
         scopeCodexHomeDir: codexHome,
         packageRoot: wd,
+        homeDir: home,
         backupContext: {
           backupRoot: join(wd, 'backups'),
           baseRoot: home,
