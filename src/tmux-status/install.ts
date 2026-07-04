@@ -17,6 +17,8 @@ export const OMX_TMUX_STATUS_MANAGED_BLOCK_END =
   '# <<< OMX managed tmux status end <<<';
 export const OMX_TMUX_STATUS_RENDER_SCRIPT_NAME = 'render.sh';
 export const OMX_TMUX_STATUS_CONF_NAME = 'tmux-status.conf';
+const OMX_CONFIG_FILE_NAME = '.omx-config.json';
+const DEFAULT_TMUX_STATUS_CCH_SESSIONS_CACHE_SECONDS = 5;
 
 interface SetupCategorySummaryLike {
   updated: number;
@@ -209,6 +211,60 @@ function sourceLiveTmuxStatusConfig(tmuxStatusConfPath: string): void {
   }
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
+
+async function seedTmuxStatusOmxConfig(
+  codexHomeDir: string,
+  summary: SetupCategorySummaryLike,
+  backupContext: SetupBackupContextLike,
+  options: SyncOptionsLike,
+): Promise<void> {
+  const configPath = join(codexHomeDir, OMX_CONFIG_FILE_NAME);
+  let root: Record<string, unknown> = {};
+
+  if (existsSync(configPath)) {
+    try {
+      const parsed = JSON.parse(await readFile(configPath, 'utf-8')) as unknown;
+      if (!isRecord(parsed)) return;
+      root = { ...parsed };
+    } catch {
+      return;
+    }
+  }
+
+  const tmuxStatusBar = isRecord(root.tmuxStatusBar)
+    ? { ...root.tmuxStatusBar }
+    : {};
+  const cch = isRecord(tmuxStatusBar.cch)
+    ? { ...tmuxStatusBar.cch }
+    : {};
+
+  if (typeof cch.sessionsCacheSeconds === 'number' && Number.isFinite(cch.sessionsCacheSeconds) && cch.sessionsCacheSeconds > 0) {
+    return;
+  }
+  if (typeof cch.sessionsCacheSeconds === 'string') {
+    const parsed = Number.parseInt(cch.sessionsCacheSeconds.trim(), 10);
+    if (Number.isFinite(parsed) && parsed > 0) {
+      return;
+    }
+  }
+
+  cch.sessionsCacheSeconds = DEFAULT_TMUX_STATUS_CCH_SESSIONS_CACHE_SECONDS;
+  tmuxStatusBar.cch = cch;
+  root.tmuxStatusBar = tmuxStatusBar;
+
+  await syncManagedContent(
+    JSON.stringify(root, null, 2) + '\n',
+    configPath,
+    summary,
+    backupContext,
+    options,
+    `tmux status OMX config ${configPath}`,
+  );
+}
+
 export interface InstallTmuxStatusOptions {
   scope: 'user' | 'project';
   scopeCodexHomeDir: string;
@@ -231,6 +287,12 @@ export async function installManagedTmuxStatusArtifacts(
   const installCodexHome = resolveTmuxStatusInstallCodexHome(
     input.scope,
     input.scopeCodexHomeDir,
+  );
+  await seedTmuxStatusOmxConfig(
+    installCodexHome,
+    input.summary,
+    input.backupContext,
+    input.options,
   );
   const assetRoot = resolveTmuxStatusAssetRoot(installCodexHome);
   const renderScriptPath = join(assetRoot, OMX_TMUX_STATUS_RENDER_SCRIPT_NAME);

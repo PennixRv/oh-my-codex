@@ -528,8 +528,8 @@ export function resolvePaneSessionId(
   _session: SessionStateSnapshot,
   rolloutSessionId: string | undefined,
 ): string | undefined {
-  return paneLocalSessionId
-    ?? rolloutSessionId;
+  return rolloutSessionId
+    ?? paneLocalSessionId;
 }
 
 export function resolveUsageMetrics(

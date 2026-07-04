@@ -230,7 +230,7 @@ describe('tmux status rollout helpers', () => {
     );
   });
 
-  it('prefers the pane resume id over shared session state and rollout metadata', () => {
+  it('prefers the live rollout session id over a stale pane resume id', () => {
     assert.equal(
       resolvePaneSessionId(
         '019f20ec-cab5-7e82-bf5f-faee5753c79f',
@@ -240,7 +240,7 @@ describe('tmux status rollout helpers', () => {
         },
         '019ef8bb-c32d-7530-b6af-929f1b6f6deb',
       ),
-      '019f20ec-cab5-7e82-bf5f-faee5753c79f',
+      '019ef8bb-c32d-7530-b6af-929f1b6f6deb',
     );
   });
 
@@ -255,6 +255,20 @@ describe('tmux status rollout helpers', () => {
         '019f0c5e-9624-7182-b231-c83305f8d02e',
       ),
       '019f0c5e-9624-7182-b231-c83305f8d02e',
+    );
+  });
+
+  it('falls back to the pane resume id when there is no live rollout session id', () => {
+    assert.equal(
+      resolvePaneSessionId(
+        '019f20ec-cab5-7e82-bf5f-faee5753c79f',
+        {
+          nativeSessionId: '019ef8bb-c32d-7530-b6af-929f1b6f6deb',
+          sessionId: '019ef8bb-c32d-7530-b6af-929f1b6f6deb',
+        },
+        undefined,
+      ),
+      '019f20ec-cab5-7e82-bf5f-faee5753c79f',
     );
   });
 

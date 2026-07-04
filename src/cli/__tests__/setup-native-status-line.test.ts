@@ -32,6 +32,11 @@ describe("setup native status line management", () => {
       await runSetupInTempDir(wd, { scope: "project" });
 
       const config = await readFile(join(wd, ".codex", "config.toml"), "utf-8");
+      const omxConfig = JSON.parse(
+        await readFile(join(process.env.HOME ?? "", ".codex", ".omx-config.json"), "utf-8"),
+      ) as {
+        tmuxStatusBar?: { cch?: { sessionsCacheSeconds?: number } };
+      };
       assert.match(config, /^\[tui\]$/m);
       assert.match(config, /^# omx:managed-status-line$/m);
       assert.match(config, /^status_line = \[\]$/m);
@@ -39,6 +44,7 @@ describe("setup native status line management", () => {
         config,
         /^status_line = \["model-with-reasoning", "context-remaining", "current-dir"\]$/m,
       );
+      assert.equal(omxConfig.tmuxStatusBar?.cch?.sessionsCacheSeconds, 5);
     } finally {
       await rm(wd, { recursive: true, force: true });
     }
