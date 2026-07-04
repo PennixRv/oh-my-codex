@@ -4,6 +4,16 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+## [0.18.79] - 2026-07-04
+
+Patch release for the Pennix fork plugin-mode setup guidance line: plugin-mode `developer_instructions` is now treated as an optional OMX bootstrap instead of an always-appended managed payload, so user-owned instructions stay intact unless setup is explicitly asked to add or refresh the OMX fragment.
+
+- `omx setup` in plugin mode now distinguishes three states for root `developer_instructions`: missing, recognized historical OMX-managed guidance, and custom user-authored content.
+- Missing plugin-mode `developer_instructions` no longer gets auto-populated during non-interactive setup. Setup now preserves the empty state by default and only adds the OMX bootstrap when explicitly approved.
+- Historical OMX-managed plugin bootstrap text is now preserved by default in non-interactive setup and only refreshed when setup is explicitly told to update the managed wording.
+- Custom `developer_instructions` is no longer appended with the OMX plugin fragment. User-owned guidance remains untouched, which aligns the implementation with the documented “AGENTS.md is the primary contract; developer_instructions is optional bootstrap” model.
+- Focused regression coverage now locks the new decision matrix, including the explicit add/refresh path and preservation of a user-owned root `model_reasoning_effort` during plugin-mode migration.
+
 ## [0.18.72] - 2026-07-04
 
 Patch release for the Pennix fork tmux-status correctness line: setup now explicitly hides the native Codex footer when OMX owns the TUI status config, the managed tmux status bar binds usage metrics only to pane-local rollout/session evidence, and displayed numeric values are normalized to fixed one-decimal formatting.

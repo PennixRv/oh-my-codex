@@ -919,7 +919,7 @@ describe('omx setup AGENTS refresh behavior', () => {
 });
 
 describe('omx setup plugin developer_instructions behavior', () => {
-  it('appends the OMX plugin fragment to existing custom developer_instructions', async () => {
+  it('preserves existing custom developer_instructions by default', async () => {
     const wd = await mkdtemp(join(tmpdir(), 'omx-setup-plugin-devinst-'));
     const restoreTty = setMockTty(false);
     const home = join(wd, 'home');
@@ -938,8 +938,33 @@ describe('omx setup plugin developer_instructions behavior', () => {
       });
       const config = await readFile(join(home, '.codex', 'config.toml'), 'utf-8');
 
-      assert.match(output, /plugin-mode developer_instructions default/i);
-      assert.match(config, /custom leader rule/);
+      assert.match(output, /Plugin-mode developer_instructions default preserved/i);
+      assert.match(config, /^developer_instructions = "custom leader rule"$/m);
+      assert.doesNotMatch(config, /<omx version=\\"1\\">You have Pennix OMX installed through Codex plugin mode/);
+    } finally {
+      restoreHome();
+      restoreTty();
+      await rm(wd, { recursive: true, force: true });
+    }
+  });
+
+  it('can add the OMX plugin bootstrap when developer_instructions is missing and explicitly requested', async () => {
+    const wd = await mkdtemp(join(tmpdir(), 'omx-setup-plugin-devinst-'));
+    const restoreTty = setMockTty(false);
+    const home = join(wd, 'home');
+    const restoreHome = setMockHome(home);
+    try {
+      await mkdir(join(wd, '.omx', 'state'), { recursive: true });
+      await mkdir(join(home, '.codex'), { recursive: true });
+
+      const output = await runSetupWithCapturedLogs(wd, {
+        scope: 'user',
+        installMode: 'plugin',
+        pluginDeveloperInstructionsPrompt: async () => true,
+      });
+      const config = await readFile(join(home, '.codex', 'config.toml'), 'utf-8');
+
+      assert.match(output, /plugin-mode developer_instructions bootstrap/i);
       assert.match(config, /<omx version=\\"1\\">You have Pennix OMX installed through Codex plugin mode/);
       assert.equal(countOccurrences(config, '<omx version=\\"1\\">'), 1);
     } finally {
@@ -949,7 +974,7 @@ describe('omx setup plugin developer_instructions behavior', () => {
     }
   });
 
-  it('migrates historical managed developer_instructions to the plugin fragment automatically', async () => {
+  it('migrates historical managed developer_instructions to the plugin fragment when explicitly refreshed', async () => {
     const wd = await mkdtemp(join(tmpdir(), 'omx-setup-plugin-devinst-'));
     const restoreTty = setMockTty(false);
     const home = join(wd, 'home');
@@ -965,6 +990,7 @@ describe('omx setup plugin developer_instructions behavior', () => {
       await runSetupWithCapturedLogs(wd, {
         scope: 'user',
         installMode: 'plugin',
+        pluginDeveloperInstructionsPrompt: async () => 'refresh',
       });
       const config = await readFile(join(home, '.codex', 'config.toml'), 'utf-8');
 
@@ -1051,10 +1077,11 @@ describe('omx setup plugin developer_instructions behavior', () => {
       const output = await runSetupWithCapturedLogs(wd, {
         scope: 'user',
         installMode: 'plugin',
+        pluginDeveloperInstructionsPrompt: async () => 'refresh',
       });
       const config = await readFile(join(home, '.codex', 'config.toml'), 'utf-8');
 
-      assert.match(output, /plugin-mode developer_instructions default/i);
+      assert.match(output, /plugin-mode developer_instructions bootstrap/i);
       assert.match(config, /<omx version=\\"1\\">You have Pennix OMX installed through Codex plugin mode/);
       assert.doesNotMatch(config, /never omit it for OMX work/);
       assert.match(config, /prefer setting `agent_type` to the narrowest installed role/);
@@ -1067,7 +1094,7 @@ describe('omx setup plugin developer_instructions behavior', () => {
     }
   });
 
-  it('preserves an existing root model_reasoning_effort during plugin migration', async () => {
+  it('preserves an existing root model_reasoning_effort while historical developer_instructions stay untouched by default', async () => {
     const wd = await mkdtemp(join(tmpdir(), 'omx-setup-plugin-devinst-'));
     const restoreTty = setMockTty(false);
     const home = join(wd, 'home');
@@ -1092,7 +1119,8 @@ describe('omx setup plugin developer_instructions behavior', () => {
 
       assert.match(config, /^model_reasoning_effort = "xhigh"$/m);
       assert.equal((config.match(/^model_reasoning_effort\s*=/gm) ?? []).length, 1);
-      assert.match(config, /<omx version=\\"1\\">You have Pennix OMX installed through Codex plugin mode/);
+      assert.match(config, /You have Pennix OMX installed\. AGENTS\.md is the orchestration brain and main control surface/);
+      assert.doesNotMatch(config, /<omx version=\\"1\\">You have Pennix OMX installed through Codex plugin mode/);
     } finally {
       restoreHome();
       restoreTty();

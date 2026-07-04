@@ -867,6 +867,80 @@ async function promptForModelUpgrade(
 	}
 }
 
+function normalizePluginDeveloperInstructionsPromptDecision(
+	state: "missing" | "historical",
+	result: boolean | "skip" | "preserve-or-add" | "refresh",
+): PluginDeveloperInstructionsDecisionAction {
+	if (result === true) {
+		return state === "missing" ? "add" : "update";
+	}
+	if (result === "preserve-or-add") {
+		return state === "missing" ? "add" : "preserve";
+	}
+	if (result === "refresh") {
+		return state === "historical" ? "update" : "preserve";
+	}
+	return "preserve";
+}
+
+async function promptForPluginDeveloperInstructionsAction(
+	configPath: string,
+	state: "missing" | "historical",
+	prompt?:
+		| ((
+				configPath: string,
+		  ) => Promise<boolean | "skip" | "preserve-or-add" | "refresh">)
+		| undefined,
+): Promise<PluginDeveloperInstructionsDecisionAction> {
+	if (prompt) {
+		return normalizePluginDeveloperInstructionsPromptDecision(
+			state,
+			await prompt(configPath),
+		);
+	}
+	if (!process.stdin.isTTY || !process.stdout.isTTY) {
+		return "preserve";
+	}
+	const rl = createInterface({
+		input: process.stdin,
+		output: process.stdout,
+	});
+	try {
+		if (state === "missing") {
+			console.log("Optional plugin-mode developer_instructions bootstrap:");
+			console.log(`  ${configPath}`);
+			console.log(
+				"  AGENTS.md remains the primary orchestration contract; this bootstrap is optional.",
+			);
+			const answer = (
+				await rl.question(
+					"Add the OMX plugin-mode developer_instructions bootstrap now? [y/N]: ",
+				)
+			)
+				.trim()
+				.toLowerCase();
+			return answer === "y" || answer === "yes" ? "add" : "preserve";
+		}
+		console.log("Historical OMX developer_instructions detected:");
+		console.log(`  ${configPath}`);
+		console.log(
+			"  Refreshing updates only the OMX-managed bootstrap wording and leaves user-owned config untouched.",
+		);
+		const answer = (
+			await rl.question(
+				"Refresh the OMX plugin-mode developer_instructions bootstrap to the current wording? [Y/n]: ",
+			)
+		)
+			.trim()
+			.toLowerCase();
+		return answer === "" || answer === "y" || answer === "yes"
+			? "update"
+			: "preserve";
+	} finally {
+		rl.close();
+	}
+}
+
 async function promptForAgentsOverwrite(
 	destinationPath: string,
 ): Promise<boolean> {
@@ -930,16 +1004,29 @@ function readRootDeveloperInstructions(config: string): unknown | undefined {
 
 async function resolvePluginDeveloperInstructionsDecision(
 	configPath: string,
+	prompt?: SetupOptions["pluginDeveloperInstructionsPrompt"],
 ): Promise<PluginDeveloperInstructionsDecision> {
 	const existing = existsSync(configPath)
 		? await readFile(configPath, "utf-8")
 		: "";
 	const value = readRootDeveloperInstructions(existing);
 	if (value === undefined) {
+		const action = await promptForPluginDeveloperInstructionsAction(
+			configPath,
+			"missing",
+			prompt,
+		);
+		if (action === "add") {
+			return {
+				action: "add",
+				state: "missing",
+				reason: "missing developer_instructions",
+			};
+		}
 		return {
-			action: "add",
+			action: "preserve",
 			state: "missing",
-			reason: "missing developer_instructions",
+			reason: "missing developer_instructions preserved",
 		};
 	}
 
@@ -956,18 +1043,30 @@ async function resolvePluginDeveloperInstructionsDecision(
 	}
 
 	if (state === "historical") {
+		const action = await promptForPluginDeveloperInstructionsAction(
+			configPath,
+			"historical",
+			prompt,
+		);
+		if (action === "update") {
+			return {
+				action: "update",
+				state,
+				reason: "recognized historical OMX developer_instructions",
+			};
+		}
 		return {
-			action: "update",
+			action: "preserve",
 			state,
-			reason: "recognized historical OMX developer_instructions",
+			reason: "historical OMX developer_instructions preserved",
 		};
 	}
 
 	if (state === "custom") {
 		return {
-			action: "update",
+			action: "preserve",
 			state,
-			reason: "append OMX developer_instructions fragment to custom instructions",
+			reason: "custom developer_instructions preserved",
 		};
 	}
 
@@ -2289,6 +2388,7 @@ export async function setup(options: SetupOptions = {}): Promise<void> {
 		isPluginInstallMode
 			? await resolvePluginDeveloperInstructionsDecision(
 					scopeDirs.codexConfigFile,
+					options.pluginDeveloperInstructionsPrompt,
 				)
 			: {
 					action: "preserve",
@@ -2706,9 +2806,9 @@ export async function setup(options: SetupOptions = {}): Promise<void> {
 				: `  Native Codex hooks fallback and runtime feature flags refresh complete (${scopeDirs.codexHooksFile}; hooks, goals).\n`,
 		);
 
-		if (pluginDeveloperInstructionsDecision.action !== "preserve") {
-			const developerInstructionsResult =
-				await applyPluginDeveloperInstructionsDefault(
+			if (pluginDeveloperInstructionsDecision.action !== "preserve") {
+				const developerInstructionsResult =
+					await applyPluginDeveloperInstructionsDefault(
 					scopeDirs.codexConfigFile,
 					backupContext,
 					summary.config,
@@ -2718,16 +2818,24 @@ export async function setup(options: SetupOptions = {}): Promise<void> {
 						decision: pluginDeveloperInstructionsDecision,
 					},
 				);
-			if (developerInstructionsResult === "updated") {
-				resolvedConfig = existsSync(scopeDirs.codexConfigFile)
-					? await readFile(scopeDirs.codexConfigFile, "utf-8")
-					: "";
-				console.log(
-					`  ${dryRun ? "Would add" : "Added"} plugin-mode developer_instructions default (${scopeDirs.codexConfigFile}).\n`,
-				);
-			} else {
-				console.log(
-					`  Preserved existing developer_instructions in ${scopeDirs.codexConfigFile}.\n`,
+				if (developerInstructionsResult === "updated") {
+					resolvedConfig = existsSync(scopeDirs.codexConfigFile)
+						? await readFile(scopeDirs.codexConfigFile, "utf-8")
+						: "";
+					console.log(
+						`  ${
+							pluginDeveloperInstructionsDecision.action === "add"
+								? dryRun
+									? "Would add"
+									: "Added"
+								: dryRun
+									? "Would refresh"
+									: "Refreshed"
+						} plugin-mode developer_instructions bootstrap (${scopeDirs.codexConfigFile}).\n`,
+					);
+				} else {
+					console.log(
+						`  Preserved existing developer_instructions in ${scopeDirs.codexConfigFile}.\n`,
 				);
 			}
 		} else {
