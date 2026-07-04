@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
-import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
+import { mkdir, open, readFile, readdir, stat, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { basename, dirname, join, resolve } from 'node:path';
 import { parse as parseToml } from '@iarna/toml';
@@ -15,6 +15,18 @@ import { resolveTmuxBinaryForPlatform } from '../utils/platform-command.js';
 
 const TMUX_FIELD_SEPARATOR = '\x1f';
 const CONTROL_CHARS_RE = /[\u0000-\u001f\u007f-\u009f]/g;
+const ROLLOUT_CANDIDATE_SCAN_LIMIT = 48;
+const ROLLOUT_CANDIDATE_CACHE_SECONDS = 10;
+const ROLLOUT_PREVIEW_BYTES = 16 * 1024;
+const CCH_ADMIN_TOKEN_FILE_ENV_VARS = [
+  'CCH_ADMIN_TOKEN_FILE',
+  'OMX_CCH_ADMIN_TOKEN_FILE',
+] as const;
+const DEFAULT_CCH_ADMIN_TOKEN_RELATIVE_PATHS = [
+  'cch-admin-token',
+  '.omx/cch-admin-token',
+] as const;
+const LEGACY_CCH_ADMIN_TOKEN_FILE = join(homedir(), '.claude', 'cch-admin-token');
 
 interface TmuxThemePalette {
   model: string;
@@ -44,12 +56,21 @@ interface PaneContext {
 }
 
 interface RolloutSnapshot {
+  sessionId?: string;
   model?: string;
   effort?: string;
   ctxUsed?: number;
   ctxMax?: number;
+  totalTokens?: number;
   inputTokens?: number;
   cachedInputTokens?: number;
+}
+
+interface RolloutCandidate {
+  path: string;
+  sessionId?: string;
+  cwd?: string;
+  mtimeMs: number;
 }
 
 interface SessionStateSnapshot {
@@ -89,6 +110,7 @@ export interface TmuxStatusRenderSnapshot {
   costUsd?: number;
   ctxUsed?: number;
   ctxMax?: number;
+  totalTokens?: number;
   cacheRate?: number;
   teamSupplement?: TeamSupplement;
   sessionName: string;
@@ -103,6 +125,7 @@ const STATUS_LABELS = {
   effort: 'Effort',
   cost: 'Cost',
   context: 'Ctx',
+  total: 'Total',
   cache: 'Cache',
   team: 'Team',
   worker: 'Wrk',
@@ -175,6 +198,15 @@ function normalizeNumber(value: unknown): number | undefined {
   if (typeof value !== 'string') return undefined;
   const parsed = Number(value.trim());
   return Number.isFinite(parsed) ? parsed : undefined;
+}
+
+function safeParseJsonRecord(value: string): Record<string, unknown> | null {
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    return isRecord(parsed) ? parsed as Record<string, unknown> : null;
+  } catch {
+    return null;
+  }
 }
 
 function formatCompactNumber(value: number): string {
@@ -287,6 +319,13 @@ export function renderTmuxStatusLeft(
     ),
     renderLabeledSegment(
       theme,
+      STATUS_LABELS.total,
+      snapshot.totalTokens === undefined
+        ? '?'
+        : formatCompactNumber(snapshot.totalTokens),
+    ),
+    renderLabeledSegment(
+      theme,
       STATUS_LABELS.cache,
       formatPercent(snapshot.cacheRate),
     ),
@@ -379,6 +418,214 @@ async function writeJsonCache(
       2,
     ),
   );
+}
+
+function extractTypedPayload(
+  parsed: Record<string, unknown>,
+  typeName: string,
+): Record<string, unknown> | null {
+  const payload = isRecord(parsed.payload)
+    ? parsed.payload as Record<string, unknown>
+    : null;
+  if (sanitizeOptionalString(parsed.type) === typeName && payload) {
+    return payload;
+  }
+  if (
+    payload
+    && sanitizeOptionalString(payload.type) === typeName
+  ) {
+    return payload;
+  }
+  return null;
+}
+
+function readFirstEventPayload(
+  lines: string[],
+  typeName: string,
+): Record<string, unknown> | null {
+  for (const rawLine of lines) {
+    const line = rawLine.trim();
+    if (!line) continue;
+    const parsed = safeParseJsonRecord(line);
+    if (!parsed) continue;
+    const payload = extractTypedPayload(parsed, typeName);
+    if (payload) return payload;
+  }
+  return null;
+}
+
+export function extractCodexResumeSessionId(
+  command: string,
+): string | undefined {
+  const patterns = [
+    /\bcodex\s+resume\s+([0-9a-f-]{20,})\b/i,
+    /\bcodex\s+--resume\s+([0-9a-f-]{20,})\b/i,
+    /\bcodex\s+--conversation\s+([0-9a-f-]{20,})\b/i,
+  ];
+  for (const pattern of patterns) {
+    const match = command.match(pattern);
+    if (match?.[1]) return match[1];
+  }
+  return undefined;
+}
+
+export function rolloutFileNameCouldMatchSessionId(
+  fileName: string,
+  sessionId: string,
+): boolean {
+  return (
+    fileName === `rollout-${sessionId}.jsonl`
+    || fileName.endsWith(`-${sessionId}.jsonl`)
+  );
+}
+
+export function resolvePaneSessionId(
+  inferredSessionId: string | undefined,
+  session: SessionStateSnapshot,
+  rolloutSessionId: string | undefined,
+): string | undefined {
+  return inferredSessionId
+    ?? session.nativeSessionId
+    ?? session.sessionId
+    ?? rolloutSessionId;
+}
+
+function normalizePathForPrefixCompare(pathValue: string | undefined): string | undefined {
+  if (!pathValue) return undefined;
+  const normalized = resolve(pathValue);
+  return normalized.endsWith('/') ? normalized : `${normalized}/`;
+}
+
+function scoreRolloutCwdMatch(
+  rolloutCwd: string | undefined,
+  paneCurrentPath: string,
+): number {
+  const normalizedPane = normalizePathForPrefixCompare(paneCurrentPath);
+  const normalizedRollout = normalizePathForPrefixCompare(rolloutCwd);
+  if (!normalizedPane || !normalizedRollout) return 0;
+  if (normalizedPane === normalizedRollout) return 4;
+  if (normalizedPane.startsWith(normalizedRollout)) return 3;
+  if (normalizedRollout.startsWith(normalizedPane)) return 2;
+  return 0;
+}
+
+async function readRolloutPreview(
+  rolloutPath: string,
+): Promise<{ sessionId?: string; cwd?: string }> {
+  const handle = await open(rolloutPath, 'r').catch(() => null);
+  if (!handle) return {};
+  try {
+    const buffer = Buffer.alloc(ROLLOUT_PREVIEW_BYTES);
+    const { bytesRead } = await handle.read(buffer, 0, buffer.length, 0);
+    const preview = buffer.toString('utf-8', 0, bytesRead);
+    const sessionId = preview.match(/"id"\s*:\s*"([^"]+)"/)?.[1];
+    const cwd = preview.match(/"cwd"\s*:\s*"([^"]+)"/)?.[1];
+    return {
+      sessionId: sanitizeOptionalString(sessionId),
+      cwd: sanitizeOptionalString(cwd),
+    };
+  } finally {
+    await handle.close();
+  }
+}
+
+async function listRecentRolloutCandidates(
+  sessionsRoot: string,
+): Promise<RolloutCandidate[]> {
+  if (!existsSync(sessionsRoot)) return [];
+  const pending = [sessionsRoot];
+  const candidates: RolloutCandidate[] = [];
+
+  while (pending.length > 0) {
+    const current = pending.pop();
+    assert(current);
+    const dirEntries = await readdir(current, { withFileTypes: true }).catch(() => []);
+    for (const entry of dirEntries) {
+      const entryPath = join(current, entry.name);
+      if (entry.isDirectory()) {
+        pending.push(entryPath);
+        continue;
+      }
+      if (!entry.isFile() || !entry.name.startsWith('rollout-') || !entry.name.endsWith('.jsonl')) {
+        continue;
+      }
+      const fileStat = await stat(entryPath).catch(() => null);
+      if (!fileStat?.isFile()) continue;
+      const preview = await readRolloutPreview(entryPath);
+      candidates.push({
+        path: entryPath,
+        sessionId:
+          preview.sessionId
+          ?? basename(entryPath, '.jsonl').replace(/^rollout-/, ''),
+        cwd: preview.cwd,
+        mtimeMs: fileStat.mtimeMs,
+      });
+    }
+  }
+
+  return candidates
+    .sort((left, right) => right.mtimeMs - left.mtimeMs)
+    .slice(0, ROLLOUT_CANDIDATE_SCAN_LIMIT);
+}
+
+async function findRolloutCandidateForPane(
+  codexHomeDir: string,
+  pane: PaneContext,
+  preferredSessionId: string | undefined,
+  cacheDir: string,
+): Promise<RolloutCandidate | null> {
+  if (preferredSessionId) {
+    const exactPath = await findRolloutPathForSession(
+      codexHomeDir,
+      preferredSessionId,
+      cacheDir,
+    );
+    if (exactPath) {
+      return {
+        path: exactPath,
+        sessionId: preferredSessionId,
+        mtimeMs: 0,
+      };
+    }
+  }
+
+  const cacheKey = `rollout-candidate:${codexHomeDir}:${pane.currentPath}:${preferredSessionId ?? ''}`;
+  const cached = await readFreshJsonCache<RolloutCandidate>(
+    cacheDir,
+    cacheKey,
+    ROLLOUT_CANDIDATE_CACHE_SECONDS,
+  );
+  if (cached && existsSync(cached.path)) {
+    return cached;
+  }
+
+  const sessionsRoot = join(codexHomeDir, 'sessions');
+  const candidates = await listRecentRolloutCandidates(sessionsRoot);
+  let best: RolloutCandidate | null = null;
+  let bestScore = 0;
+
+  for (const candidate of candidates) {
+    const score = scoreRolloutCwdMatch(candidate.cwd, pane.currentPath);
+    if (score === 0) continue;
+    if (
+      !best
+      || score > bestScore
+      || (score === bestScore && candidate.mtimeMs > best.mtimeMs)
+    ) {
+      best = candidate;
+      bestScore = score;
+    }
+  }
+
+  if (best) {
+    await writeJsonCache(
+      cacheDir,
+      cacheKey,
+      ROLLOUT_CANDIDATE_CACHE_SECONDS,
+      best,
+    );
+  }
+  return best;
 }
 
 function parseShellEnvAssignment(command: string, key: string): string | undefined {
@@ -545,7 +792,6 @@ async function findRolloutPathForSession(
 
   const sessionsRoot = join(codexHomeDir, 'sessions');
   if (!existsSync(sessionsRoot)) return null;
-  const targetFileName = `rollout-${sessionId}.jsonl`;
   const pending = [sessionsRoot];
 
   while (pending.length > 0) {
@@ -558,7 +804,10 @@ async function findRolloutPathForSession(
         pending.push(entryPath);
         continue;
       }
-      if (entry.isFile() && entry.name === targetFileName) {
+      if (
+        entry.isFile()
+        && rolloutFileNameCouldMatchSessionId(entry.name, sessionId)
+      ) {
         await writeJsonCache(cacheDir, cacheKey, 30, entryPath);
         return entryPath;
       }
@@ -574,55 +823,73 @@ function readLastEventPayload(
   for (let index = lines.length - 1; index >= 0; index -= 1) {
     const line = lines[index]?.trim();
     if (!line) continue;
-    try {
-      const parsed = JSON.parse(line) as Record<string, unknown>;
-      if (parsed.type === typeName && isRecord(parsed.payload)) {
-        return parsed.payload;
-      }
-    } catch {
-      continue;
-    }
+    const parsed = safeParseJsonRecord(line);
+    if (!parsed) continue;
+    const payload = extractTypedPayload(parsed, typeName);
+    if (payload) return payload;
   }
   return null;
 }
 
+export function normalizeCchManagementBaseUrl(
+  baseUrl: string,
+): string {
+  return baseUrl.replace(/\/+$/, '').replace(/\/v1$/i, '');
+}
+
+export function extractRolloutSnapshotFromLines(
+  lines: string[],
+): RolloutSnapshot {
+  const sessionMeta = readFirstEventPayload(lines, 'session_meta');
+  const taskStarted = readFirstEventPayload(lines, 'task_started');
+  const turnContext = readLastEventPayload(lines, 'turn_context');
+  const tokenCount = readLastEventPayload(lines, 'token_count');
+  const tokenInfo = isRecord(tokenCount?.info)
+    ? tokenCount.info as Record<string, unknown>
+    : {};
+  const totalUsage = isRecord(tokenInfo.total_token_usage)
+    ? tokenInfo.total_token_usage as Record<string, unknown>
+    : {};
+  const lastUsage = isRecord(tokenInfo.last_token_usage)
+    ? tokenInfo.last_token_usage as Record<string, unknown>
+    : {};
+
+  return {
+    sessionId:
+      sanitizeOptionalString(sessionMeta?.id)
+      ?? sanitizeOptionalString(sessionMeta?.session_id),
+    model:
+      sanitizeOptionalString(turnContext?.model)
+      ?? sanitizeOptionalString(tokenInfo.model),
+    effort:
+      sanitizeOptionalString(turnContext?.effort)
+      ?? sanitizeOptionalString(turnContext?.reasoning_effort),
+    // Context occupancy should track the current window, not cumulative session input.
+    ctxUsed:
+      normalizeNumber(lastUsage.input_tokens)
+      ?? normalizeNumber(totalUsage.input_tokens),
+    ctxMax:
+      normalizeNumber(tokenInfo.model_context_window)
+      ?? normalizeNumber(taskStarted?.model_context_window),
+    inputTokens:
+      normalizeNumber(totalUsage.input_tokens)
+      ?? normalizeNumber(lastUsage.input_tokens),
+    cachedInputTokens:
+      normalizeNumber(totalUsage.cached_input_tokens)
+      ?? normalizeNumber(lastUsage.cached_input_tokens),
+    totalTokens:
+      normalizeNumber(totalUsage.total_tokens)
+      ?? normalizeNumber(lastUsage.total_tokens),
+  };
+}
+
 async function readRolloutSnapshot(
-  codexHomeDir: string,
-  sessionId: string | undefined,
-  cacheDir: string,
+  rolloutPath: string | null,
 ): Promise<RolloutSnapshot> {
-  const rolloutPath = await findRolloutPathForSession(codexHomeDir, sessionId, cacheDir);
   if (!rolloutPath) return {};
   try {
     const raw = await readFile(rolloutPath, 'utf-8');
-    const lines = raw.split(/\r?\n/);
-    const turnContext = readLastEventPayload(lines, 'turn_context');
-    const tokenCount = readLastEventPayload(lines, 'token_count');
-    const tokenInfo = isRecord(tokenCount?.info) ? tokenCount?.info as Record<string, unknown> : {};
-    const totalUsage = isRecord(tokenInfo.total_token_usage)
-      ? tokenInfo.total_token_usage as Record<string, unknown>
-      : {};
-    const lastUsage = isRecord(tokenInfo.last_token_usage)
-      ? tokenInfo.last_token_usage as Record<string, unknown>
-      : {};
-    return {
-      model:
-        sanitizeOptionalString(turnContext?.model)
-        ?? sanitizeOptionalString(tokenInfo.model),
-      effort:
-        sanitizeOptionalString(turnContext?.effort)
-        ?? sanitizeOptionalString(turnContext?.reasoning_effort),
-      ctxUsed:
-        normalizeNumber(totalUsage.input_tokens)
-        ?? normalizeNumber(lastUsage.input_tokens),
-      ctxMax: normalizeNumber(tokenInfo.model_context_window),
-      inputTokens:
-        normalizeNumber(totalUsage.input_tokens)
-        ?? normalizeNumber(lastUsage.input_tokens),
-      cachedInputTokens:
-        normalizeNumber(totalUsage.cached_input_tokens)
-        ?? normalizeNumber(lastUsage.cached_input_tokens),
-    };
+    return extractRolloutSnapshotFromLines(raw.split(/\r?\n/));
   } catch {
     return {};
   }
@@ -664,6 +931,57 @@ async function fetchJsonWithBearer(
   return await response.json();
 }
 
+async function readOptionalTextFile(
+  path: string,
+): Promise<string | undefined> {
+  try {
+    if (!existsSync(path)) return undefined;
+    return sanitizeOptionalString(await readFile(path, 'utf-8'));
+  } catch {
+    return undefined;
+  }
+}
+
+async function resolveCchBearerToken(
+  codexHomeDir: string,
+  config: TmuxStatusBarConfig,
+): Promise<{ token?: string; source: string }> {
+  const envToken = sanitizeOptionalString(
+    process.env[config.cch.adminTokenEnvVar],
+  );
+  if (envToken) {
+    return {
+      token: envToken,
+      source: `env:${config.cch.adminTokenEnvVar}`,
+    };
+  }
+
+  const explicitTokenFilePaths = CCH_ADMIN_TOKEN_FILE_ENV_VARS
+    .map((envVar) => sanitizeOptionalString(process.env[envVar]))
+    .filter((value): value is string => Boolean(value));
+  const candidateFiles = [
+    ...explicitTokenFilePaths,
+    ...DEFAULT_CCH_ADMIN_TOKEN_RELATIVE_PATHS.map((relativePath) => join(codexHomeDir, relativePath)),
+    LEGACY_CCH_ADMIN_TOKEN_FILE,
+  ];
+
+  for (const candidateFile of candidateFiles) {
+    const fileToken = await readOptionalTextFile(candidateFile);
+    if (fileToken) {
+      return {
+        token: fileToken,
+        source: `file:${candidateFile}`,
+      };
+    }
+  }
+
+  const authToken = await readCodexAuthToken(codexHomeDir);
+  return {
+    token: authToken,
+    source: authToken ? 'codex-auth' : 'missing',
+  };
+}
+
 function extractSessionItems(value: unknown): Array<Record<string, unknown>> {
   if (Array.isArray(value)) {
     return value.filter(isRecord);
@@ -683,19 +1001,58 @@ async function readExactCchSession(
 ): Promise<CchSessionSummary | null> {
   if (!sessionId) return null;
 
-  const baseUrl = sanitizeOptionalString(config.cch.baseUrl)
+  const rawBaseUrl = sanitizeOptionalString(config.cch.baseUrl)
     ?? sanitizeOptionalString(codexConfig.providerBaseUrl);
-  if (!baseUrl) return null;
+  if (!rawBaseUrl) return null;
 
-  const adminToken = sanitizeOptionalString(
-    process.env[config.cch.adminTokenEnvVar],
+  const managementBaseUrl = normalizeCchManagementBaseUrl(rawBaseUrl);
+  const { token: bearerToken, source: tokenSource } = await resolveCchBearerToken(
+    codexHomeDir,
+    config,
   );
-  const authToken = await readCodexAuthToken(codexHomeDir);
-  const bearerToken = adminToken ?? authToken;
   if (!bearerToken) return null;
 
-  const normalizedBaseUrl = baseUrl.replace(/\/+$/, '');
-  const cacheKey = `cch-sessions:${normalizedBaseUrl}:${adminToken ? 'admin' : 'auth'}`;
+  const exactStatsCacheKey = `cch-session-stats:${managementBaseUrl}:${tokenSource}:${sessionId}`;
+  const cachedExactStats = await readFreshJsonCache<CchSessionSummary>(
+    cacheDir,
+    exactStatsCacheKey,
+    config.cch.sessionsCacheSeconds,
+  );
+  if (cachedExactStats) {
+    return cachedExactStats;
+  }
+
+  try {
+    const exactStats = await fetchJsonWithBearer(
+      `${managementBaseUrl}/api/v1/usage-logs/stats?sessionId=${encodeURIComponent(sessionId)}`,
+      bearerToken,
+    );
+    if (isRecord(exactStats)) {
+      const summary: CchSessionSummary = {
+        sessionId,
+        costUsd: normalizeNumber(exactStats.totalCost),
+        inputTokens: normalizeNumber(exactStats.totalInputTokens),
+        cacheReadInputTokens: normalizeNumber(exactStats.totalCacheReadTokens),
+      };
+      await writeJsonCache(
+        cacheDir,
+        exactStatsCacheKey,
+        config.cch.sessionsCacheSeconds,
+        summary,
+      );
+      if (
+        summary.costUsd !== undefined
+        || summary.inputTokens !== undefined
+        || summary.cacheReadInputTokens !== undefined
+      ) {
+        return summary;
+      }
+    }
+  } catch {
+    // Fall through to the broader sessions list only when exact stats are unavailable.
+  }
+
+  const cacheKey = `cch-sessions:${managementBaseUrl}:${tokenSource}`;
   const cached = await readFreshJsonCache<Array<Record<string, unknown>>>(
     cacheDir,
     cacheKey,
@@ -704,7 +1061,7 @@ async function readExactCchSession(
   const items = cached ?? await (async () => {
     try {
       const payload = await fetchJsonWithBearer(
-        `${normalizedBaseUrl}/api/v1/sessions`,
+        `${managementBaseUrl}/api/v1/sessions`,
         bearerToken,
       );
       const extracted = extractSessionItems(payload);
@@ -885,8 +1242,21 @@ async function buildRenderSnapshot(
   const stateRoot = await resolveStateRootForPane(pane);
   const session = await readSessionStateSnapshot(stateRoot);
   const codexConfig = await readCodexConfig(codexHomeDir);
-  const exactSessionId = session.nativeSessionId ?? session.sessionId;
-  const rollout = await readRolloutSnapshot(codexHomeDir, exactSessionId, cacheDir);
+  const command = `${pane.startCommand} ${pane.currentCommand}`;
+  const inferredSessionId = extractCodexResumeSessionId(command);
+  const preferredSessionId = inferredSessionId ?? session.nativeSessionId ?? session.sessionId;
+  const rolloutCandidate = await findRolloutCandidateForPane(
+    codexHomeDir,
+    pane,
+    preferredSessionId,
+    cacheDir,
+  );
+  const rollout = await readRolloutSnapshot(rolloutCandidate?.path ?? null);
+  const exactSessionId = resolvePaneSessionId(
+    inferredSessionId,
+    session,
+    rollout.sessionId,
+  );
   const cchSession = await readExactCchSession(
     codexHomeDir,
     config,
@@ -921,6 +1291,7 @@ async function buildRenderSnapshot(
       costUsd: cchSession?.costUsd,
       ctxUsed: rollout.ctxUsed,
       ctxMax: rollout.ctxMax ?? codexConfig.modelContextWindow,
+      totalTokens: rollout.totalTokens,
       cacheRate: localCacheRate ?? remoteCacheRate,
       teamSupplement,
       sessionName: pane.sessionName,
