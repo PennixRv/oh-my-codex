@@ -229,6 +229,14 @@ export function statusLineForPreset(
   return `status_line = [${fields.map((field) => `"${field}"`).join(", ")}]`;
 }
 
+const HIDDEN_STATUS_LINE = "status_line = []";
+
+function statusLineForManagedValue(
+  preset: HudPreset | null = DEFAULT_STATUS_LINE_PRESET,
+): string {
+  return preset === null ? HIDDEN_STATUS_LINE : statusLineForPreset(preset);
+}
+
 // Marker comment OMX emits immediately above any status_line it owns. New writes
 // always include it; the customized-section detector keys on this marker so a
 // user-edited status_line that happens to byte-match a preset literal (e.g.
@@ -249,11 +257,12 @@ const LEGACY_OMX_STATUS_LINE = statusLineForPreset(
 // its value is a known OMX preset, it is OMX-managed. If the marker is
 // present but the value is something else, the user edited the value (and
 // left the marker untouched) — treat as a user customization and preserve.
-const OMX_PRESET_STATUS_LINE_VALUES: ReadonlySet<string> = new Set(
-  (Object.keys(STATUS_LINE_PRESETS) as HudPreset[]).map((preset) =>
+const OMX_MANAGED_STATUS_LINE_VALUES: ReadonlySet<string> = new Set([
+  ...(Object.keys(STATUS_LINE_PRESETS) as HudPreset[]).map((preset) =>
     statusLineForPreset(preset),
   ),
-);
+  HIDDEN_STATUS_LINE,
+]);
 const LEGACY_OMX_TEAM_RUN_TABLE_PATTERN =
   /^\s*\[mcp_servers\.(?:"omx_team_run"|omx_team_run)\]\s*$/m;
 const OMX_CONFIG_MARKER = `${OMX_DISPLAY_NAME} (OMX) Configuration`;
@@ -2104,7 +2113,7 @@ function extractCustomizedTuiSectionsFromOmxBlocks(config: string): string[] {
           // customization and preserved across rebuild.
           const hasMarker =
             lastNonBlankBeforeStatusLine === OMX_MANAGED_STATUS_LINE_MARKER;
-          const matchesPreset = OMX_PRESET_STATUS_LINE_VALUES.has(trimmed);
+          const matchesPreset = OMX_MANAGED_STATUS_LINE_VALUES.has(trimmed);
           const isManagedByMarker = hasMarker && matchesPreset;
           const isManagedByLegacyValue =
             !hasMarker && trimmed === LEGACY_OMX_STATUS_LINE;
@@ -2128,7 +2137,7 @@ function extractCustomizedTuiSectionsFromOmxBlocks(config: string): string[] {
 
 function upsertTuiStatusLine(
   config: string,
-  preset: HudPreset = DEFAULT_STATUS_LINE_PRESET,
+  preset: HudPreset | null = DEFAULT_STATUS_LINE_PRESET,
   options: { forceStatusLinePreset?: boolean } = {},
 ): {
   cleaned: string;
@@ -2191,7 +2200,7 @@ function upsertTuiStatusLine(
         const hasMarker =
           lastNonBlankBeforeStatusLine === OMX_MANAGED_STATUS_LINE_MARKER;
         const isManagedByMarker =
-          hasMarker && OMX_PRESET_STATUS_LINE_VALUES.has(statusLineEntry);
+          hasMarker && OMX_MANAGED_STATUS_LINE_VALUES.has(statusLineEntry);
         const isManagedByLegacyValue =
           !hasMarker && statusLineEntry === LEGACY_OMX_STATUS_LINE;
         const isOmxManagedStatusLine =
@@ -2217,13 +2226,14 @@ function upsertTuiStatusLine(
   // emit the managed-status-line marker comment alongside it so the
   // customized-section detector can unambiguously tell our writes apart
   // from a user edit on the next merge.
+  const managedStatusLine = statusLineForManagedValue(preset);
   const mergedSection = preservedStatusLine
     ? ["[tui]", ...preservedKeyLines, preservedStatusLine]
     : [
         "[tui]",
         ...preservedKeyLines,
         OMX_MANAGED_STATUS_LINE_MARKER,
-        statusLineForPreset(preset),
+        managedStatusLine,
       ];
   const firstStart = sections[0].start;
   const rebuilt: string[] = [];
@@ -2690,13 +2700,13 @@ function getOmxTablesBlock(
   }
 
   lines.push(
-    ...(includeTui && statusLinePreset != null
+    ...(includeTui
       ? [
           "",
           "# OMX TUI StatusLine (Codex CLI v0.101.0+)",
           "[tui]",
           OMX_MANAGED_STATUS_LINE_MARKER,
-          statusLineForPreset(statusLinePreset),
+          statusLineForManagedValue(statusLinePreset),
           "",
         ]
       : [""]),
@@ -2734,7 +2744,10 @@ export function buildMergedConfig(
       ? extractFirstPartyOmxMcpSections(existing)
       : "";
   const includeTui = options.includeTui !== false;
-  const statusLinePreset = options.statusLinePreset ?? null;
+  const statusLinePreset =
+    options.statusLinePreset === undefined
+      ? DEFAULT_STATUS_LINE_PRESET
+      : options.statusLinePreset;
   const customizedManagedTuiSections =
     extractCustomizedTuiSectionsFromOmxBlocks(existing);
 
@@ -2784,7 +2797,7 @@ export function buildMergedConfig(
   existing = upsertEnvSettings(existing);
   existing = upsertAgentsSettings(existing);
   const tuiUpsert = includeTui
-    ? upsertTuiStatusLine(existing, statusLinePreset ?? undefined, {
+    ? upsertTuiStatusLine(existing, statusLinePreset, {
         forceStatusLinePreset: options.forceStatusLinePreset,
       })
     : { cleaned: existing, hadExistingTui: false };

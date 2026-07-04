@@ -4,6 +4,15 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+## [0.18.72] - 2026-07-04
+
+Patch release for the Pennix fork tmux-status correctness line: setup now explicitly hides the native Codex footer when OMX owns the TUI status config, the managed tmux status bar binds usage metrics only to pane-local rollout/session evidence, and displayed numeric values are normalized to fixed one-decimal formatting.
+
+- `omx setup` now writes an explicit OMX-managed `[tui]` `status_line = []` so fresh plugin/project installs stop rendering the native `gpt-5.4 xhigh · ~/...` footer under the managed tmux bar, while preserving user-owned custom `status_line` arrays.
+- Tmux status CCH/rollout telemetry no longer falls back to stale shared OMX session state for bare `codex` panes. When a pane has no pane-local rollout/session evidence yet, `Cost`, `Ctx`, `Total`, and `Cache` render as zeroed fresh-session values instead of inheriting an older session's totals.
+- Active-pane session binding now prefers the current pane process' live rollout fd and strips transient tmux session hash suffixes from the displayed session label, keeping metrics and labels aligned to the real active Codex pane.
+- Tmux status numeric formatting is now consistent: `Cost` is rendered with a dollar sign, compact numbers and percentages use fixed one-decimal formatting, and `Total` remains a separate item after `Ctx`.
+
 ## [0.18.69] - 2026-07-04
 
 Patch release for the Pennix fork tmux-status and lifecycle-hardening line: publish the tracked tmux status bar and setup/uninstall preservation fixes that were prepared for `0.18.68`, plus the CI-discovered shared-ownership uninstall expectation alignment that blocked the earlier tag before npm publication.

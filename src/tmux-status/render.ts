@@ -30,12 +30,18 @@ const LEGACY_CCH_ADMIN_TOKEN_FILE = join(homedir(), '.claude', 'cch-admin-token'
 
 interface TmuxThemePalette {
   model: string;
+  effort: string;
+  cost: string;
+  context: string;
+  total: string;
+  cache: string;
   metric: string;
   value: string;
   secondary: string;
   separator: string;
   git: string;
   path: string;
+  session: string;
   time: string;
 }
 
@@ -105,6 +111,14 @@ interface CchSessionSummary {
   totalTokens?: number;
 }
 
+interface ResolvedUsageMetrics {
+  costUsd?: number;
+  ctxUsed?: number;
+  ctxMax?: number;
+  totalTokens?: number;
+  cacheRate?: number;
+}
+
 export interface TmuxStatusRenderSnapshot {
   visible: boolean;
   model?: string;
@@ -137,12 +151,18 @@ const STATUS_LABELS = {
 } as const;
 
 const BASE_THEME_PALETTE: Omit<TmuxThemePalette, 'model'> = {
+  effort: 'colour181',
+  cost: 'colour150',
+  context: 'colour117',
+  total: 'colour180',
+  cache: 'colour109',
   metric: 'colour245',
   value: 'colour253',
-  secondary: 'colour109',
+  secondary: 'colour145',
   separator: 'colour240',
   git: 'colour150',
-  path: 'colour251',
+  path: 'colour110',
+  session: 'colour180',
   time: 'colour247',
 };
 
@@ -215,18 +235,17 @@ function formatCompactNumber(value: number): string {
   if (!Number.isFinite(value)) return '?';
   if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M`;
   if (value >= 1_000) return `${(value / 1_000).toFixed(1)}k`;
-  return `${Math.round(value)}`;
+  return value.toFixed(1);
 }
 
 function formatPercent(value: number | undefined): string {
   if (value === undefined || !Number.isFinite(value)) return '?';
-  return `${Math.max(0, Math.min(100, value)).toFixed(1).replace(/\.0$/, '')}%`;
+  return `${Math.max(0, Math.min(100, value)).toFixed(1)}%`;
 }
 
 function formatCostUsd(value: number | undefined): string {
   if (value === undefined || !Number.isFinite(value)) return '?';
-  const digits = value >= 1 ? 2 : 4;
-  return value.toFixed(digits).replace(/0+$/, '').replace(/\.$/, '');
+  return `$${value.toFixed(1)}`;
 }
 
 function formatContext(used: number | undefined, max: number | undefined): string {
@@ -291,6 +310,12 @@ function renderTeamSupplement(
   );
 }
 
+function normalizeDisplayedSessionName(sessionName: string): string {
+  const sanitized = sanitizeTmuxText(sessionName || '?');
+  if (sanitized === '') return '?';
+  return sanitized.replace(/([_-])[0-9a-f]{8,}$/i, '');
+}
+
 export function renderTmuxStatusLeft(
   snapshot: TmuxStatusRenderSnapshot,
   themeName: TmuxStatusTheme,
@@ -308,16 +333,19 @@ export function renderTmuxStatusLeft(
       theme,
       STATUS_LABELS.effort,
       sanitizeTmuxText(snapshot.effort ?? '?'),
+      theme.effort,
     ),
     renderLabeledSegment(
       theme,
       STATUS_LABELS.cost,
       formatCostUsd(snapshot.costUsd),
+      theme.cost,
     ),
     renderLabeledSegment(
       theme,
       STATUS_LABELS.context,
       formatContext(snapshot.ctxUsed, snapshot.ctxMax),
+      theme.context,
     ),
     renderLabeledSegment(
       theme,
@@ -325,11 +353,13 @@ export function renderTmuxStatusLeft(
       snapshot.totalTokens === undefined
         ? '?'
         : formatCompactNumber(snapshot.totalTokens),
+      theme.total,
     ),
     renderLabeledSegment(
       theme,
       STATUS_LABELS.cache,
       formatPercent(snapshot.cacheRate),
+      theme.cache,
     ),
   ];
   const teamSupplement = renderTeamSupplement(snapshot.teamSupplement, theme);
@@ -350,9 +380,14 @@ export function renderTmuxStatusRight(
 ): string {
   const theme = THEMES[themeName];
   const pathLabel = sanitizeTmuxText(shortenHomePath(snapshot.panePath || '.'));
-  const sessionLabel = sanitizeTmuxText(snapshot.sessionName || '?');
+  const sessionLabel = normalizeDisplayedSessionName(snapshot.sessionName || '?');
   const parts = [
-    renderLabeledSegment(theme, STATUS_LABELS.session, sessionLabel),
+    renderLabeledSegment(
+      theme,
+      STATUS_LABELS.session,
+      sessionLabel,
+      theme.session,
+    ),
     renderLabeledSegment(
       theme,
       STATUS_LABELS.path,
@@ -490,17 +525,48 @@ function isRolloutFilePath(pathValue: string): boolean {
 
 export function resolvePaneSessionId(
   paneLocalSessionId: string | undefined,
-  session: SessionStateSnapshot,
+  _session: SessionStateSnapshot,
   rolloutSessionId: string | undefined,
 ): string | undefined {
   return paneLocalSessionId
     ?? rolloutSessionId;
 }
 
-function resolveFallbackStateSessionId(
-  session: SessionStateSnapshot,
-): string | undefined {
-  return session.nativeSessionId ?? session.sessionId;
+export function resolveUsageMetrics(
+  options: {
+    isCodexPane: boolean;
+    hasPaneLocalTelemetry: boolean;
+    rollout: RolloutSnapshot;
+    cchSession: CchSessionSummary | null;
+    codexConfig: ParsedCodexConfig;
+  },
+): ResolvedUsageMetrics {
+  const localCacheRate = computeCacheRate(
+    options.rollout.inputTokens,
+    options.rollout.cachedInputTokens,
+  );
+  const remoteCacheRate = computeCacheRate(
+    options.cchSession?.inputTokens,
+    options.cchSession?.cacheReadInputTokens,
+  );
+
+  if (options.isCodexPane && !options.hasPaneLocalTelemetry) {
+    return {
+      costUsd: 0,
+      ctxUsed: 0,
+      ctxMax: options.codexConfig.modelContextWindow,
+      totalTokens: 0,
+      cacheRate: 0,
+    };
+  }
+
+  return {
+    costUsd: options.cchSession?.costUsd,
+    ctxUsed: options.rollout.ctxUsed,
+    ctxMax: options.rollout.ctxMax ?? options.codexConfig.modelContextWindow,
+    totalTokens: options.cchSession?.totalTokens ?? options.rollout.totalTokens,
+    cacheRate: remoteCacheRate ?? localCacheRate,
+  };
 }
 
 function normalizePathForPrefixCompare(pathValue: string | undefined): string | undefined {
@@ -1298,28 +1364,27 @@ async function buildRenderSnapshot(
   const inferredSessionId = extractCodexResumeSessionId(command);
   const liveRolloutPath = await findOpenRolloutPathForPaneProcess(pane.pid);
   const liveRollout = await readRolloutSnapshot(liveRolloutPath);
-  const preferredSessionId =
-    inferredSessionId
-    ?? liveRollout.sessionId
-    ?? resolveFallbackStateSessionId(session);
+  const paneLocalSessionId = inferredSessionId ?? liveRollout.sessionId;
+  const hasPaneLocalTelemetry = Boolean(inferredSessionId || liveRolloutPath);
   const rolloutCandidate = liveRolloutPath
     ? null
-    : await findRolloutCandidateForPane(
+    : paneLocalSessionId
+      ? await findRolloutCandidateForPane(
         codexHomeDir,
         pane,
-        preferredSessionId,
+        paneLocalSessionId,
         cacheDir,
-      );
+      )
+      : null;
   const rollout = liveRolloutPath
     ? liveRollout
     : await readRolloutSnapshot(rolloutCandidate?.path ?? null);
   const exactSessionId =
     resolvePaneSessionId(
-      inferredSessionId ?? liveRollout.sessionId,
+      paneLocalSessionId,
       session,
       rollout.sessionId,
-    )
-    ?? resolveFallbackStateSessionId(session);
+    );
   const cchSession = await readExactCchSession(
     codexHomeDir,
     config,
@@ -1331,31 +1396,34 @@ async function buildRenderSnapshot(
     ? await readTeamSupplement(stateRoot, pane.paneId)
     : undefined;
   const git = readGitBranch(pane.currentPath);
-  const localCacheRate = computeCacheRate(
-    rollout.inputTokens,
-    rollout.cachedInputTokens,
-  );
-  const remoteCacheRate = computeCacheRate(
-    cchSession?.inputTokens,
-    cchSession?.cacheReadInputTokens,
-  );
+  const visible = isCodexLikePane(pane, session, stateRoot) || Boolean(teamSupplement);
+  const usage = resolveUsageMetrics({
+    isCodexPane: visible,
+    hasPaneLocalTelemetry,
+    rollout,
+    cchSession,
+    codexConfig,
+  });
+
+  const snapshotModel =
+    cchSession?.model
+    ?? rollout.model
+    ?? codexConfig.model;
+  const snapshotEffort =
+    rollout.effort
+    ?? codexConfig.modelReasoningEffort;
 
   return {
     config,
     snapshot: {
-      visible: isCodexLikePane(pane, session, stateRoot) || Boolean(teamSupplement),
-      model:
-        cchSession?.model
-        ?? rollout.model
-        ?? codexConfig.model,
-      effort:
-        rollout.effort
-        ?? codexConfig.modelReasoningEffort,
-      costUsd: cchSession?.costUsd,
-      ctxUsed: rollout.ctxUsed,
-      ctxMax: rollout.ctxMax ?? codexConfig.modelContextWindow,
-      totalTokens: cchSession?.totalTokens ?? rollout.totalTokens,
-      cacheRate: remoteCacheRate ?? localCacheRate,
+      visible,
+      model: snapshotModel,
+      effort: snapshotEffort,
+      costUsd: usage.costUsd,
+      ctxUsed: usage.ctxUsed,
+      ctxMax: usage.ctxMax,
+      totalTokens: usage.totalTokens,
+      cacheRate: usage.cacheRate,
       teamSupplement,
       sessionName: pane.sessionName,
       panePath: pane.currentPath,

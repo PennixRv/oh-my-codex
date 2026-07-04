@@ -4345,8 +4345,8 @@ async function updateManagedConfig(
 		sharedMcpServers: sharedMcpRegistry.servers,
 		sharedMcpRegistrySource: sharedMcpRegistry.sourcePath,
 		verbose: options.verbose,
-		statusLinePreset: null, // Pennix fork: HUD disabled
-		forceStatusLinePreset: false, // Pennix fork: HUD disabled
+		statusLinePreset: null, // Pennix fork: hide Codex native status line
+		forceStatusLinePreset: true, // rewrite only OMX-managed lines; preserve user customizations
 		notifyCommand: notifyPlan.notifyCommand,
 		includeFirstPartyMcp: mcpMode === "compat",
 		preserveExistingFirstPartyMcp,

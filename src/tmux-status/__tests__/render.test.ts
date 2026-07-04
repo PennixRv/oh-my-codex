@@ -5,6 +5,7 @@ import {
   extractRolloutSnapshotFromLines,
   normalizeCchManagementBaseUrl,
   resolvePaneSessionId,
+  resolveUsageMetrics,
   rolloutFileNameCouldMatchSessionId,
   renderTmuxStatusLeft,
   renderTmuxStatusRight,
@@ -51,8 +52,7 @@ describe('tmux status left renderer', () => {
     assert.match(rendered, /Effort/);
     assert.match(rendered, /xhigh/);
     assert.match(rendered, /Cost/);
-    assert.match(rendered, /0\.125/);
-    assert.doesNotMatch(rendered, /\$0\.125/);
+    assert.match(rendered, /\$0\.1/);
     assert.match(rendered, /Ctx/);
     assert.match(rendered, /42\.0k\/240\.0k 17\.5%/);
     assert.match(rendered, /Total/);
@@ -111,6 +111,18 @@ describe('tmux status right renderer', () => {
     assert.match(rendered, /feature\/status-bar\*/);
     assert.match(rendered, /14:28/);
     assert.doesNotMatch(rendered, /Time/);
+  });
+
+  it('strips transient hash suffixes from tmux session names', () => {
+    const rendered = renderTmuxStatusRight(
+      makeSnapshot({
+        sessionName: 'aoe_Armenians_a768005a',
+      }),
+      'nord',
+    );
+
+    assert.match(rendered, /aoe_Armenians/);
+    assert.doesNotMatch(rendered, /a768005a/);
   });
 });
 
@@ -258,5 +270,95 @@ describe('tmux status rollout helpers', () => {
       ),
       '019f0c5e-9624-7182-b231-c83305f8d02e',
     );
+  });
+
+  it('does not fall back to stale shared OMX state without pane-local session evidence', () => {
+    assert.equal(
+      resolvePaneSessionId(
+        undefined,
+        {
+          nativeSessionId: '019ef8bb-c32d-7530-b6af-929f1b6f6deb',
+          sessionId: '019ef8bb-c32d-7530-b6af-929f1b6f6deb',
+        },
+        undefined,
+      ),
+      undefined,
+    );
+  });
+});
+
+describe('tmux status usage metrics resolution', () => {
+  it('zeros usage metrics for Codex panes that have no pane-local telemetry yet', () => {
+    assert.deepEqual(
+      resolveUsageMetrics({
+        isCodexPane: true,
+        hasPaneLocalTelemetry: false,
+        rollout: {
+          ctxUsed: 42000,
+          ctxMax: 240000,
+          totalTokens: 2_878_679,
+          inputTokens: 2_862_682,
+          cachedInputTokens: 2_667_520,
+        },
+        cchSession: {
+          sessionId: '019ef8bb-c32d-7530-b6af-929f1b6f6deb',
+          costUsd: 0.125,
+          inputTokens: 2_862_682,
+          cacheReadInputTokens: 2_667_520,
+          totalTokens: 2_878_679,
+        },
+        codexConfig: {
+          modelContextWindow: 250000,
+        },
+      }),
+      {
+        costUsd: 0,
+        ctxUsed: 0,
+        ctxMax: 250000,
+        totalTokens: 0,
+        cacheRate: 0,
+      },
+    );
+  });
+
+  it('uses real rollout and CCH metrics once pane-local telemetry exists', () => {
+    const metrics = resolveUsageMetrics({
+      isCodexPane: true,
+      hasPaneLocalTelemetry: true,
+      rollout: {
+        ctxUsed: 42000,
+        ctxMax: 240000,
+        totalTokens: 2_878_679,
+        inputTokens: 2_862_682,
+        cachedInputTokens: 2_667_520,
+      },
+      cchSession: {
+        sessionId: '019f0c5e-9624-7182-b231-c83305f8d02e',
+        costUsd: 0.125,
+        inputTokens: 2_862_682,
+        cacheReadInputTokens: 2_667_520,
+        totalTokens: 2_878_679,
+      },
+      codexConfig: {
+        modelContextWindow: 250000,
+      },
+    });
+
+    assert.deepEqual(
+      {
+        costUsd: metrics.costUsd,
+        ctxUsed: metrics.ctxUsed,
+        ctxMax: metrics.ctxMax,
+        totalTokens: metrics.totalTokens,
+      },
+      {
+        costUsd: 0.125,
+        ctxUsed: 42000,
+        ctxMax: 240000,
+        totalTokens: 2_878_679,
+      },
+    );
+    assert.ok(metrics.cacheRate !== undefined);
+    assert.ok(Math.abs(metrics.cacheRate - 48.23548940888597) < 1e-9);
   });
 });
