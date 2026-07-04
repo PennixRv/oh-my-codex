@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
-import { mkdir, open, readFile, readdir, stat, writeFile } from 'node:fs/promises';
+import { mkdir, open, readFile, readlink, readdir, stat, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { basename, dirname, join, resolve } from 'node:path';
 import { parse as parseToml } from '@iarna/toml';
@@ -53,6 +53,7 @@ interface PaneContext {
   currentPath: string;
   currentCommand: string;
   startCommand: string;
+  pid?: number;
 }
 
 interface RolloutSnapshot {
@@ -101,6 +102,7 @@ interface CchSessionSummary {
   costUsd?: number;
   inputTokens?: number;
   cacheReadInputTokens?: number;
+  totalTokens?: number;
 }
 
 export interface TmuxStatusRenderSnapshot {
@@ -479,15 +481,26 @@ export function rolloutFileNameCouldMatchSessionId(
   );
 }
 
+function isRolloutFilePath(pathValue: string): boolean {
+  const normalized = sanitizeOptionalString(pathValue.replace(/\s+\(deleted\)$/u, ''));
+  if (!normalized) return false;
+  const fileName = basename(normalized);
+  return fileName.startsWith('rollout-') && fileName.endsWith('.jsonl');
+}
+
 export function resolvePaneSessionId(
-  inferredSessionId: string | undefined,
+  paneLocalSessionId: string | undefined,
   session: SessionStateSnapshot,
   rolloutSessionId: string | undefined,
 ): string | undefined {
-  return inferredSessionId
-    ?? session.nativeSessionId
-    ?? session.sessionId
+  return paneLocalSessionId
     ?? rolloutSessionId;
+}
+
+function resolveFallbackStateSessionId(
+  session: SessionStateSnapshot,
+): string | undefined {
+  return session.nativeSessionId ?? session.sessionId;
 }
 
 function normalizePathForPrefixCompare(pathValue: string | undefined): string | undefined {
@@ -658,19 +671,21 @@ async function readPaneContext(paneId: string): Promise<PaneContext | null> {
     '-p',
     '-t',
     paneId,
-    `#{pane_id}${TMUX_FIELD_SEPARATOR}#{session_name}${TMUX_FIELD_SEPARATOR}#{pane_current_path}${TMUX_FIELD_SEPARATOR}#{pane_current_command}${TMUX_FIELD_SEPARATOR}#{pane_start_command}`,
+    `#{pane_id}${TMUX_FIELD_SEPARATOR}#{session_name}${TMUX_FIELD_SEPARATOR}#{pane_current_path}${TMUX_FIELD_SEPARATOR}#{pane_current_command}${TMUX_FIELD_SEPARATOR}#{pane_start_command}${TMUX_FIELD_SEPARATOR}#{pane_pid}`,
   ]);
   if (!output) return null;
-  const [resolvedPaneId, sessionName, currentPath, currentCommand, startCommand] = output
+  const [resolvedPaneId, sessionName, currentPath, currentCommand, startCommand, panePid] = output
     .split(TMUX_FIELD_SEPARATOR)
     .map((value) => value ?? '');
   if (!resolvedPaneId) return null;
+  const parsedPid = Number.parseInt(panePid, 10);
   return {
     paneId: resolvedPaneId,
     sessionName,
     currentPath,
     currentCommand,
     startCommand,
+    pid: Number.isFinite(parsedPid) && parsedPid > 0 ? parsedPid : undefined,
   };
 }
 
@@ -814,6 +829,41 @@ async function findRolloutPathForSession(
     }
   }
   return null;
+}
+
+async function findOpenRolloutPathForPaneProcess(
+  panePid: number | undefined,
+): Promise<string | null> {
+  if (!panePid || panePid <= 0) return null;
+  const fdRoot = `/proc/${panePid}/fd`;
+  if (!existsSync(fdRoot)) return null;
+  const entries = await readdir(fdRoot).catch(() => []);
+  const candidates = new Set<string>();
+  for (const entry of entries) {
+    const fdPath = join(fdRoot, entry);
+    try {
+      const target = await readlink(fdPath);
+      if (isRolloutFilePath(target)) {
+        candidates.add(target.replace(/\s+\(deleted\)$/u, ''));
+      }
+    } catch {
+      continue;
+    }
+  }
+  if (candidates.size === 0) return null;
+  if (candidates.size === 1) return [...candidates][0] ?? null;
+
+  let bestPath: string | null = null;
+  let bestMtimeMs = -1;
+  for (const candidate of candidates) {
+    const fileStat = await stat(candidate).catch(() => null);
+    const mtimeMs = fileStat?.mtimeMs ?? -1;
+    if (mtimeMs > bestMtimeMs) {
+      bestMtimeMs = mtimeMs;
+      bestPath = candidate;
+    }
+  }
+  return bestPath ?? [...candidates][0] ?? null;
 }
 
 function readLastEventPayload(
@@ -1033,6 +1083,7 @@ async function readExactCchSession(
         costUsd: normalizeNumber(exactStats.totalCost),
         inputTokens: normalizeNumber(exactStats.totalInputTokens),
         cacheReadInputTokens: normalizeNumber(exactStats.totalCacheReadTokens),
+        totalTokens: normalizeNumber(exactStats.totalTokens),
       };
       await writeJsonCache(
         cacheDir,
@@ -1085,6 +1136,7 @@ async function readExactCchSession(
     costUsd: normalizeNumber(match.costUsd),
     inputTokens: normalizeNumber(match.inputTokens),
     cacheReadInputTokens: normalizeNumber(match.cacheReadInputTokens),
+    totalTokens: normalizeNumber(match.totalTokens),
   };
 }
 
@@ -1244,19 +1296,30 @@ async function buildRenderSnapshot(
   const codexConfig = await readCodexConfig(codexHomeDir);
   const command = `${pane.startCommand} ${pane.currentCommand}`;
   const inferredSessionId = extractCodexResumeSessionId(command);
-  const preferredSessionId = inferredSessionId ?? session.nativeSessionId ?? session.sessionId;
-  const rolloutCandidate = await findRolloutCandidateForPane(
-    codexHomeDir,
-    pane,
-    preferredSessionId,
-    cacheDir,
-  );
-  const rollout = await readRolloutSnapshot(rolloutCandidate?.path ?? null);
-  const exactSessionId = resolvePaneSessionId(
-    inferredSessionId,
-    session,
-    rollout.sessionId,
-  );
+  const liveRolloutPath = await findOpenRolloutPathForPaneProcess(pane.pid);
+  const liveRollout = await readRolloutSnapshot(liveRolloutPath);
+  const preferredSessionId =
+    inferredSessionId
+    ?? liveRollout.sessionId
+    ?? resolveFallbackStateSessionId(session);
+  const rolloutCandidate = liveRolloutPath
+    ? null
+    : await findRolloutCandidateForPane(
+        codexHomeDir,
+        pane,
+        preferredSessionId,
+        cacheDir,
+      );
+  const rollout = liveRolloutPath
+    ? liveRollout
+    : await readRolloutSnapshot(rolloutCandidate?.path ?? null);
+  const exactSessionId =
+    resolvePaneSessionId(
+      inferredSessionId ?? liveRollout.sessionId,
+      session,
+      rollout.sessionId,
+    )
+    ?? resolveFallbackStateSessionId(session);
   const cchSession = await readExactCchSession(
     codexHomeDir,
     config,
@@ -1282,17 +1345,17 @@ async function buildRenderSnapshot(
     snapshot: {
       visible: isCodexLikePane(pane, session, stateRoot) || Boolean(teamSupplement),
       model:
-        rollout.model
-        ?? codexConfig.model
-        ?? cchSession?.model,
+        cchSession?.model
+        ?? rollout.model
+        ?? codexConfig.model,
       effort:
         rollout.effort
         ?? codexConfig.modelReasoningEffort,
       costUsd: cchSession?.costUsd,
       ctxUsed: rollout.ctxUsed,
       ctxMax: rollout.ctxMax ?? codexConfig.modelContextWindow,
-      totalTokens: rollout.totalTokens,
-      cacheRate: localCacheRate ?? remoteCacheRate,
+      totalTokens: cchSession?.totalTokens ?? rollout.totalTokens,
+      cacheRate: remoteCacheRate ?? localCacheRate,
       teamSupplement,
       sessionName: pane.sessionName,
       panePath: pane.currentPath,

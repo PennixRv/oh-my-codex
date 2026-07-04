@@ -231,4 +231,32 @@ describe('tmux status rollout helpers', () => {
       '019f20ec-cab5-7e82-bf5f-faee5753c79f',
     );
   });
+
+  it('prefers a pane-local rollout session id over stale shared OMX state', () => {
+    assert.equal(
+      resolvePaneSessionId(
+        '019f0c5e-9624-7182-b231-c83305f8d02e',
+        {
+          nativeSessionId: '019ef8bb-c32d-7530-b6af-929f1b6f6deb',
+          sessionId: '019ef8bb-c32d-7530-b6af-929f1b6f6deb',
+        },
+        '019f0c5e-9624-7182-b231-c83305f8d02e',
+      ),
+      '019f0c5e-9624-7182-b231-c83305f8d02e',
+    );
+  });
+
+  it('falls back to rollout metadata when there is no resume id', () => {
+    assert.equal(
+      resolvePaneSessionId(
+        undefined,
+        {
+          nativeSessionId: '019ef8bb-c32d-7530-b6af-929f1b6f6deb',
+          sessionId: '019ef8bb-c32d-7530-b6af-929f1b6f6deb',
+        },
+        '019f0c5e-9624-7182-b231-c83305f8d02e',
+      ),
+      '019f0c5e-9624-7182-b231-c83305f8d02e',
+    );
+  });
 });
