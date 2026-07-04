@@ -1,5 +1,9 @@
 # Release readiness: oh-my-codex 0.18.68
 
+Superseded:
+- The `v0.18.68` tag-triggered GitHub release workflow failed in `Run tests` before npm publication or GitHub Release creation.
+- The corrected publish candidate is `0.18.69`; see `docs/qa/release-readiness-0.18.69.md`.
+
 ## Range
 
 - Previous published npm version / successful release: `v0.18.67`.

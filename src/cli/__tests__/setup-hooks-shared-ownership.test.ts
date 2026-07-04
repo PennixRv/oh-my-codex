@@ -290,7 +290,11 @@ describe("omx setup/uninstall shared ownership for native hooks", () => {
       assert.doesNotMatch(config, /^codex_hooks = true$/m);
       assert.doesNotMatch(config, /^multi_agent\s*=/m);
       assert.doesNotMatch(config, /^child_agents_md\s*=/m);
-      assert.doesNotMatch(config, /^goals\s*=/m);
+      assert.match(
+        config,
+        /^goals = true$/m,
+        "uninstall should preserve native Codex goals support alongside preserved user hooks",
+      );
     } finally {
       await rm(wd, { recursive: true, force: true });
     }
