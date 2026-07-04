@@ -258,8 +258,9 @@ function formatContext(used: number | undefined, max: number | undefined): strin
   ) {
     return '?';
   }
-  const pct = formatPercent((used / max) * 100);
-  return `${formatCompactNumber(used)}/${formatCompactNumber(max)} ${pct}`;
+  const remaining = Math.max(0, max - used);
+  const pct = formatPercent((remaining / max) * 100);
+  return `${formatCompactNumber(remaining)}/${formatCompactNumber(max)} ${pct}`;
 }
 
 function trimSupplement(value: string, limit: number = 56): string {
@@ -563,7 +564,7 @@ export function resolveUsageMetrics(
   return {
     costUsd: options.cchSession?.costUsd,
     ctxUsed: options.rollout.ctxUsed,
-    ctxMax: options.rollout.ctxMax ?? options.codexConfig.modelContextWindow,
+    ctxMax: options.codexConfig.modelContextWindow ?? options.rollout.ctxMax,
     totalTokens: options.cchSession?.totalTokens ?? options.rollout.totalTokens,
     cacheRate: remoteCacheRate ?? localCacheRate,
   };

@@ -21,7 +21,7 @@ function makeSnapshot(
     effort: 'xhigh',
     costUsd: 0.125,
     ctxUsed: 42000,
-    ctxMax: 240000,
+    ctxMax: 250000,
     totalTokens: 2_878_679,
     cacheRate: 37.5,
     sessionName: 'dev',
@@ -54,7 +54,7 @@ describe('tmux status left renderer', () => {
     assert.match(rendered, /Cost/);
     assert.match(rendered, /\$0\.1/);
     assert.match(rendered, /Ctx/);
-    assert.match(rendered, /42\.0k\/240\.0k 17\.5%/);
+    assert.match(rendered, /208\.0k\/250\.0k 83\.2%/);
     assert.match(rendered, /Total/);
     assert.match(rendered, /2\.9M/);
     assert.ok(rendered.indexOf('Ctx') < rendered.indexOf('Total'));
@@ -144,7 +144,7 @@ describe('tmux status rollout helpers', () => {
     );
   });
 
-  it('reads turn_context and event_msg token_count with the old status-bar semantics', () => {
+  it('reads turn_context and event_msg token_count with rollout telemetry semantics', () => {
     const snapshot = extractRolloutSnapshotFromLines([
       JSON.stringify({
         type: 'session_meta',
@@ -368,7 +368,7 @@ describe('tmux status usage metrics resolution', () => {
       {
         costUsd: 0.125,
         ctxUsed: 42000,
-        ctxMax: 240000,
+        ctxMax: 250000,
         totalTokens: 2_878_679,
       },
     );
