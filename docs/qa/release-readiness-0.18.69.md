@@ -15,6 +15,7 @@
 - setup preserves a trusted existing installed marketplace source when rerun from a source checkout
 - uninstall preserves official Codex `plugin_hooks` and `goals` feature flags while still removing OMX-managed wrappers
 - the shared-ownership uninstall regression now expects preserved `goals = true`, aligning the release gate with the existing uninstall contract
+- the release workflow now resolves the latest published ancestor tag for generated release notes, keeping the corrective release compare range anchored at `v0.18.67`
 
 ## PR inventory
 
@@ -39,6 +40,7 @@
 - [x] `node dist/scripts/check-version-sync.js --tag v0.18.69`
 - [x] `npm pack --dry-run`
 - [x] `git diff --cached --check`
+- [x] `node dist/scripts/run-test-files.js dist/verification/__tests__/release-workflow-release-body.test.js dist/scripts/__tests__/generate-release-body.test.js`
 - [ ] `node dist/scripts/generate-release-body.js --template RELEASE_BODY.md --out /tmp/RELEASE_BODY.v0.18.69.generated.md --current-tag v0.18.69 --previous-tag v0.18.67 --repo PennixRv/oh-my-codex`
 
 ## CI / publication evidence
@@ -51,7 +53,7 @@
 
 ## Known gaps
 
-- The tag workflow remains the authoritative full `npm run test:node` gate; local validation here is focused on the new tmux-status and lifecycle-preservation surfaces plus the corrected shared-ownership uninstall expectation.
+- The tag workflow remains the authoritative full `npm run test:node` gate; local validation here is focused on the new tmux-status and lifecycle-preservation surfaces, the corrected shared-ownership uninstall expectation, and the release-note compare-base fix for failed unpublished tags.
 - `generate-release-body.js` verifies the current tag ref and therefore cannot produce the final compare-aware release body until the local `v0.18.69` tag exists.
 - Published-artifact clean reinstall smoke remains deferred until npm publication completes.
 

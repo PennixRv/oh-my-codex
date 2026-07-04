@@ -41,7 +41,8 @@ Patch release for the Pennix fork tmux-status and lifecycle-hardening line.
 
 - The `v0.18.68` GitHub release workflow failed in `Run tests` and never published to npm.
 - The failing assertion still expected uninstall to remove `goals`, even though the shipping uninstall implementation already preserved official Codex `goals = true` for user-hook ownership cases.
-- `0.18.69` carries the same product changes as `0.18.68`, plus the corrected shared-ownership uninstall expectation so the standard tag workflow can publish the intended artifact.
+- The release workflow now resolves the latest published ancestor tag for generated release notes, so the failed unpublished `v0.18.68` tag cannot shrink the `v0.18.67...v0.18.69` compare range.
+- `0.18.69` carries the same product changes as `0.18.68`, plus the corrected shared-ownership uninstall expectation and release-note compare-base fix so the standard tag workflow can publish the intended artifact.
 
 ## Recommended release message
 

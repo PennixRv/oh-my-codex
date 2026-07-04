@@ -10,6 +10,7 @@ Patch release for the Pennix fork tmux-status and lifecycle-hardening line: publ
 
 - Ships the managed tmux status bar, text-first tmux 256-color wording, trusted marketplace preservation on setup, and official Codex `plugin_hooks` / `goals` preservation on uninstall that were prepared for the failed `0.18.68` candidate.
 - Aligns the shared-ownership uninstall regression to the current uninstall contract by expecting preserved `goals = true` when user hooks remain, matching the existing uninstall implementation and other uninstall regression coverage.
+- Teaches the tag-triggered release workflow to resolve the latest published ancestor tag instead of the newest raw tag, so a failed unpublished tag like `v0.18.68` cannot truncate the generated GitHub Release compare range.
 - Replaces the failed `v0.18.68` tag as the first publishable candidate for this change set; `0.18.68` never reached npm or GitHub Releases.
 
 ## [0.18.67] - 2026-07-02

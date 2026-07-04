@@ -59,10 +59,24 @@ jobs:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Prepare release notes
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           if [ -s RELEASE_BODY.md ]; then
             echo "Generating release notes from RELEASE_BODY.md template"
-            PREVIOUS_TAG=$(git tag --sort=-creatordate | grep -Fxv "$GITHUB_REF_NAME" | head -n 1 || true)
+            PREVIOUS_TAG=""
+            while read -r CANDIDATE_TAG; do
+              if [ -z "$CANDIDATE_TAG" ] || [ "$CANDIDATE_TAG" = "$GITHUB_REF_NAME" ]; then
+                continue
+              fi
+              if ! git merge-base --is-ancestor "$CANDIDATE_TAG" "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+                continue
+              fi
+              if gh release view "$CANDIDATE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+                PREVIOUS_TAG="$CANDIDATE_TAG"
+                break
+              fi
+            done < <(git tag --sort=-creatordate)
             ARGS=(
               --template RELEASE_BODY.md
               --out release-notes.md

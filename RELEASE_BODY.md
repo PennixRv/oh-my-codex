@@ -13,6 +13,7 @@ This release ships the tracked tmux status bar line plus setup/uninstall lifecyc
 - `omx setup` now preserves an existing trusted installed marketplace source when it is rerun from a source checkout instead of silently repointing the local marketplace to the repo checkout path.
 - `omx uninstall` now preserves official Codex `plugin_hooks = true` and `goals = true` feature flags while still removing OMX-managed wrappers and marketplace/plugin registrations.
 - The shared-ownership uninstall regression gate now expects preserved `goals = true` when user hooks remain, matching the shipping uninstall behavior that already passed the other uninstall coverage lanes.
+- The release workflow now resolves the latest published ancestor tag for generated GitHub Release notes, so failed unpublished tags do not collapse the compare range for the corrective release.
 
 ## Fixes / compatibility
 
