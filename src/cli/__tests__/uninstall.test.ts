@@ -483,7 +483,7 @@ describe('omx uninstall', () => {
     }
   });
 
-  it('preserves user hooks while removing OMX-managed wrappers', async () => {
+  it('preserves user hooks and official Codex goals flag while removing OMX-managed wrappers', async () => {
     const wd = await mkdtemp(join(tmpdir(), 'omx-uninstall-'));
     try {
       const home = join(wd, 'home');
@@ -537,7 +537,7 @@ describe('omx uninstall', () => {
       );
       assert.doesNotMatch(config, /^multi_agent\s*=/m);
       assert.doesNotMatch(config, /^child_agents_md\s*=/m);
-      assert.doesNotMatch(config, /^goals\s*=/m);
+      assert.match(config, /^goals\s*=\s*true$/m);
     } finally {
       await rm(wd, { recursive: true, force: true });
     }
@@ -611,7 +611,8 @@ describe('omx uninstall', () => {
         /^\s*hooks\s*=\s*true$/m,
         'preserved user hooks should keep native Codex hooks enabled after plugin-mode uninstall',
       );
-      assert.doesNotMatch(config, /^\s*plugin_hooks\s*=\s*true$/m);
+      assert.match(config, /^\s*plugin_hooks\s*=\s*true$/m);
+      assert.match(config, /^\s*goals\s*=\s*true$/m);
       assert.doesNotMatch(config, /oh-my-codex@oh-my-codex-local:hooks\/hooks\.json/);
       assert.doesNotMatch(config, /^\[plugins\."oh-my-codex@oh-my-codex-local"/m);
       assert.doesNotMatch(config, /^\[marketplaces\.oh-my-codex-local\]$/m);
@@ -741,6 +742,48 @@ describe('omx uninstall', () => {
       assert.doesNotMatch(config, /model_reasoning_effort\s*=/);
       assert.doesNotMatch(config, /developer_instructions\s*=/);
       assert.doesNotMatch(config, /oh-my-codex \(OMX\) Configuration/);
+    } finally {
+      await rm(wd, { recursive: true, force: true });
+    }
+  });
+
+  it('preserves official Codex plugin_hooks and goals flags during uninstall', async () => {
+    const wd = await mkdtemp(join(tmpdir(), 'omx-uninstall-preserve-codex-flags-'));
+    try {
+      const home = join(wd, 'home');
+      const codexDir = join(home, '.codex');
+      await mkdir(codexDir, { recursive: true });
+      await writeFile(
+        join(codexDir, 'config.toml'),
+        [
+          `developer_instructions = ${JSON.stringify(OMX_PLUGIN_DEVELOPER_INSTRUCTIONS)}`,
+          '',
+          '[features]',
+          'plugin_hooks = true',
+          'goals = true',
+          'web_search = true',
+          '',
+          `[plugins."oh-my-codex@oh-my-codex-local"]`,
+          'enabled = true',
+          '',
+          '[marketplaces.oh-my-codex-local]',
+          'source_type = "local"',
+          'source = "/tmp/omx-installed"',
+          '',
+        ].join('\n'),
+      );
+
+      const res = runOmx(wd, ['uninstall'], { HOME: home });
+      if (shouldSkipForSpawnPermissions(res.error)) return;
+      assert.equal(res.status, 0, res.stderr || res.stdout);
+
+      const config = await readFile(join(codexDir, 'config.toml'), 'utf-8');
+      assert.match(config, /^plugin_hooks = true$/m);
+      assert.match(config, /^goals = true$/m);
+      assert.match(config, /^web_search = true$/m);
+      assert.doesNotMatch(config, /^developer_instructions\s*=/m);
+      assert.doesNotMatch(config, /^\[plugins\."oh-my-codex@oh-my-codex-local"\]$/m);
+      assert.doesNotMatch(config, /^\[marketplaces\.oh-my-codex-local\]$/m);
     } finally {
       await rm(wd, { recursive: true, force: true });
     }
@@ -1185,5 +1228,34 @@ describe('stripOmxFeatureFlags', () => {
     const config = 'model = "o4-mini"\n';
     const result = stripOmxFeatureFlags(config);
     assert.equal(result, config);
+  });
+
+  it('can preserve official Codex plugin_hooks and goals flags', async () => {
+    const { stripOmxFeatureFlags } = await import('../../config/generator.js');
+
+    const config = [
+      '[features]',
+      'multi_agent = true',
+      'child_agents_md = true',
+      'plugin_hooks = true',
+      'hooks = true',
+      'codex_hooks = true',
+      'goals = true',
+      'goal = true',
+      'web_search = true',
+      '',
+    ].join('\n');
+
+    const result = stripOmxFeatureFlags(config, {
+      preserveCodexManagedFlags: true,
+    });
+    assert.doesNotMatch(result, /multi_agent/);
+    assert.doesNotMatch(result, /child_agents_md/);
+    assert.doesNotMatch(result, /^hooks\s*=/m);
+    assert.doesNotMatch(result, /^codex_hooks\s*=/m);
+    assert.doesNotMatch(result, /^goal\s*=/m);
+    assert.match(result, /^plugin_hooks\s*=\s*true$/m);
+    assert.match(result, /^goals\s*=\s*true$/m);
+    assert.match(result, /web_search = true/);
   });
 });

@@ -1807,7 +1807,12 @@ function upsertAgentsSettings(config: string): string {
  * Remove OMX-owned feature flags from the [features] section.
  * If the section becomes empty after removal, remove the section header too.
  */
-export function stripOmxFeatureFlags(config: string): string {
+export function stripOmxFeatureFlags(
+  config: string,
+  options: {
+    preserveCodexManagedFlags?: boolean;
+  } = {},
+): string {
   const lines = config.split(/\r?\n/);
   const featuresStart = lines.findIndex((line) =>
     /^\s*\[features\]\s*$/.test(line),
@@ -1826,13 +1831,14 @@ export function stripOmxFeatureFlags(config: string): string {
   const omxFlags = [
     "multi_agent",
     "child_agents_md",
-    "plugin_hooks",
     "hooks",
     "codex_hooks",
-    "goals",
     "goal",
     "collab",
   ];
+  if (!options.preserveCodexManagedFlags) {
+    omxFlags.push("plugin_hooks", "goals");
+  }
   const filtered: string[] = [];
   for (let i = 0; i < lines.length; i++) {
     if (i > featuresStart && i < sectionEnd) {

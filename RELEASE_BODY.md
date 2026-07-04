@@ -1,36 +1,34 @@
-# oh-my-codex-pennix v0.18.67
+# oh-my-codex-pennix v0.18.68
 
 > Release notes template for the Pennix fork. The tag workflow regenerates this file into the final GitHub release body.
 
 ## Summary
 
-This release ships a bounded Pennix follow-up hotfix for clean uninstall/reinstall safety. It fixes the remaining uninstall residue discovered immediately after `0.18.66`: OMX was still leaving managed install-state files behind under `CODEX_HOME/.omx`, and the summary text overstated what had actually been removed.
+This release ships the tracked tmux status bar line plus setup/uninstall lifecycle hardening. It replaces the icon-heavy status wording with a text-first tmux 256-color layout, installs and removes the managed tmux assets in user scope, preserves trusted plugin marketplace sources during setup, and stops uninstall from stripping official Codex `plugin_hooks` / `goals` feature flags.
 
 ## Highlights
 
-- `omx uninstall` now removes managed `install-state.json` and `native-agents.json` from `CODEX_HOME/.omx`, so uninstall no longer leaves behind stale installed/setup version markers or native-agent manifests after a clean teardown.
-- The new cleanup is intentionally narrow: unrelated `CODEX_HOME/.omx` files are preserved, and the directory is pruned only when those managed install artifacts were the last remaining entries.
-- Uninstall summary output now distinguishes managed `CODEX_HOME/.omx` install artifacts from the separate project `.omx/` purge path, and regression coverage locks the precise preservation contract.
+- New managed tmux status assets install a bounded OMX block into `~/.tmux.conf` and keep the renderer/config under `CODEX_HOME/.omx/tmux-status`, even when `omx setup` runs with `--scope project`.
+- The status bar itself now renders `Model`, `Effort`, `Cost`, `Ctx`, `Cache`, `Sess`, `Path`, and `Git` labels with a restrained tmux 256-color palette and a keyless clock, avoiding Nerd Font spacing inconsistencies.
+- `omx setup` now preserves an existing trusted installed marketplace source when it is rerun from a source checkout instead of silently repointing the local marketplace to the repo checkout path.
+- `omx uninstall` now preserves official Codex `plugin_hooks = true` and `goals = true` feature flags while still removing OMX-managed wrappers and marketplace/plugin registrations.
 
 ## Fixes / compatibility
 
-- The `0.18.66` `developer_instructions` preservation hotfix remains intact; this cut only closes the remaining uninstall residue gap that appeared during published-artifact smoke.
-- Team/runtime, mailbox-boundary delivery, HUD behavior, and prior tmux/session fixes remain unchanged in this cut.
-- The new regression test covers mixed `CODEX_HOME/.omx` contents, proving that managed install artifacts are removed while unrelated files remain.
-
-## Merged PR inventory
-
-- No merged PRs. `0.18.67` is a direct release-line commit on the Pennix fork.
+- Existing user Codex config survives setup/uninstall better: trusted marketplace source, `plugin_hooks`, and `goals` are retained instead of being rewritten away by OMX lifecycle commands.
+- Managed tmux status assets remain user-scoped, so project-scoped setup does not create repo-local duplicate statusline state.
+- Tmux status install/uninstall stays bounded: only the OMX-managed `~/.tmux.conf` block and `CODEX_HOME/.omx/tmux-status` assets are touched.
 
 ## Validation
 
 - `npm run build`
 - `npm run verify:native-agents && npm run verify:plugin-bundle`
-- `node dist/scripts/run-test-files.js dist/cli/__tests__/uninstall.test.js`
-- `node dist/scripts/check-version-sync.js --tag v0.18.67`
+- `node dist/scripts/run-test-files.js dist/cli/__tests__/setup-install-mode.test.js dist/cli/__tests__/uninstall.test.js dist/cli/__tests__/tmux-status-lifecycle.test.js`
+- `node --test dist/tmux-status/__tests__/render.test.js dist/tmux-status/__tests__/install.test.js`
+- `node dist/scripts/check-version-sync.js --tag v0.18.68`
 
 ## Contributors
 
 Thanks to the contributors who made this release possible.
 
-**Full Changelog**: [`v0.18.66...v0.18.67`](https://github.com/PennixRv/oh-my-codex/compare/v0.18.66...v0.18.67)
+**Full Changelog**: [`v0.18.67...v0.18.68`](https://github.com/PennixRv/oh-my-codex/compare/v0.18.67...v0.18.68)

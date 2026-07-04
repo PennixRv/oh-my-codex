@@ -180,6 +180,55 @@ describe("setup install mode trust-state migration regressions", () => {
 			await rm(wd, { recursive: true, force: true });
 		}
 	});
+
+	it("preserves an existing trusted marketplace source when setup runs from a source checkout", async () => {
+		const wd = await mkdtemp(join(tmpdir(), "omx-setup-install-mode-"));
+		try {
+			await withIsolatedUserHome(wd, async (codexHomeDir) => {
+				await withTempCwd(wd, async () => {
+					const installedRoot = join(wd, "installed-oh-my-codex");
+					await mkdir(installedRoot, { recursive: true });
+					await writeFile(
+						join(installedRoot, "package.json"),
+						JSON.stringify({
+							name: "oh-my-codex-pennix",
+							version: "0.0.0-test",
+						}) + "\n",
+					);
+
+					const configPath = join(codexHomeDir, "config.toml");
+					await writeFile(
+						configPath,
+						[
+							`[marketplaces.oh-my-codex-local]`,
+							'source_type = "local"',
+							`source = ${JSON.stringify(installedRoot)}`,
+							"",
+						].join("\n"),
+					);
+
+					const output = await captureConsoleOutput(async () => {
+						await setup({ scope: "user", installMode: "plugin", force: true });
+					});
+
+					const config = await readFile(configPath, "utf-8");
+					const parsed = parseToml(config) as {
+						marketplaces?: Record<string, { source?: string }>;
+					};
+					assert.equal(
+						parsed.marketplaces?.["oh-my-codex-local"]?.source,
+						installedRoot,
+					);
+					assert.match(
+						output,
+						/Registered local Codex plugin marketplace oh-my-codex-local .*preserved existing trusted install source/i,
+					);
+				});
+			});
+		} finally {
+			await rm(wd, { recursive: true, force: true });
+		}
+	});
 });
 
 describe.skip("notify setup scope", () => {
@@ -1508,7 +1557,7 @@ describe.skip("omx setup install mode behavior", () => {
 		}
 	});
 
-	it("registers the local Codex plugin marketplace without reintroducing legacy assets", async () => {
+		it("registers the local Codex plugin marketplace without reintroducing legacy assets", async () => {
 		const wd = await mkdtemp(join(tmpdir(), "omx-setup-install-mode-"));
 		try {
 			await withIsolatedUserHome(wd, async (codexHomeDir) => {
@@ -1594,10 +1643,10 @@ describe.skip("omx setup install mode behavior", () => {
 			});
 		} finally {
 			await rm(wd, { recursive: true, force: true });
-		}
-	});
+			}
+		});
 
-	it("enables the local Codex plugin while preserving plugin subtable policy", async () => {
+		it("enables the local Codex plugin while preserving plugin subtable policy", async () => {
 		const wd = await mkdtemp(join(tmpdir(), "omx-setup-install-mode-"));
 		try {
 			await withIsolatedUserHome(wd, async (codexHomeDir) => {

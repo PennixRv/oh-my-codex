@@ -135,6 +135,7 @@ import {
 	OMX_FORK_USER_FACING_NAME,
 	OMX_FORK_REPO_SLUG,
 } from "../utils/package.js";
+import { installManagedTmuxStatusArtifacts } from "../tmux-status/install.js";
 
 async function resolveStatusLinePresetForSetup(
 	projectRoot: string,
@@ -1303,6 +1304,59 @@ async function isTrustedOmxPluginMarketplaceSource(
 	}
 }
 
+function looksLikeSourceCheckout(packageRoot: string): boolean {
+	return existsSync(join(packageRoot, ".git"));
+}
+
+async function resolveMarketplaceRegistrationPackageRoot(
+	configPath: string,
+	packageRoot: string,
+): Promise<{
+		packageRoot: string;
+		preservedExistingSource: boolean;
+	}> {
+	if (!existsSync(configPath)) {
+		return { packageRoot, preservedExistingSource: false };
+	}
+
+	let existingConfig = "";
+	try {
+		existingConfig = await readFile(configPath, "utf-8");
+	} catch {
+		return { packageRoot, preservedExistingSource: false };
+	}
+
+	let parsedConfig: ReturnType<typeof getParsedPluginMarketplaceConfig>;
+	try {
+		parsedConfig = getParsedPluginMarketplaceConfig(existingConfig);
+	} catch {
+		return { packageRoot, preservedExistingSource: false };
+	}
+
+	const existingSource = parsedConfig.marketplace?.source;
+	if (
+		typeof existingSource !== "string"
+		|| existingSource.length === 0
+		|| existingSource === packageRoot
+		|| !looksLikeSourceCheckout(packageRoot)
+	) {
+		return { packageRoot, preservedExistingSource: false };
+	}
+
+	const trustedExistingSource = await isTrustedOmxPluginMarketplaceSource(
+		existingSource,
+		packageRoot,
+	);
+	if (!trustedExistingSource) {
+		return { packageRoot, preservedExistingSource: false };
+	}
+
+	return {
+		packageRoot: existingSource,
+		preservedExistingSource: true,
+	};
+}
+
 async function configSuggestsPluginInstallMode(
 	configPath: string,
 	packageRoot: string,
@@ -1694,13 +1748,25 @@ async function ensurePluginMarketplaceRegistration(
 	backupContext: SetupBackupContext,
 	summary: SetupCategorySummary,
 	options: Pick<SetupOptions, "dryRun" | "verbose">,
-): Promise<"updated" | "unchanged" | "unavailable"> {
+): Promise<{
+	status: "updated" | "unchanged" | "unavailable";
+	packageRoot: string;
+	preservedExistingSource: boolean;
+}> {
 	const packagedMarketplace = await resolvePackagedOmxMarketplace(pkgRoot);
 	if (!packagedMarketplace) {
 		summary.skipped += 1;
-		return "unavailable";
+		return {
+			status: "unavailable",
+			packageRoot: pkgRoot,
+			preservedExistingSource: false,
+		};
 	}
 
+	const registration = await resolveMarketplaceRegistrationPackageRoot(
+		configPath,
+		pkgRoot,
+	);
 	const existingConfig = existsSync(configPath)
 		? await readFile(configPath, "utf-8")
 		: "";
@@ -1710,13 +1776,17 @@ async function ensurePluginMarketplaceRegistration(
 			mcpMode === "compat",
 			{ removeWhenDisabled: removeFirstPartyMcp },
 		),
-		pkgRoot,
+		registration.packageRoot,
 	);
 	const destinationExists = existsSync(configPath);
 
 	if (nextConfig === existingConfig) {
 		summary.unchanged += 1;
-		return "unchanged";
+		return {
+			status: "unchanged",
+			packageRoot: registration.packageRoot,
+			preservedExistingSource: registration.preservedExistingSource,
+		};
 	}
 
 	if (
@@ -1731,10 +1801,14 @@ async function ensurePluginMarketplaceRegistration(
 	summary.updated += 1;
 	if (options.verbose) {
 		console.log(
-			`  ${options.dryRun ? "would register" : "registered"} local Codex plugin marketplace ${OMX_LOCAL_MARKETPLACE_NAME} from ${pkgRoot}`,
+			`  ${options.dryRun ? "would register" : "registered"} local Codex plugin marketplace ${OMX_LOCAL_MARKETPLACE_NAME} from ${registration.packageRoot}${registration.preservedExistingSource ? " (preserved existing trusted install source)" : ""}`,
 		);
 	}
-	return "updated";
+	return {
+		status: "updated",
+		packageRoot: registration.packageRoot,
+		preservedExistingSource: registration.preservedExistingSource,
+	};
 }
 
 async function cleanupPluginModeManagedHooksJson(
@@ -2555,28 +2629,28 @@ export async function setup(options: SetupOptions = {}): Promise<void> {
 				pluginScopedHooks: pluginScopedHooksSupported,
 			},
 		);
-		const pluginMarketplaceResult = await ensurePluginMarketplaceRegistration(
-			scopeDirs.codexConfigFile,
-			pkgRoot,
+			const pluginMarketplaceResult = await ensurePluginMarketplaceRegistration(
+				scopeDirs.codexConfigFile,
+				pkgRoot,
 			resolvedMcpMode.mcpMode,
 			removeFirstPartyMcpRegistrations,
-			backupContext,
-			summary.config,
-			{ dryRun, verbose },
-		);
-		if (pluginMarketplaceResult === "unavailable") {
-			console.log(
-				`  warning: packaged ${OMX_LOCAL_MARKETPLACE_NAME} Codex plugin marketplace metadata not found; /skills plugin discovery was not registered.`,
+				backupContext,
+				summary.config,
+				{ dryRun, verbose },
 			);
-		} else if (pluginMarketplaceResult === "updated") {
-			console.log(
-				`  ${dryRun ? "Would register" : "Registered"} local Codex plugin marketplace ${OMX_LOCAL_MARKETPLACE_NAME} (${pkgRoot}).`,
-			);
-		} else {
-			console.log(
-				`  Local Codex plugin marketplace ${OMX_LOCAL_MARKETPLACE_NAME} already registered (${pkgRoot}).`,
-			);
-		}
+			if (pluginMarketplaceResult.status === "unavailable") {
+				console.log(
+					`  warning: packaged ${OMX_LOCAL_MARKETPLACE_NAME} Codex plugin marketplace metadata not found; /skills plugin discovery was not registered.`,
+				);
+			} else if (pluginMarketplaceResult.status === "updated") {
+				console.log(
+					`  ${dryRun ? "Would register" : "Registered"} local Codex plugin marketplace ${OMX_LOCAL_MARKETPLACE_NAME} (${pluginMarketplaceResult.packageRoot})${pluginMarketplaceResult.preservedExistingSource ? " [preserved existing trusted install source]" : ""}.`,
+				);
+			} else {
+				console.log(
+					`  Local Codex plugin marketplace ${OMX_LOCAL_MARKETPLACE_NAME} already registered (${pluginMarketplaceResult.packageRoot})${pluginMarketplaceResult.preservedExistingSource ? " [preserved existing trusted install source]" : ""}.`,
+				);
+			}
 		const packagedMarketplace = await resolvePackagedOmxMarketplace(pkgRoot);
 		const pluginCacheRefresh = await refreshOmxPluginDiscoveryCache(
 			pkgRoot,
@@ -2753,6 +2827,23 @@ export async function setup(options: SetupOptions = {}): Promise<void> {
 	} else {
 		console.log("  Skipped because Team mode is disabled for this setup.");
 	}
+	console.log();
+
+	console.log("[5.6/8] Installing managed tmux status bar...");
+	const tmuxStatusInstall = await installManagedTmuxStatusArtifacts({
+		scope: resolvedScope.scope,
+		scopeCodexHomeDir: scopeDirs.codexHomeDir,
+		packageRoot: pkgRoot,
+		backupContext,
+		summary: summary.config,
+		options: { dryRun, verbose },
+	});
+	console.log(
+		`  Managed tmux status assets ready (${tmuxStatusInstall.assetRoot}).`,
+	);
+	console.log(
+		`  Managed tmux block ensured in ${tmuxStatusInstall.tmuxConfigPath}.`,
+	);
 	console.log();
 
 	// Step 6: Generate AGENTS.md

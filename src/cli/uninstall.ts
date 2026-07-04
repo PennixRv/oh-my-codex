@@ -43,6 +43,7 @@ import { resolveCodexHookFeatureFlagForCli } from "./codex-feature-probe.js";
 import { readPersistedSetupScope } from "./index.js";
 import { isOmxGeneratedAgentsMd } from "../utils/agents-md.js";
 import { OMX_FIRST_PARTY_MCP_SERVER_NAMES } from "../config/omx-first-party-mcp.js";
+import { removeManagedTmuxStatusArtifacts } from "../tmux-status/install.js";
 
 export interface UninstallOptions {
   codexFeaturesProbe?: () => string | null;
@@ -62,6 +63,8 @@ interface UninstallSummary {
   topLevelKeysRemoved: boolean;
   featureFlagsRemoved: boolean;
   hooksFileRemoved: boolean;
+  tmuxConfigCleaned: boolean;
+  tmuxStatusArtifactsRemoved: number;
   promptsRemoved: number;
   skillsRemoved: number;
   agentConfigsRemoved: number;
@@ -401,7 +404,9 @@ async function cleanConfig(
   config = stripOmxSeededBehavioralDefaults(config);
 
   // Strip feature flags
-  config = stripOmxFeatureFlags(config);
+  config = stripOmxFeatureFlags(config, {
+    preserveCodexManagedFlags: true,
+  });
   if (shouldRestoreHooksFeatureFlag) {
     config = upsertCodexHooksFeatureFlag(
       config,
@@ -740,6 +745,14 @@ function printSummary(summary: UninstallSummary, dryRun: boolean): void {
   if (summary.hooksFileRemoved) {
     console.log(`  ${prefix} OMX-managed entries in .codex/hooks.json`);
   }
+  if (summary.tmuxConfigCleaned) {
+    console.log(`  ${prefix} OMX-managed block in ~/.tmux.conf`);
+  }
+  if (summary.tmuxStatusArtifactsRemoved > 0) {
+    console.log(
+      `  ${prefix} ${summary.tmuxStatusArtifactsRemoved} tmux status asset(s)`,
+    );
+  }
 
   if (summary.promptsRemoved > 0) {
     console.log(`  ${prefix} ${summary.promptsRemoved} agent prompt(s)`);
@@ -773,6 +786,8 @@ function printSummary(summary: UninstallSummary, dryRun: boolean): void {
   const totalActions =
     (summary.configCleaned ? 1 : 0) +
     (summary.hooksFileRemoved ? 1 : 0) +
+    (summary.tmuxConfigCleaned ? 1 : 0) +
+    summary.tmuxStatusArtifactsRemoved +
     summary.promptsRemoved +
     summary.skillsRemoved +
     summary.agentConfigsRemoved +
@@ -818,6 +833,8 @@ export async function uninstall(options: UninstallOptions = {}): Promise<void> {
     topLevelKeysRemoved: false,
     featureFlagsRemoved: false,
     hooksFileRemoved: false,
+    tmuxConfigCleaned: false,
+    tmuxStatusArtifactsRemoved: 0,
     promptsRemoved: 0,
     skillsRemoved: 0,
     agentConfigsRemoved: 0,
@@ -928,6 +945,13 @@ export async function uninstall(options: UninstallOptions = {}): Promise<void> {
     scopeDirs.codexHomeDir,
     { dryRun, verbose },
   );
+  const tmuxStatusRemoval = await removeManagedTmuxStatusArtifacts(
+    scope,
+    scopeDirs.codexHomeDir,
+    { dryRun, verbose },
+  );
+  summary.tmuxConfigCleaned = tmuxStatusRemoval.tmuxConfigCleaned;
+  summary.tmuxStatusArtifactsRemoved = tmuxStatusRemoval.assetEntriesRemoved;
   summary.installArtifactsRemoved = await removeManagedInstallArtifacts(
     scopeDirs.codexHomeDir,
     { dryRun, verbose },
