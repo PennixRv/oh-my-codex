@@ -36,7 +36,7 @@
 - [x] `node dist/scripts/check-version-sync.js --tag v0.18.80`
 - [x] `npm pack --dry-run`
 - [x] `git diff --cached --check`
-- [ ] `node dist/scripts/generate-release-body.js --template RELEASE_BODY.md --out /tmp/RELEASE_BODY.v0.18.80.generated.md --current-tag v0.18.80 --previous-tag v0.18.79 --repo PennixRv/oh-my-codex`
+- [x] `node dist/scripts/generate-release-body.js --template RELEASE_BODY.md --out /tmp/RELEASE_BODY.v0.18.80.generated.md --current-tag v0.18.80 --previous-tag v0.18.79 --repo PennixRv/oh-my-codex`
 
 ## CI / publication evidence
 
