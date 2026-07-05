@@ -18,6 +18,7 @@ const CONTROL_CHARS_RE = /[\u0000-\u001f\u007f-\u009f]/g;
 const ROLLOUT_CANDIDATE_SCAN_LIMIT = 48;
 const ROLLOUT_CANDIDATE_CACHE_SECONDS = 10;
 const ROLLOUT_PREVIEW_BYTES = 16 * 1024;
+const OFFICIAL_CONTEXT_BASELINE_TOKENS = 12_000;
 const CCH_ADMIN_TOKEN_FILE_ENV_VARS = [
   'CCH_ADMIN_TOKEN_FILE',
   'OMX_CCH_ADMIN_TOKEN_FILE',
@@ -248,7 +249,10 @@ function formatCostUsd(value: number | undefined): string {
   return `$${value.toFixed(1)}`;
 }
 
-function formatContext(used: number | undefined, max: number | undefined): string {
+function computeOfficialContextRemainingPercent(
+  used: number | undefined,
+  max: number | undefined,
+): number | undefined {
   if (
     used === undefined
     || !Number.isFinite(used)
@@ -256,11 +260,46 @@ function formatContext(used: number | undefined, max: number | undefined): strin
     || !Number.isFinite(max)
     || max <= 0
   ) {
-    return '?';
+    return undefined;
   }
-  const remaining = Math.max(0, max - used);
-  const pct = formatPercent((remaining / max) * 100);
-  return `${formatCompactNumber(remaining)}/${formatCompactNumber(max)} ${pct}`;
+  if (max <= OFFICIAL_CONTEXT_BASELINE_TOKENS) {
+    return 0;
+  }
+  const effectiveWindow = max - OFFICIAL_CONTEXT_BASELINE_TOKENS;
+  const usedInWindow = Math.max(0, used - OFFICIAL_CONTEXT_BASELINE_TOKENS);
+  const remaining = Math.max(0, effectiveWindow - usedInWindow);
+  return Math.round((remaining / effectiveWindow) * 100);
+}
+
+function computeOfficialContextRemainingTokens(
+  used: number | undefined,
+  max: number | undefined,
+): { remaining: number; effectiveWindow: number; remainingPercent: number } | undefined {
+  if (
+    used === undefined
+    || !Number.isFinite(used)
+    || max === undefined
+    || !Number.isFinite(max)
+    || max <= 0
+  ) {
+    return undefined;
+  }
+  const remainingPercent = computeOfficialContextRemainingPercent(used, max);
+  if (remainingPercent === undefined) return undefined;
+  const effectiveWindow = Math.max(0, max - OFFICIAL_CONTEXT_BASELINE_TOKENS);
+  const usedInWindow = Math.max(0, used - OFFICIAL_CONTEXT_BASELINE_TOKENS);
+  const remaining = Math.max(0, effectiveWindow - usedInWindow);
+  return {
+    remaining,
+    effectiveWindow,
+    remainingPercent,
+  };
+}
+
+function formatContext(used: number | undefined, max: number | undefined): string {
+  const metrics = computeOfficialContextRemainingTokens(used, max);
+  if (!metrics) return '?';
+  return `${formatCompactNumber(metrics.remaining)}/${formatCompactNumber(metrics.effectiveWindow)} ${metrics.remainingPercent}%`;
 }
 
 function trimSupplement(value: string, limit: number = 56): string {
@@ -564,7 +603,7 @@ export function resolveUsageMetrics(
   return {
     costUsd: options.cchSession?.costUsd,
     ctxUsed: options.rollout.ctxUsed,
-    ctxMax: options.codexConfig.modelContextWindow ?? options.rollout.ctxMax,
+    ctxMax: options.rollout.ctxMax ?? options.codexConfig.modelContextWindow,
     totalTokens: options.cchSession?.totalTokens ?? options.rollout.totalTokens,
     cacheRate: remoteCacheRate ?? localCacheRate,
   };
@@ -981,10 +1020,10 @@ export function extractRolloutSnapshotFromLines(
     effort:
       sanitizeOptionalString(turnContext?.effort)
       ?? sanitizeOptionalString(turnContext?.reasoning_effort),
-    // Context occupancy should track the current window, not cumulative session input.
+    // Match Codex upstream context semantics: use last_token_usage.total_tokens.
     ctxUsed:
-      normalizeNumber(lastUsage.input_tokens)
-      ?? normalizeNumber(totalUsage.input_tokens),
+      normalizeNumber(lastUsage.total_tokens)
+      ?? normalizeNumber(lastUsage.input_tokens),
     ctxMax:
       normalizeNumber(tokenInfo.model_context_window)
       ?? normalizeNumber(taskStarted?.model_context_window),

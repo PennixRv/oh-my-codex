@@ -4,6 +4,15 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+## [0.18.80] - 2026-07-05
+
+Patch release for the Pennix fork tmux-status context parity line: `Ctx` now follows official Codex remaining-context semantics instead of the older Pennix-specific `input_tokens / context_window` approximation.
+
+- `Ctx` now derives its active-window occupancy from `last_token_usage.total_tokens` when rollout telemetry provides it, matching the official Codex TUI context-left source instead of using `last_token_usage.input_tokens`.
+- The displayed remaining percentage now uses the official Codex baseline-normalized formula with the fixed `12000` token reserve, so the metric reflects user-controllable context left instead of raw `remaining / full window`.
+- The tmux status value now keeps a numerator and denominator plus percentage, but they are the official effective-window figures (`remaining / (context_window - 12000)`) rather than the older raw full-window approximation.
+- Focused regression coverage now locks both the `last_token_usage.total_tokens` source and the exact `23% left` official-style example that motivated this release.
+
 ## [0.18.79] - 2026-07-04
 
 Patch release for the Pennix fork plugin-mode setup guidance line: plugin-mode `developer_instructions` is now treated as an optional OMX bootstrap instead of an always-appended managed payload, so user-owned instructions stay intact unless setup is explicitly asked to add or refresh the OMX fragment.

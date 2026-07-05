@@ -54,7 +54,7 @@ describe('tmux status left renderer', () => {
     assert.match(rendered, /Cost/);
     assert.match(rendered, /\$0\.1/);
     assert.match(rendered, /Ctx/);
-    assert.match(rendered, /208\.0k\/250\.0k 83\.2%/);
+    assert.match(rendered, /208\.0k\/238\.0k 87%/);
     assert.match(rendered, /Total/);
     assert.match(rendered, /2\.9M/);
     assert.ok(rendered.indexOf('Ctx') < rendered.indexOf('Total'));
@@ -83,6 +83,19 @@ describe('tmux status left renderer', () => {
     assert.match(rendered, /executor\/working/);
     assert.match(rendered, /Patch the tmux status insta/);
     assert.doesNotMatch(rendered, /worker-2/);
+  });
+
+  it('matches the official Codex baseline-normalized context-left semantics', () => {
+    const rendered = renderTmuxStatusLeft(
+      makeSnapshot({
+        ctxUsed: 214_510,
+        ctxMax: 275_000,
+      }),
+      'nord',
+    );
+
+    assert.match(rendered, /Ctx/);
+    assert.match(rendered, /60\.5k\/263\.0k 23%/);
   });
 
   it('returns an empty string when the pane is not OMX-owned', () => {
@@ -174,6 +187,7 @@ describe('tmux status rollout helpers', () => {
             last_token_usage: {
               input_tokens: 169_543,
               cached_input_tokens: 168_320,
+              total_tokens: 174_139,
             },
             model_context_window: 258_400,
           },
@@ -184,11 +198,31 @@ describe('tmux status rollout helpers', () => {
     assert.equal(snapshot.sessionId, '019f20ec-cab5-7e82-bf5f-faee5753c79f');
     assert.equal(snapshot.model, 'gpt-5.4');
     assert.equal(snapshot.effort, 'xhigh');
-    assert.equal(snapshot.ctxUsed, 169_543);
+    assert.equal(snapshot.ctxUsed, 174_139);
     assert.equal(snapshot.ctxMax, 258_400);
     assert.equal(snapshot.inputTokens, 2_862_682);
     assert.equal(snapshot.cachedInputTokens, 2_667_520);
     assert.equal(snapshot.totalTokens, 2_878_679);
+  });
+
+  it('falls back to last input tokens when older rollout context totals are missing', () => {
+    const snapshot = extractRolloutSnapshotFromLines([
+      JSON.stringify({
+        type: 'event_msg',
+        payload: {
+          type: 'token_count',
+          info: {
+            last_token_usage: {
+              input_tokens: 42_000,
+            },
+            model_context_window: 250_000,
+          },
+        },
+      }),
+    ]);
+
+    assert.equal(snapshot.ctxUsed, 42_000);
+    assert.equal(snapshot.ctxMax, 250_000);
   });
 
   it('normalizes provider base urls before calling CCH management endpoints', () => {
@@ -368,7 +402,7 @@ describe('tmux status usage metrics resolution', () => {
       {
         costUsd: 0.125,
         ctxUsed: 42000,
-        ctxMax: 250000,
+        ctxMax: 240000,
         totalTokens: 2_878_679,
       },
     );
