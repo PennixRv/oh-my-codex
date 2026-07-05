@@ -52,15 +52,15 @@ describe('tmux status left renderer', () => {
     assert.match(rendered, /Effort/);
     assert.match(rendered, /xhigh/);
     assert.match(rendered, /Cost/);
-    assert.match(rendered, /\$0\.1/);
+    assert.match(rendered, /\$0\.13/);
     assert.match(rendered, /Ctx/);
-    assert.match(rendered, /208\.0k\/238\.0k 87%/);
+    assert.match(rendered, /208\.0k\/238\.0k 87\.39%/);
     assert.match(rendered, /Total/);
-    assert.match(rendered, /2\.9M/);
+    assert.match(rendered, /2\.88M/);
     assert.ok(rendered.indexOf('Ctx') < rendered.indexOf('Total'));
     assert.ok(rendered.indexOf('Total') < rendered.indexOf('Cache'));
     assert.match(rendered, /Cache/);
-    assert.match(rendered, /37\.5%/);
+    assert.match(rendered, /37\.50%/);
     assert.match(rendered, /Team/);
     assert.match(rendered, /alpha 3\/2/);
   });
@@ -95,7 +95,7 @@ describe('tmux status left renderer', () => {
     );
 
     assert.match(rendered, /Ctx/);
-    assert.match(rendered, /60\.5k\/263\.0k 23%/);
+    assert.match(rendered, /60\.5k\/263\.0k 23\.00%/);
   });
 
   it('returns an empty string when the pane is not OMX-owned', () => {

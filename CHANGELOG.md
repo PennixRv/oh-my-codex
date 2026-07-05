@@ -4,6 +4,15 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+## [0.18.81] - 2026-07-05
+
+Patch release for the Pennix fork tmux-status formatting and release-pipeline recovery line: numeric status metrics now use fixed two-decimal formatting everywhere except the compact `Ctx` token pair, GitHub Releases once again attach the native archives plus `native-release-manifest.json`, and the documented `dev` sync step now matches the repo's real `fast-forward-or-reconcile` branch model.
+
+- `Cost`, `Total`, `Cache`, and the `Ctx` percentage now render with fixed two-decimal formatting, while the `Ctx` numerator/denominator pair deliberately stays on one-decimal compact notation such as `222.2k/249.3k`.
+- The tag-triggered `Release` workflow now rebuilds the cross-platform native asset matrix, generates `native-release-manifest.json`, attaches the release assets to GitHub, smoke-verifies the published archives, and only then proceeds to packed-install smoke and npm publication.
+- The native release workflow contract is now active test coverage again, so dropping the asset publication / smoke-verification stages no longer slips through as an untested workflow regression.
+- `RELEASE_PROTOCOL.md` now treats the `dev` tail step as `fast-forward when possible, otherwise land a dedicated main-to-dev reconciliation merge`, instead of assuming every release train can end with a no-conflict fast-forward.
+
 ## [0.18.80] - 2026-07-05
 
 Patch release for the Pennix fork tmux-status context parity line: `Ctx` now follows official Codex remaining-context semantics instead of the older Pennix-specific `input_tokens / context_window` approximation.

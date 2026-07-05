@@ -232,21 +232,21 @@ function safeParseJsonRecord(value: string): Record<string, unknown> | null {
   }
 }
 
-function formatCompactNumber(value: number): string {
+function formatCompactNumber(value: number, digits: number = 2): string {
   if (!Number.isFinite(value)) return '?';
-  if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M`;
-  if (value >= 1_000) return `${(value / 1_000).toFixed(1)}k`;
-  return value.toFixed(1);
+  if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(digits)}M`;
+  if (value >= 1_000) return `${(value / 1_000).toFixed(digits)}k`;
+  return value.toFixed(digits);
 }
 
-function formatPercent(value: number | undefined): string {
+function formatPercent(value: number | undefined, digits: number = 2): string {
   if (value === undefined || !Number.isFinite(value)) return '?';
-  return `${Math.max(0, Math.min(100, value)).toFixed(1)}%`;
+  return `${Math.max(0, Math.min(100, value)).toFixed(digits)}%`;
 }
 
 function formatCostUsd(value: number | undefined): string {
   if (value === undefined || !Number.isFinite(value)) return '?';
-  return `$${value.toFixed(1)}`;
+  return `$${value.toFixed(2)}`;
 }
 
 function computeOfficialContextRemainingPercent(
@@ -268,7 +268,7 @@ function computeOfficialContextRemainingPercent(
   const effectiveWindow = max - OFFICIAL_CONTEXT_BASELINE_TOKENS;
   const usedInWindow = Math.max(0, used - OFFICIAL_CONTEXT_BASELINE_TOKENS);
   const remaining = Math.max(0, effectiveWindow - usedInWindow);
-  return Math.round((remaining / effectiveWindow) * 100);
+  return (remaining / effectiveWindow) * 100;
 }
 
 function computeOfficialContextRemainingTokens(
@@ -299,7 +299,7 @@ function computeOfficialContextRemainingTokens(
 function formatContext(used: number | undefined, max: number | undefined): string {
   const metrics = computeOfficialContextRemainingTokens(used, max);
   if (!metrics) return '?';
-  return `${formatCompactNumber(metrics.remaining)}/${formatCompactNumber(metrics.effectiveWindow)} ${metrics.remainingPercent}%`;
+  return `${formatCompactNumber(metrics.remaining, 1)}/${formatCompactNumber(metrics.effectiveWindow, 1)} ${formatPercent(metrics.remainingPercent, 2)}`;
 }
 
 function trimSupplement(value: string, limit: number = 56): string {

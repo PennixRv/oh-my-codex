@@ -1,35 +1,36 @@
-# oh-my-codex-pennix v0.18.80
+# oh-my-codex-pennix v0.18.81
 
 > Release notes template for the Pennix fork. The tag workflow regenerates this file into the final GitHub release body.
 
 ## Summary
 
-This release makes the managed tmux `Ctx` metric mean the same thing as official Codex again. OMX now derives remaining context from the active rollout window's `last_token_usage.total_tokens`, applies the same fixed `12000` token baseline reserve used by the upstream TUI, prefers the live rollout `model_context_window` over stale local config when both exist, and renders the result as official effective-window `remaining/total %` telemetry instead of the older Pennix-specific full-window approximation.
+This release tightens the visible tmux metric formatting and restores the release workflow pieces that were supposed to ship the native artifacts. OMX now keeps the `Ctx` token pair on compact one-decimal notation while normalizing the rest of the visible metrics to two decimals, the tag workflow once again publishes `native-release-manifest.json` plus the native archives for `omx-api`, `omx-explore-harness`, and `omx-sparkshell`, and the documented `dev` sync step now reflects the real `fast-forward-or-reconcile` branch model instead of assuming every release can end with a pure fast-forward.
 
 ## Highlights
 
-- `Ctx` now uses `last_token_usage.total_tokens` from the active rollout window when available, matching the upstream Codex context-left source instead of using `last_token_usage.input_tokens`.
-- The remaining-context percentage now follows the official baseline-normalized formula with the same fixed `12000` token reserve that upstream uses for user-controllable context.
-- The visible tmux status text now keeps `remaining/total %`, and the numerator and denominator are the official effective-window values, so the metric no longer mixes an official-looking percentage with a non-official full-window denominator.
-- Focused tmux-status regression coverage now locks both the upstream token source selection and the exact `23% left` semantics that motivated the fix.
+- `Cost`, `Total`, `Cache`, and the `Ctx` percentage now render with fixed two-decimal formatting, while the compact `Ctx` token pair remains one-decimal `remaining/effective-window` telemetry such as `222.2k/249.3k`.
+- GitHub Releases again attach `native-release-manifest.json` and the native archives produced by the cross-platform cargo-dist matrix before npm publish proceeds.
+- Published native archives are now smoke-verified by manifest/checksum/binary-path before the packed-install smoke and npm publication stages run.
+- The release workflow contract test is active again, and the release protocol now documents the correct `dev` sync fallback when a simple fast-forward is not available.
 
 ## Fixes / compatibility
 
-- `Cost`, `Total`, `Cache`, pane-local session binding, and footer suppression behavior are unchanged; this release only narrows the `Ctx` semantic mismatch with official Codex.
-- Older rollout records that lack `last_token_usage.total_tokens` still fall back to the last input token count, so historical telemetry does not disappear entirely on pre-alignment traces.
-- The tracked tmux status bar remains an OMX-owned surface, but `Ctx` now reports official-style remaining context and official effective-window token totals instead of the earlier Pennix-specific approximation.
+- The tmux status bar still prefers the same pane-local rollout/session binding and official remaining-context semantics from `0.18.80`; this release only tightens the visible numeric formatting on top of that logic.
+- Older rollout records that lack `last_token_usage.total_tokens` still fall back to the last input token count, so historical telemetry continues to render instead of dropping to unknown.
+- The `dev` tail step is now explicit about reconciliation merges when branch history has diverged; it no longer implies that a forceful reset or guaranteed fast-forward is acceptable.
 
 ## Validation
 
 - `npm run build`
 - `node dist/scripts/run-test-files.js dist/tmux-status/__tests__/render.test.js`
+- `node dist/scripts/run-test-files.js dist/verification/__tests__/explore-harness-release-workflow.test.js dist/verification/__tests__/release-workflow-release-body.test.js dist/verification/__tests__/native-release-manifest.test.js`
 - `npm run test:node`
 - `npm run verify:native-agents`
 - `npm run verify:plugin-bundle`
-- `node dist/scripts/check-version-sync.js --tag v0.18.80`
+- `node dist/scripts/check-version-sync.js --tag v0.18.81`
 
 ## Contributors
 
 Thanks to the contributors who made this release possible.
 
-**Full Changelog**: [`v0.18.79...v0.18.80`](https://github.com/PennixRv/oh-my-codex/compare/v0.18.79...v0.18.80)
+**Full Changelog**: [`v0.18.80...v0.18.81`](https://github.com/PennixRv/oh-my-codex/compare/v0.18.80...v0.18.81)

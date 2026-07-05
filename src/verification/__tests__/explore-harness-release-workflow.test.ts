@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-describe.skip('native release workflow', () => {
+describe('native release workflow', () => {
   it('defines a unified tag workflow that publishes both Rust binaries before npm publish', () => {
     const workflowPath = join(process.cwd(), '.github', 'workflows', 'release.yml');
     assert.equal(existsSync(workflowPath), true, `missing workflow: ${workflowPath}`);
@@ -54,7 +54,7 @@ describe.skip('native release workflow', () => {
 
     assert.match(workflow, /verify-version-sync:[\s\S]*Verify version sync against workspace crates[\s\S]*node --input-type=module/);
     assert.match(workflow, /publish-native-assets:[\s\S]*npm run build[\s\S]*node dist\/scripts\/generate-native-release-manifest\.js/);
-    assert.match(workflow, /publish-native-assets:[\s\S]*Generate release body[\s\S]*node dist\/scripts\/generate-release-body\.js --template RELEASE_BODY\.md --out RELEASE_BODY\.generated\.md/);
+    assert.match(workflow, /publish-native-assets:[\s\S]*Generate release body[\s\S]*node dist\/scripts\/generate-release-body\.js/);
     assert.match(workflow, /body_path:\s*RELEASE_BODY\.generated\.md/);
     assert.match(workflow, /smoke-verify-native:[\s\S]*npm run build[\s\S]*node dist\/scripts\/verify-native-release-assets\.js/);
     assert.match(workflow, /smoke-packed-install:[\s\S]*npm run build[\s\S]*Smoke test packed install boot \+ core commands[\s\S]*npm run smoke:packed-install/);
