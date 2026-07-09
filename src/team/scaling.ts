@@ -60,9 +60,8 @@ import {
   removeWorkerWorktreeRootAgentsFile,
 } from './worker-bootstrap.js';
 import { buildTeamWorkerGoalInstruction } from './goal-workflow.js';
-import { loadRolePrompt } from './role-router.js';
+import { activeRolePromptDirs, resolveRolePrompt } from './role-router.js';
 import { composeRoleInstructionsForRole } from '../agents/native-config.js';
-import { codexPromptsDir } from '../utils/paths.js';
 import { resolveCodexHomeForLaunch } from '../cli/codex-home.js';
 import {
   parseTeamWorkerLaunchArgs,
@@ -453,8 +452,10 @@ export async function scaleUp(
       const workerCwd = workerWorkspace ? workerWorkspace.worktreePath : leaderCwd;
 
       // Build startup command and create tmux pane
-      const rawRolePromptContent = await loadRolePrompt(runtimeRole, join(leaderCwd, '.codex', 'prompts'))
-        ?? await loadRolePrompt(runtimeRole, codexPromptsDir());
+      const rawRolePromptContent = await resolveRolePrompt(
+        runtimeRole,
+        activeRolePromptDirs(leaderCwd),
+      );
       const preferredReasoning = resolveAgentReasoningEffort(runtimeRole, codexHomeOverride)
         ?? resolveAgentReasoningEffort(agentType, codexHomeOverride);
       const workerLaunchArgs = resolveWorkerLaunchArgsForScaling(launchEnv, runtimeRole, preferredReasoning, codexHomeOverride);

@@ -6,7 +6,7 @@ import { dirname, join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { parseAskArgs } from '../ask.js';
+import { parseAskArgs, resolveAskAgentPromptContent } from '../ask.js';
 
 function runOmx(
   cwd: string,
@@ -401,7 +401,7 @@ describe('omx ask', () => {
     }
   });
 
-  it('fails clearly when --agent-prompt role is missing from prompts directory', async () => {
+  it('fails clearly when --agent-prompt role is missing from every prompt source', async () => {
     const wd = await mkdtemp(join(tmpdir(), 'omx-ask-agent-prompt-missing-'));
     try {
       const fakeBin = join(wd, 'bin');
@@ -418,15 +418,82 @@ describe('omx ask', () => {
 
       const res = runOmx(
         wd,
-        ['ask', 'gemini', '--agent-prompt=planner', '--prompt', 'do', 'planning'],
+        ['ask', 'gemini', '--agent-prompt=missing-role', '--prompt', 'do', 'planning'],
         { PATH: `${fakeBin}:${process.env.PATH || ''}`, CODEX_HOME: codexHome },
       );
       if (shouldSkipForSpawnPermissions(res.error)) return;
 
       assert.equal(res.status, 1, res.stderr || res.stdout);
-      assert.match(res.stderr, /--agent-prompt role "planner" not found/i);
+      assert.match(res.stderr, /--agent-prompt role "missing-role" not found/i);
       assert.doesNotMatch(res.stdout, /should-not-run/);
     } finally {
+      await rm(wd, { recursive: true, force: true });
+    }
+  });
+
+  it('falls back to packaged role prompts when local prompt copies are absent', async () => {
+    const wd = await mkdtemp(join(tmpdir(), 'omx-ask-packaged-agent-prompt-'));
+    try {
+      const fakeBin = join(wd, 'bin');
+      const codexHome = join(wd, '.codex-home');
+      await mkdir(fakeBin, { recursive: true });
+
+      await writeFile(
+        join(fakeBin, 'claude'),
+        '#!/bin/sh\nif [ "$1" = "--version" ]; then echo "fake-claude"; exit 0; fi\nif [ "$1" = "-p" ] && [ "$2" = "--" ]; then printf "CLAUDE_PACKAGED_OK:%s" "$3"; exit 0; fi\necho "unexpected args:$*" 1>&2\nexit 3\n',
+      );
+      await chmod(join(fakeBin, 'claude'), 0o755);
+
+      const res = runOmx(
+        wd,
+        ['ask', 'claude', '--agent-prompt', 'executor', 'ship', 'feature'],
+        { PATH: `${fakeBin}:${process.env.PATH || ''}`, CODEX_HOME: codexHome },
+      );
+      if (shouldSkipForSpawnPermissions(res.error)) return;
+
+      assert.equal(res.status, 0, res.stderr || res.stdout);
+      const artifact = await readFile(res.stdout.trim(), 'utf-8');
+      assert.match(artifact, /CLAUDE_PACKAGED_OK:/);
+      assert.match(artifact, /## Final prompt[\s\S]*You are Executor\./);
+    } finally {
+      await rm(wd, { recursive: true, force: true });
+    }
+  });
+
+  it('ignores stale repo-local prompt copies when persisted setup scope is user', async () => {
+    const wd = await mkdtemp(join(tmpdir(), 'omx-ask-user-scope-prompts-'));
+    const previousHome = process.env.HOME;
+    const previousCodexHome = process.env.CODEX_HOME;
+    try {
+      const homeDir = join(wd, 'home');
+      const codexHome = join(homeDir, '.codex');
+      await mkdir(join(wd, '.omx'), { recursive: true });
+      await mkdir(join(wd, '.codex', 'prompts'), { recursive: true });
+      await mkdir(join(codexHome, 'prompts'), { recursive: true });
+      await writeFile(
+        join(wd, '.omx', 'setup-scope.json'),
+        JSON.stringify({ scope: 'user' }),
+      );
+      await writeFile(
+        join(wd, '.codex', 'prompts', 'executor.md'),
+        '# Executor\n\nSTALE_PROJECT',
+      );
+      await writeFile(
+        join(codexHome, 'prompts', 'executor.md'),
+        '# Executor\n\nFRESH_USER',
+      );
+
+      process.env.HOME = homeDir;
+      process.env.CODEX_HOME = codexHome;
+
+      const content = await resolveAskAgentPromptContent('executor', wd);
+      assert.match(content, /FRESH_USER/);
+      assert.doesNotMatch(content, /STALE_PROJECT/);
+    } finally {
+      if (typeof previousHome === 'string') process.env.HOME = previousHome;
+      else delete process.env.HOME;
+      if (typeof previousCodexHome === 'string') process.env.CODEX_HOME = previousCodexHome;
+      else delete process.env.CODEX_HOME;
       await rm(wd, { recursive: true, force: true });
     }
   });

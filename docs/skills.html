@@ -34,14 +34,14 @@
       <h2>Execution Modes</h2>
       <ul>
         <li><code>$team</code> - coordinated multi-agent execution for the approved plan</li>
-        <li><code>$ralph</code> - persistence loop until completion</li>
+        <li><code>$ralph</code> - explicit alternate single-owner persistence loop</li>
         <li><code>$autopilot</code> - strict autonomous loop over <code>$deep-interview -> $ralplan -> $ultragoal (+ $team if needed) -> $code-review -> $ultraqa</code>, returning to planning when review or QA is not clean and never leaving ralplan until Architect/Critic consensus evidence is recorded</li>
         <li><code>$ultrawork</code> - max parallel execution</li>
         <li><code>$ultragoal</code> - durable multi-goal planning and execution over <code>.omx/ultragoal</code> artifacts plus Codex goal handoff</li>
-        <li><code>$visual-verdict</code> - structured visual QA loop for screenshot/reference matching</li>
-        <li><code>$ecomode</code> - token-efficient model routing</li>
+        <li><code>$visual-verdict</code> (deprecated; use <code>$visual-ralph</code>)</li>
+        <li><code>$ecomode</code> (deprecated standalone mode)</li>
         <li><code>$ultraqa</code> - test/verify/fix loop</li>
-        <li><code>$swarm</code> - team compatibility facade</li>
+        <li><code>$swarm</code> (deprecated; use <code>$team</code>)</li>
       </ul>
 
       <h2>Planning & Clarification</h2>
@@ -64,24 +64,24 @@
       <h2>Agent Shortcuts</h2>
       <ul>
         <li><code>$analyze</code></li>
-        <li><code>$deepsearch</code></li>
-        <li><code>$tdd</code></li>
-        <li><code>$build-fix</code></li>
+        <li><code>$deepsearch</code> (deprecated)</li>
+        <li><code>$tdd</code> (deprecated)</li>
+        <li><code>$build-fix</code> (deprecated)</li>
         <li><code>$code-review</code></li>
-        <li><code>$security-review</code></li>
+        <li><code>$security-review</code> (deprecated)</li>
         <li><code>$design</code> - maintain repo-local <code>DESIGN.md</code></li>
         <li><code>$visual-ralph</code> - measured visual-reference implementation loop</li>
         <li><code>$frontend-ui-ux</code> (deprecated; use <code>$design</code> or <code>$visual-ralph</code>)</li>
         <li><code>$git-master</code></li>
-        <li><code>$review</code></li>
+        <li><code>$review</code> (deprecated)</li>
       </ul>
 
       <h2>Utilities</h2>
       <ul>
-        <li><code>$cancel</code>, <code>$doctor</code>, <code>$help</code>, <code>$note</code>, <code>$trace</code></li>
+        <li><code>$cancel</code>, <code>$doctor</code>, <code>$help</code> (deprecated), <code>$note</code> (deprecated), <code>$trace</code> (deprecated)</li>
         <li><code>$skill</code></li>
         <li><code>$hud</code>, <code>$omx-setup</code>, <code>$configure-notifications</code></li>
-        <li><code>$ralph-init</code></li>
+        <li><code>$ralph-init</code> (deprecated)</li>
         <li><code>$worker</code> (internal) - team worker protocol / lifecycle</li>
       </ul>
 

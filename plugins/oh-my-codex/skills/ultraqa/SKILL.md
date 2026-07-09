@@ -84,7 +84,7 @@ Generated harnesses are part of the QA evidence chain; until setup succeeds, the
    - `--custom`: Run the appropriate command and check the pattern plus exit status and failure markers.
    - `--interactive`: Use qa-tester or an equivalent CLI/service harness:
      ```
-     Use `/prompts:qa-tester` with:
+     Delegate a `qa-tester` lane with:
      Goal: [describe what to verify]
      Service: [how to start]
      Test cases: [normal, hostile, malformed, interruption, resume, stale-state, dirty-worktree, hung-command, flaky, and misleading-output scenarios]
@@ -102,7 +102,7 @@ Generated harnesses are part of the QA evidence chain; until setup succeeds, the
 
 5. **ARCHITECT DIAGNOSIS**
    ```
-   Use `/prompts:architect` with:
+   Delegate an `architect` lane with:
    Goal: [goal type and behavior]
    Scenario matrix: [rows, commands, failures, evidence]
    Output: [test/build/e2e/harness output]
@@ -111,7 +111,7 @@ Generated harnesses are part of the QA evidence chain; until setup succeeds, the
 
 6. **FIX ISSUES**
    ```
-   Use `/prompts:executor` with:
+   Delegate an `executor` lane with:
    Issue: [architect diagnosis]
    Files: [affected files]
    Constraints: preserve unrelated dirty work, clean temporary harnesses, keep safety bounds

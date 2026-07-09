@@ -166,13 +166,17 @@ const OMX_SEEDED_BEHAVIORAL_DEFAULTS_END_MARKERS = [
 ] as const;
 
 export const OMX_DEVELOPER_INSTRUCTIONS =
-  `You have ${OMX_FORK_USER_FACING_NAME} installed. AGENTS.md is the orchestration brain and main control surface. Follow AGENTS.md for skill/keyword routing, $name workflow invocation, and role-specialized subagents; when spawning native subagents, prefer setting \`agent_type\` to the narrowest installed role, but if Codex full-history fork mode inherits agent settings from the parent then follow that constraint instead of redundantly forcing \`agent_type\`, \`model\`, or \`reasoning_effort\`. Use outcome-first, concise progress updates: state the target result, constraints, validation evidence, and stop condition before adding process detail. Native subagents live in .codex/agents and may handle independent parallel subtasks within one Codex session or team pane. Skills load from .codex/skills, not native-agent TOMLs. Treat installed prompts as narrower execution surfaces under AGENTS.md authority.`;
+  `You have ${OMX_FORK_USER_FACING_NAME} installed. AGENTS.md is the persistent OMX bootstrap contract. Follow AGENTS.md for mode selection, skill/keyword routing, and agent-surface boundaries. Prefer installed SKILL.md files and role prompts for detailed workflow behavior. When spawning native subagents, prefer setting \`agent_type\` to the narrowest installed role, but if Codex full-history fork mode inherits agent settings from the parent then follow that constraint instead of redundantly forcing \`agent_type\`, \`model\`, or \`reasoning_effort\`. Use concise outcome-first progress updates and verify before claiming completion.`;
 export const LEGACY_OMX_DEVELOPER_INSTRUCTIONS =
-  `You have ${OMX_LEGACY_DISPLAY_NAME} installed. AGENTS.md is the orchestration brain and main control surface. Follow AGENTS.md for skill/keyword routing, $name workflow invocation, and role-specialized subagents; when spawning native subagents, prefer setting \`agent_type\` to the narrowest installed role, but if Codex full-history fork mode inherits agent settings from the parent then follow that constraint instead of redundantly forcing \`agent_type\`, \`model\`, or \`reasoning_effort\`. Use outcome-first, concise progress updates: state the target result, constraints, validation evidence, and stop condition before adding process detail. Native subagents live in .codex/agents and may handle independent parallel subtasks within one Codex session or team pane. Skills load from .codex/skills, not native-agent TOMLs. Treat installed prompts as narrower execution surfaces under AGENTS.md authority.`;
+  `You have ${OMX_LEGACY_DISPLAY_NAME} installed. AGENTS.md is the persistent OMX bootstrap contract. Follow AGENTS.md for mode selection, skill/keyword routing, and agent-surface boundaries. Prefer installed SKILL.md files and role prompts for detailed workflow behavior. When spawning native subagents, prefer setting \`agent_type\` to the narrowest installed role, but if Codex full-history fork mode inherits agent settings from the parent then follow that constraint instead of redundantly forcing \`agent_type\`, \`model\`, or \`reasoning_effort\`. Use concise outcome-first progress updates and verify before claiming completion.`;
 export const OMX_PLUGIN_DEVELOPER_INSTRUCTIONS =
-  `<omx version="1">You have ${OMX_FORK_USER_FACING_NAME} installed through Codex plugin mode. AGENTS.md is the orchestration brain and main control surface. Follow AGENTS.md for skill/keyword routing and $name workflow invocation. When spawning native subagents, prefer setting \`agent_type\` to the narrowest installed role, but if Codex full-history fork mode inherits agent settings from the parent then follow that constraint instead of redundantly forcing \`agent_type\`, \`model\`, or \`reasoning_effort\`. Registered Codex plugin marketplace surfaces supply ${OMX_FORK_USER_FACING_NAME} workflows and plugin-scoped companion resources when the plugin is installed. Setup still installs native agent role TOML files under the active Codex home so agent_type routing works. Do not assume bundled prompt/skill files are copied into local .codex prompts/skills directories in plugin mode. User-installed skills may still live under ~/.codex/skills. Use outcome-first, concise progress updates: state the target result, constraints, validation evidence, and stop condition before adding process detail.</omx>`;
+  `<omx version="1">You have ${OMX_FORK_USER_FACING_NAME} installed through Codex plugin mode. AGENTS.md is the persistent OMX bootstrap contract. Follow AGENTS.md for mode selection, skill/keyword routing, and agent-surface boundaries. Registered Codex plugin marketplace surfaces supply ${OMX_FORK_USER_FACING_NAME} workflows and plugin-scoped companion resources when the plugin is installed; setup still installs native agent role TOML files under the active Codex home so \`agent_type\` routing works, and bundled prompt/skill files may not exist as local \`.codex/\` copies. When spawning native subagents, prefer setting \`agent_type\` to the narrowest installed role, but if Codex full-history fork mode inherits agent settings from the parent then follow that constraint instead of redundantly forcing \`agent_type\`, \`model\`, or \`reasoning_effort\`. Use concise outcome-first progress updates and verify before claiming completion.</omx>`;
 export const LEGACY_OMX_PLUGIN_DEVELOPER_INSTRUCTIONS =
-  `<omx version="1">You have ${OMX_LEGACY_DISPLAY_NAME} installed through Codex plugin mode. AGENTS.md is the orchestration brain and main control surface. Follow AGENTS.md for skill/keyword routing and $name workflow invocation. When spawning native subagents, prefer setting \`agent_type\` to the narrowest installed role, but if Codex full-history fork mode inherits agent settings from the parent then follow that constraint instead of redundantly forcing \`agent_type\`, \`model\`, or \`reasoning_effort\`. Registered Codex plugin marketplace surfaces supply OMX workflows and plugin-scoped companion resources when the plugin is installed. Setup still installs native agent role TOML files under the active Codex home so agent_type routing works. Do not assume bundled prompt/skill files are copied into local .codex prompts/skills directories in plugin mode. User-installed skills may still live under ~/.codex/skills. Use outcome-first, concise progress updates: state the target result, constraints, validation evidence, and stop condition before adding process detail.</omx>`;
+  `<omx version="1">You have ${OMX_LEGACY_DISPLAY_NAME} installed through Codex plugin mode. AGENTS.md is the persistent OMX bootstrap contract. Follow AGENTS.md for mode selection, skill/keyword routing, and agent-surface boundaries. Registered Codex plugin marketplace surfaces supply OMX workflows and plugin-scoped companion resources when the plugin is installed; setup still installs native agent role TOML files under the active Codex home so \`agent_type\` routing works, and bundled prompt/skill files may not exist as local \`.codex/\` copies. When spawning native subagents, prefer setting \`agent_type\` to the narrowest installed role, but if Codex full-history fork mode inherits agent settings from the parent then follow that constraint instead of redundantly forcing \`agent_type\`, \`model\`, or \`reasoning_effort\`. Use concise outcome-first progress updates and verify before claiming completion.</omx>`;
+export const HISTORICAL_OMX_DEVELOPER_INSTRUCTIONS =
+  `You have ${OMX_FORK_USER_FACING_NAME} installed. AGENTS.md is the orchestration brain and main control surface. Follow AGENTS.md for skill/keyword routing, $name workflow invocation, and role-specialized subagents; when spawning native subagents, prefer setting \`agent_type\` to the narrowest installed role, but if Codex full-history fork mode inherits agent settings from the parent then follow that constraint instead of redundantly forcing \`agent_type\`, \`model\`, or \`reasoning_effort\`. Use outcome-first, concise progress updates: state the target result, constraints, validation evidence, and stop condition before adding process detail. Native subagents live in .codex/agents and may handle independent parallel subtasks within one Codex session or team pane. Skills load from .codex/skills, not native-agent TOMLs. Treat installed prompts as narrower execution surfaces under AGENTS.md authority.`;
+export const LEGACY_HISTORICAL_OMX_DEVELOPER_INSTRUCTIONS =
+  `You have ${OMX_LEGACY_DISPLAY_NAME} installed. AGENTS.md is the orchestration brain and main control surface. Follow AGENTS.md for skill/keyword routing, $name workflow invocation, and role-specialized subagents; when spawning native subagents, prefer setting \`agent_type\` to the narrowest installed role, but if Codex full-history fork mode inherits agent settings from the parent then follow that constraint instead of redundantly forcing \`agent_type\`, \`model\`, or \`reasoning_effort\`. Use outcome-first, concise progress updates: state the target result, constraints, validation evidence, and stop condition before adding process detail. Native subagents live in .codex/agents and may handle independent parallel subtasks within one Codex session or team pane. Skills load from .codex/skills, not native-agent TOMLs. Treat installed prompts as narrower execution surfaces under AGENTS.md authority.`;
 export const HISTORICAL_OMX_PLUGIN_DEVELOPER_INSTRUCTIONS =
   `<omx version="1">You have ${OMX_FORK_USER_FACING_NAME} installed through Codex plugin mode. AGENTS.md is the orchestration brain and main control surface. Follow AGENTS.md for skill/keyword routing and $name workflow invocation. When spawning native subagents, set \`agent_type\` to an installed role and never omit it for OMX work. Registered Codex plugin marketplace surfaces supply ${OMX_FORK_USER_FACING_NAME} workflows and plugin-scoped companion resources when the plugin is installed. Setup still installs native agent role TOML files under the active Codex home so agent_type routing works. Do not assume bundled prompt/skill files are copied into local .codex prompts/skills directories in plugin mode. User-installed skills may still live under ~/.codex/skills. Use outcome-first, concise progress updates: state the target result, constraints, validation evidence, and stop condition before adding process detail.</omx>`;
 export const LEGACY_HISTORICAL_OMX_PLUGIN_DEVELOPER_INSTRUCTIONS =
@@ -457,6 +461,8 @@ export function stripManagedOmxDeveloperInstructions(
   if (
     normalizedCleaned === normalizeDeveloperInstructionsText(OMX_DEVELOPER_INSTRUCTIONS)
     || normalizedCleaned === normalizeDeveloperInstructionsText(LEGACY_OMX_DEVELOPER_INSTRUCTIONS)
+    || normalizedCleaned === normalizeDeveloperInstructionsText(HISTORICAL_OMX_DEVELOPER_INSTRUCTIONS)
+    || normalizedCleaned === normalizeDeveloperInstructionsText(LEGACY_HISTORICAL_OMX_DEVELOPER_INSTRUCTIONS)
   ) {
     removed = true;
     removedHistorical = true;
@@ -469,6 +475,16 @@ export function stripManagedOmxDeveloperInstructions(
         return "";
       })
       .replace(LEGACY_OMX_DEVELOPER_INSTRUCTIONS, () => {
+        removed = true;
+        removedHistorical = true;
+        return "";
+      })
+      .replace(HISTORICAL_OMX_DEVELOPER_INSTRUCTIONS, () => {
+        removed = true;
+        removedHistorical = true;
+        return "";
+      })
+      .replace(LEGACY_HISTORICAL_OMX_DEVELOPER_INSTRUCTIONS, () => {
         removed = true;
         removedHistorical = true;
         return "";
@@ -1001,6 +1017,22 @@ function upsertPluginScopedHookFeatureFlagInSection(
     featuresStart,
     sectionEnd,
     CODEX_PLUGIN_SCOPED_HOOKS_FEATURE_FLAG,
+    isAnyPluginModeHookFeatureFlagLine,
+  );
+}
+
+function upsertPluginModeCodexHookFeatureFlagInSection(
+  lines: string[],
+  featuresStart: number,
+  sectionEnd: number,
+  codexHookFeatureFlag: CodexHookFeatureFlag,
+): { sectionEnd: number; featureFlagIndex: number } {
+  const featureFlag = normalizeCodexHookFeatureFlag(codexHookFeatureFlag);
+  return upsertFeatureFlagLineInSection(
+    lines,
+    featuresStart,
+    sectionEnd,
+    featureFlag,
     isAnyPluginModeHookFeatureFlagLine,
   );
 }
@@ -1564,7 +1596,7 @@ export function upsertPluginModeRuntimeFeatureFlags(
 
   ({ sectionEnd } = options.pluginScopedHooks
     ? upsertPluginScopedHookFeatureFlagInSection(lines, featuresStart, sectionEnd)
-    : upsertCodexHookFeatureFlagInSection(
+    : upsertPluginModeCodexHookFeatureFlagInSection(
         lines,
         featuresStart,
         sectionEnd,
@@ -1820,6 +1852,7 @@ export function stripOmxFeatureFlags(
   config: string,
   options: {
     preserveCodexManagedFlags?: boolean;
+    preserveHookFeatureFlags?: boolean;
   } = {},
 ): string {
   const lines = config.split(/\r?\n/);
@@ -1837,14 +1870,10 @@ export function stripOmxFeatureFlags(
     }
   }
 
-  const omxFlags = [
-    "multi_agent",
-    "child_agents_md",
-    "hooks",
-    "codex_hooks",
-    "goal",
-    "collab",
-  ];
+  const omxFlags = ["multi_agent", "child_agents_md", "goal", "collab"];
+  if (!options.preserveHookFeatureFlags) {
+    omxFlags.push("hooks", "codex_hooks");
+  }
   if (!options.preserveCodexManagedFlags) {
     omxFlags.push("plugin_hooks", "goals");
   }

@@ -21,6 +21,7 @@ import { OMX_FIRST_PARTY_MCP_SERVER_NAMES } from "../../config/omx-first-party-m
 import {
 	OMX_DEVELOPER_INSTRUCTIONS,
 	OMX_PLUGIN_DEVELOPER_INSTRUCTIONS,
+	upsertManagedCodexHookTrustState,
 } from "../../config/generator.js";
 
 const packageRoot = process.cwd();
@@ -215,14 +216,24 @@ describe("setup install mode trust-state migration regressions", () => {
 					const parsed = parseToml(config) as {
 						marketplaces?: Record<string, { source?: string }>;
 					};
-					assert.equal(
-						parsed.marketplaces?.["oh-my-codex-local"]?.source,
-						installedRoot,
-					);
-					assert.match(
-						output,
-						/Registered local Codex plugin marketplace oh-my-codex-local .*preserved existing trusted install source/i,
-					);
+						assert.equal(
+							parsed.marketplaces?.["oh-my-codex-local"]?.source,
+							installedRoot,
+						);
+						const renderScript = await readFile(
+							join(codexHomeDir, ".omx", "tmux-status", "render.sh"),
+							"utf-8",
+						);
+						assert.match(
+							renderScript,
+							new RegExp(
+								installedRoot.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"),
+							),
+						);
+						assert.match(
+							output,
+							/Registered local Codex plugin marketplace oh-my-codex-local .*preserved existing trusted install source/i,
+						);
 				});
 			});
 		} finally {
@@ -1068,7 +1079,7 @@ describe.skip("omx setup install mode behavior", () => {
 							return "user";
 						},
 						installModePrompt: async (defaultMode) => {
-							assert.equal(defaultMode, "legacy");
+							assert.equal(defaultMode, "plugin");
 							return "legacy";
 						},
 					});
@@ -2035,24 +2046,25 @@ describe.skip("omx setup install mode behavior", () => {
 						agentsMd,
 						/AGENTS\.md is the top-level operating contract/,
 					);
-					assert.match(
-						agentsMd,
-						/Registered Codex plugin marketplace surfaces supply Pennix OMX workflows and plugin-scoped companion resources/,
-					);
-					assert.match(
-						agentsMd,
-						/Do not assume bundled prompt\/skill files are copied into local `prompts\/` or `skills\/` directories in plugin mode/,
-					);
-					assert.match(agentsMd, /User-installed skills may still live under `~\/.codex\/skills`/);
-					assert.match(
-						agentsMd,
-						/Setup still installs native agent role TOML files under the active Codex home so agent_type routing works/i,
-					);
-					assert.doesNotMatch(agentsMd, /Role prompts under `prompts\/\*\.md`/);
-					assert.doesNotMatch(agentsMd, /load the installed prompt\/skill\/agent surfaces from/);
+						assert.match(
+							agentsMd,
+							/Registered Codex plugin marketplace surfaces supply Pennix OMX workflows and plugin-scoped companion resources/,
+						);
+						assert.match(
+							agentsMd,
+							/Role prompts, skill instructions, hook-injected routing context, and developer_instructions are narrower execution surfaces/,
+						);
+						assert.match(
+							agentsMd,
+							/Do not assume bundled prompt\/skill files are copied into local `prompts\/` or `skills\/` directories in plugin mode/,
+						);
+						assert.match(
+							agentsMd,
+							/User-installed skills may still live under the active Codex-home `skills\/` directory/,
+						);
+					});
 				});
-			});
-		} finally {
+			} finally {
 			await rm(wd, { recursive: true, force: true });
 		}
 	});
@@ -2074,20 +2086,19 @@ describe.skip("omx setup install mode behavior", () => {
 						agentsMd,
 						/Registered Codex plugin marketplace surfaces supply Pennix OMX workflows and plugin-scoped companion resources/,
 					);
-					assert.match(
-						agentsMd,
-						/Do not assume bundled prompt\/skill files are copied into local `prompts\/` or `skills\/` directories in plugin mode/,
-					);
-					assert.match(
-						agentsMd,
-						/User-installed skills may still live under `\.\/.codex\/skills` for project scope, or `~\/.codex\/skills` for user-installed skills/,
-					);
-					assert.doesNotMatch(agentsMd, /`~\/.codex\/prompts`/);
-					assert.doesNotMatch(agentsMd, /`~\/.codex\/agents`/);
-					assert.doesNotMatch(agentsMd, /Role prompts under `prompts\/\*\.md`/);
+						assert.match(
+							agentsMd,
+							/Do not assume bundled prompt\/skill files are copied into local `prompts\/` or `skills\/` directories in plugin mode/,
+						);
+						assert.match(
+							agentsMd,
+							/User-installed skills may still live under `\.\/.codex\/skills` for project scope, or `~\/.codex\/skills` for separately installed user-level skills/,
+						);
+						assert.doesNotMatch(agentsMd, /`~\/.codex\/prompts`/);
+						assert.doesNotMatch(agentsMd, /`~\/.codex\/agents`/);
+					});
 				});
-			});
-		} finally {
+			} finally {
 			await rm(wd, { recursive: true, force: true });
 		}
 	});
@@ -2167,8 +2178,9 @@ describe.skip("omx setup install mode behavior", () => {
 			await withIsolatedUserHome(wd, async (codexHomeDir) => {
 				await withTempCwd(wd, async () => {
 					const configPath = join(codexHomeDir, "config.toml");
-					const latestUnwrapped =
-						"You have Pennix OMX installed through Codex plugin mode. AGENTS.md is the orchestration brain and main control surface. Follow AGENTS.md for skill/keyword routing and $name workflow invocation. When spawning native subagents, prefer setting `agent_type` to the narrowest installed role, but if Codex full-history fork mode inherits agent settings from the parent then follow that constraint instead of redundantly forcing `agent_type`, `model`, or `reasoning_effort`. Registered Codex plugin marketplace surfaces supply Pennix OMX workflows and plugin-scoped companion resources when the plugin is installed. Setup still installs native agent role TOML files under the active Codex home so agent_type routing works. Do not assume bundled prompt/skill files are copied into local .codex prompts/skills directories in plugin mode. User-installed skills may still live under ~/.codex/skills. Use outcome-first, concise progress updates: state the target result, constraints, validation evidence, and stop condition before adding process detail.";
+					const latestUnwrapped = OMX_PLUGIN_DEVELOPER_INSTRUCTIONS
+						.replace(/^<omx version="1">/, "")
+						.replace(/<\/omx>$/, "");
 					await writeFile(
 						configPath,
 						`developer_instructions = ${JSON.stringify(latestUnwrapped)}\n`,
@@ -2412,8 +2424,8 @@ describe.skip("omx setup install mode behavior", () => {
 		}
 	});
 
-	it("uses legacy codex_hooks only when the installed Codex reports that hook feature", async () => {
-		const wd = await mkdtemp(join(tmpdir(), "omx-setup-install-mode-"));
+		it("uses legacy codex_hooks only when the installed Codex reports that hook feature", async () => {
+			const wd = await mkdtemp(join(tmpdir(), "omx-setup-install-mode-"));
 		try {
 			await withIsolatedUserHome(wd, async (codexHomeDir) => {
 				await withTempCwd(wd, async () => {
@@ -2435,11 +2447,78 @@ describe.skip("omx setup install mode behavior", () => {
 			});
 		} finally {
 			await rm(wd, { recursive: true, force: true });
-		}
-	});
+			}
+		});
 
-	it("removes legacy setup-managed hook wrappers when plugin-scoped hooks are supported", async () => {
-		const wd = await mkdtemp(join(tmpdir(), "omx-setup-install-mode-"));
+		it("ignores removed plugin_hooks support and preserves an existing hooks feature flag", async () => {
+			const wd = await mkdtemp(join(tmpdir(), "omx-setup-install-mode-"));
+			try {
+				await withIsolatedUserHome(wd, async (codexHomeDir) => {
+					await withTempCwd(wd, async () => {
+						const installedRoot = join(wd, "installed-oh-my-codex");
+						await mkdir(installedRoot, { recursive: true });
+						await writeFile(
+							join(installedRoot, "package.json"),
+							JSON.stringify({
+								name: "oh-my-codex-pennix",
+								version: "0.0.0-test",
+							}) + "\n",
+						);
+
+						const hooksPath = join(codexHomeDir, "hooks.json");
+						await writeFile(
+							hooksPath,
+							JSON.stringify({ hooks: { UserPromptSubmit: [] } }, null, 2) + "\n",
+						);
+
+						const configPath = join(codexHomeDir, "config.toml");
+						const baseConfig = [
+							"[features]",
+							"hooks = true",
+							"goals = true",
+							"",
+							`[plugins.${JSON.stringify("oh-my-codex@oh-my-codex-local")}]`,
+							"enabled = true",
+							"",
+							"[marketplaces.oh-my-codex-local]",
+							'source_type = "local"',
+							`source = ${JSON.stringify(installedRoot)}`,
+							"",
+						].join("\n");
+						const initialConfig = upsertManagedCodexHookTrustState(
+							baseConfig,
+							packageRoot,
+							hooksPath,
+							{ platform: process.platform, codexHomeDir },
+						);
+						await writeFile(configPath, initialConfig);
+
+						await setup({
+							scope: "user",
+							installMode: "plugin",
+							codexFeaturesProbe: () =>
+								[
+									"hooks                                   stable             true",
+									"plugin_hooks                            removed            false",
+									"goals                                   stable             true",
+									"",
+								].join("\n"),
+							codexVersionProbe: () => "codex-cli 0.143.0",
+						});
+
+						const config = await readFile(configPath, "utf-8");
+						assert.equal(config, initialConfig);
+						assert.match(config, /^hooks = true$/m);
+						assert.doesNotMatch(config, /^plugin_hooks = true$/m);
+					});
+				});
+			} finally {
+				await rm(wd, { recursive: true, force: true });
+			}
+		});
+
+		it("removes legacy setup-managed hook wrappers when plugin-scoped hooks are supported", async () => {
+			const wd = await mkdtemp(join(tmpdir(), "omx-setup-install-mode-"));
 		try {
 			await withIsolatedUserHome(wd, async (codexHomeDir) => {
 				await withTempCwd(wd, async () => {
@@ -2845,7 +2924,7 @@ describe.skip("omx setup install mode behavior", () => {
 					);
 					assert.doesNotMatch(
 						pluginOutput,
-						/The AGENTS\.md orchestration brain is loaded automatically/,
+						/The scope AGENTS\.md bootstrap contract is loaded automatically/,
 					);
 					assert.match(
 						pluginOutput,
@@ -2857,7 +2936,7 @@ describe.skip("omx setup install mode behavior", () => {
 					);
 					assert.match(
 						pluginOutput,
-						/Plugin-mode AGENTS\.md defaults provide persistent orchestration guidance; developer_instructions is an optional bootstrap/,
+						/Plugin-mode AGENTS\.md defaults provide the persistent OMX bootstrap; developer_instructions stays user-owned and is not injected by default/,
 					);
 
 					const legacyWd = join(wd, "legacy");
@@ -2880,7 +2959,7 @@ describe.skip("omx setup install mode behavior", () => {
 						);
 						assert.match(
 							legacyOutput,
-							/The AGENTS\.md orchestration brain is loaded automatically/,
+							/The scope AGENTS\.md bootstrap contract is loaded automatically/,
 						);
 					});
 				});

@@ -330,8 +330,14 @@ describe('omx setup skills overwrite behavior', () => {
       await setup({ scope: 'user' });
 
       const output = logs.join('\n');
-      assert.match(output, /Migration hint: Detected 1 overlapping skill names between canonical .*\.codex\/skills and legacy .*\.agents\/skills\./);
-      assert.match(output, /Remove or archive ~\/\.agents\/skills after confirming .*\.codex\/skills is the version you want Codex to load\./);
+      assert.match(
+        output,
+        /Migration hint: Legacy ~\/\.agents\/skills still exists \(1 skills\) alongside OMX's active skill root .*\.codex\/skills\./,
+      );
+      assert.match(
+        output,
+        /Codex may still discover both roots; archive or remove ~\/\.agents\/skills if Enable\/Disable Skills shows duplicates\./,
+      );
     } finally {
       console.log = originalLog;
       process.chdir(previousCwd);

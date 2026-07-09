@@ -106,7 +106,7 @@ Direct-tool lane:
 - update `skills/ultrawork/SKILL.md`
 
 Background evidence lane:
-- use /prompts:test-engineer for this scoped task
+- delegate an independent `test-engineer` evidence lane
 ```
 Why good: Context is grounded first, acceptance criteria are explicit, and the direct-tool lane runs alongside a bounded evidence lane.
 </Good>
@@ -123,8 +123,8 @@ Why good: Shared-file work stays local; independent evidence work fans out.
 <Bad>
 Parallelizing before the task is grounded:
 ```
-use /prompts:executor for this scoped task
-use /prompts:test-engineer for this scoped task
+delegate an `executor` lane immediately
+delegate a `test-engineer` lane immediately
 ```
 Why bad: No context snapshot, no pass/fail target, and delegation starts before the work is shaped.
 </Bad>

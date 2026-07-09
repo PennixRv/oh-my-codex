@@ -55,16 +55,16 @@ This provides the complete agent tier matrix, MCP tool assignments, and selectio
 
 ```
 // PREFERRED - Use for most tasks
-use /prompts:executor for this scoped task
-use /prompts:explore for this scoped task
-use /prompts:architect for this scoped task
+delegate to an `executor` lane for this scoped task
+delegate to an `explore` lane for this scoped task
+delegate to an `architect` lane for this scoped task
 
 // FALLBACK - Only if LOW fails
-use /prompts:executor for this scoped task
-use /prompts:architect for this scoped task
+delegate to an `executor` lane for this scoped task
+delegate to an `architect` lane for this scoped task
 
 // AVOID - Only for planning/critique if essential
-use /prompts:planner for this scoped task
+delegate to a `planner` lane for this scoped task
 ```
 
 ## Delegation Enforcement

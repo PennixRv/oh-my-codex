@@ -7,7 +7,10 @@ import { tmpdir } from 'node:os';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { agentsInit } from '../agents-init.js';
-import { OMX_AGENTS_CONTRACT_HEADING } from '../../utils/agents-md.js';
+import {
+  OMX_AGENTS_CONTRACT_HEADING,
+  OMX_GENERATED_AGENTS_MARKER,
+} from '../../utils/agents-md.js';
 
 function runOmx(
   cwd: string,
@@ -81,7 +84,9 @@ describe('omx agents-init', () => {
       assert.match(rootAgents, /<!-- AUTONOMY DIRECTIVE — DO NOT REMOVE -->/);
       assert.match(
         rootAgents,
-        new RegExp(`<!-- END AUTONOMY DIRECTIVE -->\\n\\n${OMX_AGENTS_CONTRACT_HEADING.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`),
+        new RegExp(
+          `<!-- END AUTONOMY DIRECTIVE -->\\n${OMX_GENERATED_AGENTS_MARKER.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\n\\n${OMX_AGENTS_CONTRACT_HEADING.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`,
+        ),
       );
       assert.match(
         rootAgents,

@@ -13,7 +13,7 @@
 
 **Repository:** https://github.com/PennixRv/oh-my-codex
 
-**Docs:** [Getting Started](./docs/getting-started.html) · [Agents](./docs/agents.html) · [Skills](./docs/skills.html) · [Integrations](./docs/integrations.html) · [Demo](./DEMO.md) · [OpenClaw guide](./docs/openclaw-integration.md)
+**Docs:** [Getting Started](./docs/getting-started.html) · [User-Scope Plugin Mode](./docs/user-scope-plugin-mode.md) · [Codex Surface Boundaries](./docs/codex-surface-boundaries.md) · [Agents](./docs/agents.html) · [Skills](./docs/skills.html) · [Integrations](./docs/integrations.html) · [Demo](./DEMO.md) · [OpenClaw guide](./docs/openclaw-integration.md)
 
 **Community:** [Discord](https://discord.gg/sj4exxQ9v) — shared OMX/community server for oh-my-codex and related tooling.
 
@@ -70,7 +70,7 @@ Choose one install path. If Codex CLI is already installed (Homebrew, npm, or an
 ```bash
 codex --version
 npm install -g oh-my-codex-pennix
-omx setup
+omx setup --scope user --plugin
 # from the git project you want Codex to edit; choose a task-specific name
 omx --worktree=feat/task --madmax --high
 ```
@@ -80,7 +80,7 @@ If you do not have Codex CLI yet and want npm to manage it:
 ```bash
 npm install -g @openai/codex
 npm install -g oh-my-codex-pennix
-omx setup
+omx setup --scope user --plugin
 ```
 
 Do not run a combined `npm install -g @openai/codex oh-my-codex-pennix` over an existing Homebrew-owned `codex` binary such as `/opt/homebrew/bin/codex`; npm may fail with `EEXIST` when `@openai/codex` tries to create the same binary. OMX only needs a working, authenticated `codex` command on `PATH`; it does not require Codex to be installed through npm.
@@ -89,7 +89,7 @@ On a real `oh-my-codex-pennix` version bump, the global npm install now prints a
 
 OMX also checks for npm updates at launch on a throttled cadence and prompts before scheduling the update after the current session exits. Set `OMX_AUTO_UPDATE=0` to disable the launch-time check, or set `OMX_AUTO_UPDATE=defer` to schedule the same deferred update without prompting.
 
-**Codex plugin install note:** this repo also ships a Codex plugin layout at the internal compatibility path `plugins/oh-my-codex` with marketplace metadata in `.agents/plugins/marketplace.json`. That plugin bundles the mirrored skill surface plus plugin-scoped companion metadata for official Codex lifecycle hooks, optional MCP compatibility servers, and apps. It is still **not** a replacement for `npm install -g oh-my-codex-pennix` plus `omx setup`: plugin-scoped hooks launch the installed `omx` CLI, legacy setup mode installs native agents and prompts, and plugin setup mode relies on plugin discovery for bundled skills while archiving/removing legacy OMX-managed prompts/native-agent TOMLs so stale role files cannot shadow plugin behavior. Plugin mode still needs a persistent scope `AGENTS.md` (`~/.codex/AGENTS.md` for user setup or `./AGENTS.md` for project setup) as the durable orchestration guidance layer; session-scoped AGENTS files only compose that durable guidance with runtime overlays and are not a replacement.
+**Codex plugin install note:** this repo also ships a Codex plugin layout at the internal compatibility path `plugins/oh-my-codex` with marketplace metadata in `.agents/plugins/marketplace.json`. That plugin bundles the mirrored skill surface plus plugin-scoped companion metadata for official Codex lifecycle hooks, optional MCP compatibility servers, and apps. It is still **not** a replacement for `npm install -g oh-my-codex-pennix` plus `omx setup`: plugin-scoped hooks launch the installed `omx` CLI, user-scope plugin setup relies on plugin discovery for bundled skills, keeps `AGENTS.md` as the persistent bootstrap guidance layer, and still installs native-agent TOMLs for `agent_type` routing. Legacy setup remains available as a compatibility path and can install local prompt/skill copies. Session-scoped AGENTS files only compose the persistent guidance with runtime overlays; they are not a replacement.
 
 Then work normally inside Codex:
 
@@ -111,7 +111,7 @@ Use OMX if you already like Codex and want a better day-to-day runtime around it
 - research boundaries: use `$best-practice-research` for ordinary pre-planning official/upstream evidence, `$autoresearch` for bounded validator-gated research artifacts, `$autoresearch-goal` for goal-mode research missions, and feed any research findings into `$ralplan` for architecture synthesis
 - durable multi-goal handoffs with `$ultragoal` and `.omx/ultragoal` artifacts as the default completion path after planning
 - specialist roles and supporting skills when the task needs them
-- project guidance through scoped `AGENTS.md`
+- project bootstrap guidance through scoped `AGENTS.md`
 - durable state under `.omx/` for plans, logs, memory, and mode tracking
 
 If you want plain Codex with no extra workflow layer, you probably do not need OMX.
@@ -248,7 +248,7 @@ Most users should think of OMX as **better task routing + better workflow + bett
 ## Start here if you are new
 
 1. If Codex CLI already exists, verify it with `codex --version` and install or update OMX with `npm install -g oh-my-codex-pennix`; otherwise install `@openai/codex` separately first if you want npm to manage Codex
-2. After install or real OMX version bumps, run `omx setup` yourself when you're ready, or use `omx update` when you also want npm to check for and install the latest build before refreshing setup
+2. After install or real OMX version bumps, run `omx setup --scope user --plugin` yourself when you're ready, or use `omx update` when you also want npm to check for and install the latest build before refreshing setup
 3. Run `omx doctor`
 4. Run a real execution smoke test: `codex login status` and `omx exec --skip-git-repo-check -C . "Reply with exactly OMX-EXEC-OK"`
 5. Launch with a named worktree from a git repo, for example `omx --worktree=feat/task --madmax --high`; if you run concurrent `--madmax` sessions, use distinct named worktrees such as `--worktree=feature/auth`
@@ -300,9 +300,10 @@ omx team shutdown <team-name>
 
 These are operator/support surfaces:
 - Codex plugin marketplace install/discovery can cache the plugin under `${CODEX_HOME:-~/.codex}/plugins/cache/$MARKETPLACE_NAME/oh-my-codex/$VERSION/` (local installs may use `local` as the version identifier); that packaged plugin includes plugin-scoped companion metadata for official Codex lifecycle hooks, optional MCP compatibility servers, and apps (MCP/apps disabled by default), so it is still paired with the installed `omx` CLI for runtime execution
-- `omx setup` installs prompts, skills, AGENTS scaffolding, `.codex/config.toml`, and (for legacy installs or older Codex without `plugin_hooks`) OMX-managed native Codex hooks in `.codex/hooks.json`
+- `omx setup --scope user --plugin` is the preferred install path; it registers plugin delivery, writes native-agent TOMLs plus persistent `AGENTS.md`, refreshes `.codex/config.toml`, and uses setup-owned native hooks only when Codex still needs the fallback path
+  - legacy setup remains available as a compatibility path and additionally installs local prompt/skill copies
   - setup refresh preserves non-OMX hook entries in `.codex/hooks.json` and only rewrites OMX-managed wrappers
-  - plugin setup keeps `AGENTS.md` as persistent durable guidance even though bundled skills/hooks come from the plugin cache; `omx doctor` treats a missing persistent scope `AGENTS.md` in plugin mode as a failed check because the session-scoped AGENTS file would otherwise contain only runtime overlay guidance
+  - plugin setup keeps `AGENTS.md` as persistent bootstrap guidance even though bundled skills/hooks come from the plugin cache; `omx doctor` treats a missing persistent scope `AGENTS.md` in plugin mode as a failed check because the session-scoped AGENTS file would otherwise contain only runtime overlay guidance
   - `omx setup --merge-agents` preserves existing `AGENTS.md` guidance while inserting or refreshing generated OMX sections between `<!-- OMX:AGENTS:START -->` / `<!-- OMX:AGENTS:END -->`; without `--merge-agents` or `--force`, non-interactive setup keeps skipping existing `AGENTS.md` files
   - `omx uninstall` removes OMX-managed wrappers from `.codex/hooks.json` but keeps the file when user hooks remain
 - `omx update` checks npm immediately, installs the newest global OMX build, then reruns the same interactive setup refresh path
@@ -311,6 +312,8 @@ These are operator/support surfaces:
 - `.omx-config.json` model/env routing is documented in [the model/env routing reference](./docs/reference/omx-config-schema-routing.md); only edit keys supported by your installed OMX version
 - `omx doctor` verifies the install when something seems wrong; it does not prove that the active Codex profile can make an authenticated model call
 - `omx hud --watch` is a monitoring/status surface, not the primary user workflow
+
+User-scope install/uninstall best practice is documented in [docs/user-scope-plugin-mode.md](./docs/user-scope-plugin-mode.md). The surface-by-surface ownership and runtime loading model is documented in [docs/codex-surface-boundaries.md](./docs/codex-surface-boundaries.md). Treat project scope and legacy prompt copies as advanced compatibility paths, not the default onboarding story.
 
 For non-team sessions, native Codex hooks are now the canonical lifecycle surface:
 - `plugins/oh-my-codex/hooks/hooks.json` = plugin-scoped hook registrations for plugin installs

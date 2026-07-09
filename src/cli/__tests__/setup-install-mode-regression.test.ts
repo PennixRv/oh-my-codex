@@ -85,6 +85,20 @@ async function withIsolatedUserHome<T>(
 	}
 }
 
+async function captureConsoleOutput(fn: () => Promise<void>): Promise<string> {
+	const previousConsoleLog = console.log;
+	const lines: string[] = [];
+	console.log = (...args: unknown[]) => {
+		lines.push(args.map((arg) => String(arg)).join(" "));
+	};
+	try {
+		await fn();
+	} finally {
+		console.log = previousConsoleLog;
+	}
+	return lines.join("\n");
+}
+
 describe("omx setup install mode regressions", () => {
 	it("defaults to plugin mode when existing Codex config already advertises OMX plugin mode", async () => {
 		const wd = await mkdtemp(join(tmpdir(), "omx-setup-install-mode-regression-"));
@@ -187,6 +201,148 @@ describe("omx setup install mode regressions", () => {
 				assert.doesNotMatch(config, /^5 = 1$/m);
 				assert.match(config, /^plugin_hooks = true$/m);
 				assert.match(config, /^goals = true$/m);
+			});
+		} finally {
+			await rm(wd, { recursive: true, force: true });
+		}
+	});
+
+	it("keeps plugin-mode setup on the bootstrap surfaces by default", async () => {
+		const wd = await mkdtemp(join(tmpdir(), "omx-setup-plugin-bootstrap-"));
+		try {
+			await withIsolatedUserHome(wd, async (codexHomeDir) => {
+				await withTempCwd(wd, async () => {
+					const output = await captureConsoleOutput(async () => {
+						await setup({ scope: "user", installMode: "plugin" });
+					});
+
+					assert.equal(existsSync(join(codexHomeDir, "hooks.json")), false);
+					assert.equal(
+						existsSync(join(codexHomeDir, "skills", "ask", "SKILL.md")),
+						false,
+					);
+					assert.equal(
+						existsSync(join(codexHomeDir, "prompts", "executor.md")),
+						false,
+					);
+					assert.equal(
+						existsSync(join(codexHomeDir, "agents", "planner.toml")),
+						true,
+					);
+					assert.equal(existsSync(join(codexHomeDir, "AGENTS.md")), true);
+
+					const config = await readFile(
+						join(codexHomeDir, "config.toml"),
+						"utf-8",
+					);
+					assert.match(config, /^plugin_hooks = true$/m);
+					assert.match(config, /^goals = true$/m);
+					assert.doesNotMatch(config, /^developer_instructions\s*=/m);
+					assert.doesNotMatch(config, /^\s*\[mcp_servers[.\]]/m);
+
+					const agentsMd = await readFile(
+						join(codexHomeDir, "AGENTS.md"),
+						"utf-8",
+					);
+					assert.match(agentsMd, /<!-- omx:generated:agents-md -->/);
+					assert.match(
+						agentsMd,
+						/Plugin setup resolves bundled workflows through the registered Codex marketplace\/plugin while still installing native-agent TOMLs for `agent_type` routing/,
+					);
+					assert.match(
+						agentsMd,
+						/Role prompts, skill instructions, hook-injected routing context, and developer_instructions are narrower execution surfaces/,
+					);
+					assert.match(
+						agentsMd,
+						/Do not assume plugin mode copies bundled prompt\/skill files into local `.codex\/` directories/,
+					);
+
+					assert.match(
+						output,
+						/Registered Codex marketplace oh-my-codex-local supplies OMX skills and workflow surfaces/,
+					);
+					assert.match(
+						output,
+						/Plugin-mode AGENTS\.md defaults provide the persistent OMX bootstrap; developer_instructions stays user-owned and is not injected by default/,
+					);
+					assert.doesNotMatch(
+						output,
+						/Use role\/workflow keywords like \$architect, \$executor, and \$plan/,
+					);
+				});
+			});
+		} finally {
+			await rm(wd, { recursive: true, force: true });
+		}
+	});
+
+	it("can opt into plugin-mode developer_instructions without reviving local prompt copies", async () => {
+		const wd = await mkdtemp(join(tmpdir(), "omx-setup-plugin-developer-instructions-"));
+		try {
+			await withIsolatedUserHome(wd, async (codexHomeDir) => {
+				await withTempCwd(wd, async () => {
+					await setup({
+						scope: "user",
+						installMode: "plugin",
+						pluginDeveloperInstructionsPrompt: async () => true,
+					});
+
+					const config = await readFile(
+						join(codexHomeDir, "config.toml"),
+						"utf-8",
+					);
+					assert.match(config, /^developer_instructions\s*=/m);
+					assert.match(
+						config,
+						/<omx version=\\"1\\">You have Pennix OMX installed through Codex plugin mode/,
+					);
+					assert.equal(
+						existsSync(join(codexHomeDir, "prompts", "executor.md")),
+						false,
+					);
+					assert.equal(
+						existsSync(join(codexHomeDir, "skills", "ask", "SKILL.md")),
+						false,
+					);
+				});
+			});
+		} finally {
+			await rm(wd, { recursive: true, force: true });
+		}
+	});
+
+	it("uses project-scope plugin AGENTS wording without legacy prompt or agent home paths", async () => {
+		const wd = await mkdtemp(join(tmpdir(), "omx-setup-plugin-project-wording-"));
+		try {
+			await withIsolatedUserHome(wd, async () => {
+				await withTempCwd(wd, async () => {
+					const output = await captureConsoleOutput(async () => {
+						await setup({ scope: "project", installMode: "plugin" });
+					});
+
+					const agentsMd = await readFile(join(wd, "AGENTS.md"), "utf-8");
+					assert.match(
+						agentsMd,
+						/Plugin setup resolves bundled workflows through the registered Codex marketplace\/plugin while still installing native-agent TOMLs for `agent_type` routing/,
+					);
+					assert.match(
+						agentsMd,
+						/User-installed skills may still live under `\.\/\.codex\/skills` for project scope, or `~\/\.codex\/skills` for separately installed user-level skills/,
+					);
+					assert.doesNotMatch(agentsMd, /`~\/\.codex\/prompts`/);
+					assert.doesNotMatch(agentsMd, /`~\/\.codex\/agents`/);
+
+					assert.match(output, /Using setup install mode: plugin/);
+					assert.match(
+						output,
+						/Registered Codex marketplace oh-my-codex-local supplies OMX skills and workflow surfaces/,
+					);
+					assert.doesNotMatch(
+						output,
+						/Native agent defaults configured.*TOML files written to \.codex\/agents\//,
+					);
+				});
 			});
 		} finally {
 			await rm(wd, { recursive: true, force: true });

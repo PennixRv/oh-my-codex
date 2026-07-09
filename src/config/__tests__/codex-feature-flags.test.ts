@@ -43,6 +43,17 @@ describe("Codex feature flag resolution", () => {
     assert.equal(supportsCodexPluginScopedHooks({ featuresListOutput: "hooks stable true" }), false);
   });
 
+  it("treats removed plugin_hooks entries as unsupported even when Codex still lists the name", () => {
+    const output = [
+      "hooks                                   stable             true",
+      "plugin_hooks                            removed            false",
+      "goals                                   stable             true",
+      "",
+    ].join("\n");
+
+    assert.equal(supportsCodexPluginScopedHooks({ featuresListOutput: output }), false);
+  });
+
   it("uses version fallback for current Codex releases when feature listing is unavailable", () => {
     assert.equal(
       resolveCodexHookFeatureFlag({ versionOutput: "codex-cli 0.130.0" }),

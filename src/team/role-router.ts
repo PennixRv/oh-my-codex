@@ -6,9 +6,11 @@
  */
 
 import { readdir, readFile } from 'fs/promises';
-import { join } from 'path';
+import { dirname, join, resolve } from 'path';
 import { existsSync } from 'fs';
 import type { TeamPhase } from './orchestrator.js';
+import { codexPromptsDir, packageRoot } from '../utils/paths.js';
+import { readPersistedSetupScopeSync } from '../cli/setup-preferences.js';
 
 // ─── Layer 1: Prompt Loading ────────────────────────────────────────────────
 
@@ -33,6 +35,66 @@ export async function loadRolePrompt(
   }
 }
 
+function normalizePromptDirs(promptDirs: readonly string[]): string[] {
+  const uniqueDirs = new Set<string>();
+
+  for (const promptDir of promptDirs) {
+    const normalized = promptDir.trim();
+    if (!normalized) continue;
+    uniqueDirs.add(normalized);
+  }
+
+  return [...uniqueDirs];
+}
+
+export function defaultRolePromptDirs(cwd: string): string[] {
+  return normalizePromptDirs([
+    join(cwd, '.codex', 'prompts'),
+    codexPromptsDir(),
+    join(packageRoot(), 'prompts'),
+  ]);
+}
+
+function findNearestProjectScopedPromptRoot(cwd: string): string | null {
+  let currentDir = resolve(cwd);
+
+  while (true) {
+    const persistedScope = readPersistedSetupScopeSync(currentDir);
+    if (persistedScope === 'project') return currentDir;
+    if (persistedScope === 'user') return null;
+
+    const parentDir = dirname(currentDir);
+    if (parentDir === currentDir) return null;
+    currentDir = parentDir;
+  }
+}
+
+export function activeRolePromptDirs(cwd: string): string[] {
+  const projectScopedPromptRoot = findNearestProjectScopedPromptRoot(cwd);
+
+  return normalizePromptDirs([
+    ...(projectScopedPromptRoot
+      ? [join(projectScopedPromptRoot, '.codex', 'prompts')]
+      : []),
+    codexPromptsDir(),
+    join(packageRoot(), 'prompts'),
+  ]);
+}
+
+export async function resolveRolePrompt(
+  role: string,
+  promptDirs: readonly string[],
+): Promise<string | null> {
+  if (!SAFE_ROLE_PATTERN.test(role)) return null;
+
+  for (const promptDir of normalizePromptDirs(promptDirs)) {
+    const content = await loadRolePrompt(role, promptDir);
+    if (content) return content;
+  }
+
+  return null;
+}
+
 /**
  * Check whether a role has a corresponding prompt file.
  */
@@ -55,6 +117,19 @@ export async function listAvailableRoles(promptsDir: string): Promise<string[]> 
   } catch {
     return [];
   }
+}
+
+export async function listAvailableRolesFromPromptDirs(
+  promptDirs: readonly string[],
+): Promise<string[]> {
+  const roles = new Set<string>();
+
+  for (const promptDir of normalizePromptDirs(promptDirs)) {
+    const promptDirRoles = await listAvailableRoles(promptDir);
+    for (const role of promptDirRoles) roles.add(role);
+  }
+
+  return [...roles].sort();
 }
 
 // ─── Layer 2: Heuristic Role Routing ────────────────────────────────────────

@@ -61,7 +61,7 @@
 
       <h2>Core Features</h2>
       <div class="grid">
-        <article class="card"><h3>Agent Prompts</h3><p>Specialized roles for implementation, review, design, and planning.</p></article>
+        <article class="card"><h3>Role Prompt Assets</h3><p>Packaged role guidance for implementation, review, design, and planning.</p></article>
         <article class="card"><h3>Skills</h3><p>Composable workflows from autopilot and team pipelines to setup, release, and tracing.</p></article>
         <article class="card"><h3>Team Orchestration</h3><p>Staged execution pipeline with verification and fix loops.</p></article>
         <article class="card"><h3>MCP State Management</h3><p>Persistent lifecycle state, notepad, and project memory across sessions.</p></article>
@@ -70,13 +70,16 @@
       <h2>Quick Start</h2>
       <ol>
         <li><code>npm install -g oh-my-codex-pennix</code></li>
-        <li>After install or real version bumps, run <code>omx setup</code> yourself when you're ready, or use <code>omx update</code> when you also want npm to update OMX first.</li>
+        <li>After install or real version bumps, run <code>omx setup --scope user --plugin</code> yourself when you're ready, or use <code>omx update</code> when you also want npm to update OMX first.</li>
+        <li>Prefer user-scope plugin mode. Treat project scope and legacy prompt copies as compatibility paths.</li>
         <li><code>omx doctor</code></li>
         <li><code>omx --xhigh --madmax</code> (trusted environments) or <code>omx</code></li>
       </ol>
 
       <h2>Reference Guides</h2>
       <ul>
+        <li><a href="./codex-surface-boundaries.md">Codex surface boundaries and runtime loading</a></li>
+        <li><a href="./user-scope-plugin-mode.md">User-scope plugin mode install and uninstall</a></li>
         <li><a href="./architecture/cli-first-mcp-taxonomy.md">CLI-first MCP taxonomy and recovery matrix</a></li>
         <li><a href="./reference/omx-config-schema-routing.md">.omx-config.json model/env routing reference</a></li>
         <li><a href="./pipeline/github-pr-package-identity.md">GitHub / PR / package identity pipeline</a></li>
@@ -106,11 +109,13 @@
       <h2>Architecture</h2>
       <pre><code>User
   -> Codex CLI
-     -> AGENTS.md (orchestration brain)
-     -> ~/.codex/prompts/*.md (installable active/internal agent prompt catalog)
-     -> ~/.codex/skills/*/SKILL.md (skill catalog)
-     -> ~/.codex/config.toml (features, notify, MCP)
+     -> AGENTS.md (persistent bootstrap contract)
+     -> packaged prompts/*.md (role prompt assets; local prompt copies are compatibility overrides)
+     -> plugin-discovered skills/*/SKILL.md (bundled workflows) or ~/.codex/skills/*/SKILL.md (legacy/user-installed skills)
+     -> hooks + config.toml (dynamic routing, lifecycle automation, runtime hints)
+     -> .omx/state/.../AGENTS.md (session-scoped runtime composition)
      -> .omx/ (runtime state, memory, plans, logs)</code></pre>
+      <p class="muted">Need the recommended non-repo install shape? See <a href="./user-scope-plugin-mode.md">User-Scope Plugin Mode</a>. Need the ownership map? See <a href="./codex-surface-boundaries.md">Codex Surface Boundaries</a>.</p>
     </main>
 
     <footer>

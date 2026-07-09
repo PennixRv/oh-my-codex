@@ -75,6 +75,7 @@ async function runSetupWithCapturedLogs(
     await setup({
       installModePrompt: async (defaultMode) => defaultMode,
       modelUpgradePrompt: async () => false,
+      pluginDeveloperInstructionsPrompt: async () => false,
       ...options,
     });
     return logs.join('\n');
@@ -113,8 +114,7 @@ describe('omx setup AGENTS refresh behavior', () => {
         scope: 'user',
       });
 
-      assert.match(output, /Generated AGENTS\.md in .*home\/\.codex\./);
-      assert.match(output, /User scope leaves project AGENTS\.md unchanged\./);
+      assert.match(output, /Generated plugin-mode AGENTS\.md defaults in .*home\/\.codex\./);
       assert.match(output, /agents_md: updated=1, unchanged=0, backed_up=0, skipped=0, removed=0/);
       assert.equal(await readFile(join(wd, 'AGENTS.md'), 'utf-8'), existing);
       assert.equal(existsSync(join(home, '.codex', 'AGENTS.md')), true);
@@ -919,6 +919,31 @@ describe('omx setup AGENTS refresh behavior', () => {
 });
 
 describe('omx setup plugin developer_instructions behavior', () => {
+  it('does not prompt or inject developer_instructions during interactive plugin setup by default', async () => {
+    const wd = await mkdtemp(join(tmpdir(), 'omx-setup-plugin-devinst-'));
+    const restoreTty = setMockTty(true);
+    const home = join(wd, 'home');
+    const restoreHome = setMockHome(home);
+    try {
+      await mkdir(join(wd, '.omx', 'state'), { recursive: true });
+      await mkdir(join(home, '.codex'), { recursive: true });
+
+      const output = await runSetupWithCapturedLogs(wd, {
+        scope: 'user',
+        installMode: 'plugin',
+        pluginDeveloperInstructionsPrompt: undefined,
+      });
+      const config = await readFile(join(home, '.codex', 'config.toml'), 'utf-8');
+
+      assert.match(output, /Plugin-mode developer_instructions default preserved/i);
+      assert.doesNotMatch(config, /^developer_instructions\s*=/m);
+    } finally {
+      restoreHome();
+      restoreTty();
+      await rm(wd, { recursive: true, force: true });
+    }
+  });
+
   it('preserves existing custom developer_instructions by default', async () => {
     const wd = await mkdtemp(join(tmpdir(), 'omx-setup-plugin-devinst-'));
     const restoreTty = setMockTty(false);
@@ -1119,7 +1144,7 @@ describe('omx setup plugin developer_instructions behavior', () => {
 
       assert.match(config, /^model_reasoning_effort = "xhigh"$/m);
       assert.equal((config.match(/^model_reasoning_effort\s*=/gm) ?? []).length, 1);
-      assert.match(config, /You have Pennix OMX installed\. AGENTS\.md is the orchestration brain and main control surface/);
+      assert.match(config, /You have Pennix OMX installed\. AGENTS\.md is the persistent OMX bootstrap contract/);
       assert.doesNotMatch(config, /<omx version=\\"1\\">You have Pennix OMX installed through Codex plugin mode/);
     } finally {
       restoreHome();

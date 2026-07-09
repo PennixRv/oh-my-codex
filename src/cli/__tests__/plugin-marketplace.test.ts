@@ -11,6 +11,7 @@ import {
   OMX_LOCAL_MARKETPLACE_NAME,
   OMX_PLUGIN_NAME,
   omxLocalPluginCacheDir,
+  requirePackagedOmxMarketplace,
   resolvePackagedOmxMarketplace,
   upsertLocalOmxPluginEnablement,
   upsertLocalOmxPluginMcpServerEnablement,
@@ -52,6 +53,174 @@ function versionScopedCacheDir(codexHomeDir: string, version: string): string {
 }
 
 describe("plugin marketplace cache lifecycle", () => {
+  it("rejects plugin-mode packaging when marketplace metadata is missing", async () => {
+    const wd = await mkdtemp(join(tmpdir(), "omx-plugin-marketplace-"));
+    try {
+      await assert.rejects(
+        requirePackagedOmxMarketplace(wd),
+        /requires packaged oh-my-codex-local marketplace metadata/i,
+      );
+    } finally {
+      await rm(wd, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects plugin-mode packaging when the plugin manifest version is missing", async () => {
+    const wd = await mkdtemp(join(tmpdir(), "omx-plugin-marketplace-"));
+    try {
+      const pluginRoot = join(wd, "plugins", "oh-my-codex");
+      await mkdir(join(wd, ".agents", "plugins"), { recursive: true });
+      await mkdir(join(pluginRoot, ".codex-plugin"), { recursive: true });
+      await mkdir(join(pluginRoot, "hooks"), { recursive: true });
+      await writeFile(
+        join(wd, ".agents", "plugins", "marketplace.json"),
+        JSON.stringify(
+          {
+            name: OMX_LOCAL_MARKETPLACE_NAME,
+            plugins: [
+              {
+                name: OMX_PLUGIN_NAME,
+                source: {
+                  source: "local",
+                  path: "./plugins/oh-my-codex",
+                },
+              },
+            ],
+          },
+          null,
+          2,
+        ) + "\n",
+      );
+      await writeFile(
+        join(pluginRoot, ".codex-plugin", "plugin.json"),
+        JSON.stringify(
+          {
+            name: OMX_PLUGIN_NAME,
+            skills: "./skills/",
+            hooks: "./hooks/hooks.json",
+          },
+          null,
+          2,
+        ) + "\n",
+      );
+      await writeFile(join(pluginRoot, "hooks", "hooks.json"), '{"hooks":{}}\n');
+      await writeFile(
+        join(pluginRoot, "hooks", "codex-native-hook.mjs"),
+        "// hook\n",
+      );
+
+      await assert.rejects(
+        requirePackagedOmxMarketplace(wd),
+        /requires a packaged oh-my-codex plugin manifest version/i,
+      );
+    } finally {
+      await rm(wd, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects plugin-mode packaging when the plugin manifest hook pointer is missing", async () => {
+    const wd = await mkdtemp(join(tmpdir(), "omx-plugin-marketplace-"));
+    try {
+      const pluginRoot = join(wd, "plugins", "oh-my-codex");
+      await mkdir(join(wd, ".agents", "plugins"), { recursive: true });
+      await mkdir(join(pluginRoot, ".codex-plugin"), { recursive: true });
+      await mkdir(join(pluginRoot, "hooks"), { recursive: true });
+      await writeFile(
+        join(wd, ".agents", "plugins", "marketplace.json"),
+        JSON.stringify(
+          {
+            name: OMX_LOCAL_MARKETPLACE_NAME,
+            plugins: [
+              {
+                name: OMX_PLUGIN_NAME,
+                source: {
+                  source: "local",
+                  path: "./plugins/oh-my-codex",
+                },
+              },
+            ],
+          },
+          null,
+          2,
+        ) + "\n",
+      );
+      await writeFile(
+        join(pluginRoot, ".codex-plugin", "plugin.json"),
+        JSON.stringify(
+          {
+            name: OMX_PLUGIN_NAME,
+            version: "1.2.3",
+            skills: "./skills/",
+          },
+          null,
+          2,
+        ) + "\n",
+      );
+      await writeFile(join(pluginRoot, "hooks", "hooks.json"), '{"hooks":{}}\n');
+      await writeFile(
+        join(pluginRoot, "hooks", "codex-native-hook.mjs"),
+        "// hook\n",
+      );
+
+      await assert.rejects(
+        requirePackagedOmxMarketplace(wd),
+        /requires packaged oh-my-codex-local marketplace metadata/i,
+      );
+    } finally {
+      await rm(wd, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects plugin-mode packaging when packaged hook assets are missing", async () => {
+    const wd = await mkdtemp(join(tmpdir(), "omx-plugin-marketplace-"));
+    try {
+      const pluginRoot = join(wd, "plugins", "oh-my-codex");
+      await mkdir(join(wd, ".agents", "plugins"), { recursive: true });
+      await mkdir(join(pluginRoot, ".codex-plugin"), { recursive: true });
+      await mkdir(join(pluginRoot, "hooks"), { recursive: true });
+      await writeFile(
+        join(wd, ".agents", "plugins", "marketplace.json"),
+        JSON.stringify(
+          {
+            name: OMX_LOCAL_MARKETPLACE_NAME,
+            plugins: [
+              {
+                name: OMX_PLUGIN_NAME,
+                source: {
+                  source: "local",
+                  path: "./plugins/oh-my-codex",
+                },
+              },
+            ],
+          },
+          null,
+          2,
+        ) + "\n",
+      );
+      await writeFile(
+        join(pluginRoot, ".codex-plugin", "plugin.json"),
+        JSON.stringify(
+          {
+            name: OMX_PLUGIN_NAME,
+            version: "1.2.3",
+            skills: "./skills/",
+            hooks: "./hooks/hooks.json",
+          },
+          null,
+          2,
+        ) + "\n",
+      );
+      await writeFile(join(pluginRoot, "hooks", "hooks.json"), '{"hooks":{}}\n');
+
+      await assert.rejects(
+        requirePackagedOmxMarketplace(wd),
+        /requires packaged oh-my-codex-local marketplace metadata/i,
+      );
+    } finally {
+      await rm(wd, { recursive: true, force: true });
+    }
+  });
+
   it("preserves historical version-scoped plugin caches when materializing the stable local cache", async () => {
     const wd = await mkdtemp(join(tmpdir(), "omx-plugin-marketplace-"));
     try {

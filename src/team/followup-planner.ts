@@ -1,7 +1,9 @@
-import { join } from 'path';
-import { codexPromptsDir, packageRoot } from '../utils/paths.js';
 import { resolveAgentReasoningEffort, type TeamReasoningEffort } from './model-contract.js';
-import { listAvailableRoles, routeTaskToRole } from './role-router.js';
+import {
+  activeRolePromptDirs,
+  listAvailableRolesFromPromptDirs,
+  routeTaskToRole,
+} from './role-router.js';
 
 export type FollowupMode = 'team' | 'ralph';
 
@@ -88,28 +90,12 @@ export function isApprovedExecutionFollowupShortcut(
     : isShortRalphFollowupRequest(text);
 }
 
-function defaultPromptDirs(projectRoot: string): string[] {
-  return [
-    join(projectRoot, 'prompts'),
-    join(projectRoot, '.codex', 'prompts'),
-    join(packageRoot(), 'prompts'),
-    codexPromptsDir(),
-  ];
-}
-
 export async function resolveAvailableAgentTypes(
   projectRoot: string,
   options: ResolveAvailableAgentTypesOptions = {},
 ): Promise<string[]> {
-  const dirs = options.promptDirs ?? defaultPromptDirs(projectRoot);
-  const roles = new Set<string>();
-
-  for (const dir of dirs) {
-    const dirRoles = await listAvailableRoles(dir);
-    for (const role of dirRoles) roles.add(role);
-  }
-
-  return [...roles].sort();
+  const dirs = options.promptDirs ?? activeRolePromptDirs(projectRoot);
+  return listAvailableRolesFromPromptDirs(dirs);
 }
 
 function chooseAvailableRole(

@@ -215,8 +215,8 @@ Usage:
                 Queue audited follow-up instructions for a running non-interactive exec job
   omx imagegen continuation <session-id> --artifact <name>
                 Queue a Stop-hook continuation for built-in image generation turns
-  omx setup     Install skills, prompts, CLI-first config, and scope-specific AGENTS.md
-                (user scope prompts for legacy vs plugin skill delivery when needed)
+  omx setup     Install OMX in user/plugin mode by default, with legacy/project compatibility paths
+                (writes CLI-first config, native agents, and scope-specific AGENTS.md)
   omx update    Install the stable channel now, then refresh setup
   omx update --stable
                 Install/rollback to npm stable (${OMX_PACKAGE_NAME}@latest), then refresh setup
@@ -224,7 +224,7 @@ Usage:
                 Install the fork dev branch, then refresh setup
   omx uninstall Remove OMX configuration and clean up installed artifacts
   omx doctor    Check installation health
-  omx list      List packaged OMX skills and native agent prompts (--json)
+  omx list      List packaged OMX skills and role prompt assets (--json)
   omx cleanup   Kill orphaned OMX MCP server processes and remove stale OMX /tmp directories
   omx doctor --team  Check team/swarm runtime health diagnostics
   omx ask       Ask local provider CLI (claude|gemini) and write artifact output
@@ -315,7 +315,7 @@ Options:
   --keep-config Skip config.toml cleanup during uninstall
   --purge       Remove .omx/ cache directory during uninstall
   --verbose     Show detailed output
-  --scope       Setup scope for "omx setup" only:
+  --scope       Setup/uninstall scope:
                 user | project
 
 Launch policy:

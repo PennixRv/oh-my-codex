@@ -2,9 +2,9 @@
  * oh-my-codex - Multi-agent orchestration for OpenAI Codex CLI
  *
  * This package provides:
- * - 30+ specialized agent prompts as Codex CLI slash commands
+ * - 30+ packaged role prompt assets plus native agent templates
  * - 35+ workflow skills as SKILL.md files
- * - AGENTS.md orchestration brain
+ * - AGENTS.md bootstrap contract
  * - MCP servers for state management, project memory, and notepad
  * - CLI tool (omx) for setup, diagnostics, and management
  * - Notification hooks for workflow tracking

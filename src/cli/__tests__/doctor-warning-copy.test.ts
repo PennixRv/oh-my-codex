@@ -249,7 +249,7 @@ command = "node"
 			await writeFile(
 				join(codexDir, "config.toml"),
 				[
-					'developer_instructions = "You have Pennix OMX installed through Codex plugin mode. AGENTS.md is the orchestration brain and main control surface."',
+					'developer_instructions = "You have Pennix OMX installed through Codex plugin mode. AGENTS.md is the persistent OMX bootstrap contract."',
 					"plugin_hooks = true",
 					"goals = true",
 					"",

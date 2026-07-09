@@ -115,9 +115,8 @@ import {
 import { buildTeamWorkerGoalInstruction } from './goal-workflow.js';
 import { synthesizeDelegationPlan } from './delegation-policy.js';
 import { coordinationPlansEqual, synthesizeCoordinationPlan, synthesizeCoordinationPlans } from './coordination-protocol.js';
-import { loadRolePrompt } from './role-router.js';
+import { activeRolePromptDirs, resolveRolePrompt } from './role-router.js';
 import { composeRoleInstructionsForRole } from '../agents/native-config.js';
-import { codexPromptsDir } from '../utils/paths.js';
 import { isTerminalPhase, type TeamPhase, type TerminalPhase } from './orchestrator.js';
 import {
   resolveTeamWorkerLaunchArgs,
@@ -3068,8 +3067,10 @@ export async function startTeam(
         ? taskRoles[0]
         : agentType;
       const runtimeRole = workerRole;
-      const rawRolePromptContent = await loadRolePrompt(runtimeRole, join(leaderCwd, '.codex', 'prompts'))
-        ?? await loadRolePrompt(runtimeRole, codexPromptsDir());
+      const rawRolePromptContent = await resolveRolePrompt(
+        runtimeRole,
+        activeRolePromptDirs(leaderCwd),
+      );
       const preferredReasoning = resolveAgentReasoningEffort(runtimeRole, codexHomeOverride)
         ?? resolveAgentReasoningEffort(agentType, codexHomeOverride);
       const workerLaunchArgs = resolveWorkerLaunchArgsFromEnv(

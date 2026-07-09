@@ -1,36 +1,41 @@
-# oh-my-codex-pennix v0.18.81
+# oh-my-codex-pennix v0.18.82
 
 > Release notes template for the Pennix fork. The tag workflow regenerates this file into the final GitHub release body.
 
 ## Summary
 
-This release tightens the visible tmux metric formatting and restores the release workflow pieces that were supposed to ship the native artifacts. OMX now keeps the `Ctx` token pair on compact one-decimal notation while normalizing the rest of the visible metrics to two decimals, the tag workflow once again publishes `native-release-manifest.json` plus the native archives for `omx-api`, `omx-explore-harness`, and `omx-sparkshell`, and the documented `dev` sync step now reflects the real `fast-forward-or-reconcile` branch model instead of assuming every release can end with a pure fast-forward.
+This release makes user-scope plugin mode the primary OMX install story, shrinks persistent `AGENTS.md` back to a bootstrap contract, resolves active role prompts from the real live Codex/plugin surfaces, hardens packaged-plugin validation, and fixes the two remaining setup regressions that were still mutating real user homes.
 
 ## Highlights
 
-- `Cost`, `Total`, `Cache`, and the `Ctx` percentage now render with fixed two-decimal formatting, while the compact `Ctx` token pair remains one-decimal `remaining/effective-window` telemetry such as `222.2k/249.3k`.
-- GitHub Releases again attach `native-release-manifest.json` and the native archives produced by the cross-platform cargo-dist matrix before npm publish proceeds.
-- Published native archives are now smoke-verified by manifest/checksum/binary-path before the packed-install smoke and npm publication stages run.
-- The release workflow contract test is active again, and the release protocol now documents the correct `dev` sync fallback when a simple fast-forward is not available.
+- README, setup guidance, and new docs now make `omx setup --scope user --plugin` the preferred onboarding path.
+- Persistent `AGENTS.md` is now treated as a bootstrap contract, while detailed behavior stays on the narrower surfaces that actually own it.
+- Active role prompts now resolve from the live Codex/plugin surfaces instead of stale repo-local leftovers.
+- Plugin install mode now fails closed when packaged marketplace/plugin metadata is incomplete.
+- Setup now preserves trusted installed package roots for tmux-status assets and ignores `plugin_hooks` rows that Codex still lists by name but already marks as `removed`.
 
 ## Fixes / compatibility
 
-- The tmux status bar still prefers the same pane-local rollout/session binding and official remaining-context semantics from `0.18.80`; this release only tightens the visible numeric formatting on top of that logic.
-- Older rollout records that lack `last_token_usage.total_tokens` still fall back to the last input token count, so historical telemetry continues to render instead of dropping to unknown.
-- The `dev` tail step is now explicit about reconciliation merges when branch history has diverged; it no longer implies that a forceful reset or guaranteed fast-forward is acceptable.
+- Existing trusted plugin marketplace registrations are preserved without unnecessary config rewrites when they already match the intended installed source.
+- Running `omx setup` from a source checkout no longer rewrites `~/.codex/.omx/tmux-status/render.sh` to the transient checkout path when a trusted installed OMX package root is already known.
+- Current Codex builds that report `plugin_hooks` only as `removed` now stay on the supported `hooks` path without rewriting an existing `hooks = true` / `goals = true` config.
+- Legacy setup and project-scope prompt copies remain available as compatibility paths; this release changes the default story and ownership model, not the existence of those escape hatches.
 
 ## Validation
 
 - `npm run build`
-- `node dist/scripts/run-test-files.js dist/tmux-status/__tests__/render.test.js`
-- `node dist/scripts/run-test-files.js dist/verification/__tests__/explore-harness-release-workflow.test.js dist/verification/__tests__/release-workflow-release-body.test.js dist/verification/__tests__/native-release-manifest.test.js`
-- `npm run test:node`
+- `node --test dist/config/__tests__/codex-feature-flags.test.js`
+- `node --test dist/cli/__tests__/setup-install-mode.test.js`
+- `node --test dist/cli/__tests__/tmux-status-lifecycle.test.js`
+- `node --test dist/cli/__tests__/uninstall.test.js`
 - `npm run verify:native-agents`
 - `npm run verify:plugin-bundle`
-- `node dist/scripts/check-version-sync.js --tag v0.18.81`
+- `node dist/scripts/generate-catalog-docs.js --check`
+- `npm pack --dry-run`
+- `node dist/scripts/check-version-sync.js --tag v0.18.82`
 
 ## Contributors
 
 Thanks to the contributors who made this release possible.
 
-**Full Changelog**: [`v0.18.80...v0.18.81`](https://github.com/PennixRv/oh-my-codex/compare/v0.18.80...v0.18.81)
+**Full Changelog**: [`v0.18.81...v0.18.82`](https://github.com/PennixRv/oh-my-codex/compare/v0.18.81...v0.18.82)

@@ -16,7 +16,7 @@ Routes to the git-master agent for git operations.
 ## Routing
 
 ```text
-Use /prompts:git-master with the user task.
+Route the task to the `git-master` role or native agent surface.
 ```
 
 ## Capabilities

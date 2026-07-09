@@ -4,8 +4,8 @@ oh-my-codex (omx) - Multi-agent orchestration for Codex CLI
 Usage:
   omx           Launch Codex CLI (HUD auto-attaches only when already inside tmux)
   omx exec      Run codex exec non-interactively with OMX AGENTS/overlay injection
-  omx setup     Install skills, prompts, CLI-first config, and scope-specific AGENTS.md
-                (user scope prompts for legacy vs plugin skill delivery when needed)
+  omx setup     Install OMX in user/plugin mode by default, with legacy/project compatibility paths
+                (writes CLI-first config, native agents, and scope-specific AGENTS.md)
   omx uninstall Remove OMX configuration and clean up installed artifacts
   omx doctor    Check installation health
   omx cleanup   Kill orphaned OMX MCP server processes from prior sessions
@@ -58,5 +58,5 @@ Options:
   --keep-config Skip config.toml cleanup during uninstall
   --purge       Remove .omx/ cache directory during uninstall
   --verbose     Show detailed output
-  --scope       Setup scope for "omx setup" only:
+  --scope       Setup/uninstall scope:
                 user | project

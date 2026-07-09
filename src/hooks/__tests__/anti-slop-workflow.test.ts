@@ -31,16 +31,6 @@ const antiSlopWorkingAgreementPatterns = [
   /^- Verify with lint, typecheck, tests, and static analysis after changes; final reports include changed files, simplifications, and remaining risks\.$/m,
 ];
 
-const antiSlopWorkflowPatterns = [
-  /^Anti-slop workflow:$/m,
-  /^- Cleanup\/refactor\/deslop work still follows the same `\$deep-interview` -> `\$ralplan` -> `\$team`\/`\$ralph` path; use `\$ai-slop-cleaner` as a bounded helper inside the chosen execution lane, not as a competing top-level workflow\.$/m,
-  /^- Write a cleanup plan before modifying code; lock existing behavior with regression tests first, then make one smell-focused pass at a time\.$/m,
-  /^- Prefer deletion over addition, and prefer reuse plus boundary repair over new layers\.$/m,
-  /^- No new dependencies without explicit request\.$/m,
-  /^- Run lint, typecheck, tests, and static analysis before claiming completion\.$/m,
-  /^- Keep writer\/reviewer pass separation for cleanup plans and approvals; preserve writer\/reviewer pass separation explicitly\.$/m,
-];
-
 const aiSlopCleanerWorkflowPatterns = [
   /^Reduce AI-generated slop with a regression-tests-first, smell-by-smell cleanup workflow that preserves behavior and raises signal quality\.$/m,
   /^## Scoped File Lists and Ralph Workflow$/m,
@@ -87,10 +77,9 @@ const aiSlopCleanerWorkflowPatterns = [
 ];
 
 describe('anti-slop workflow surfaces', () => {
-  it('adds durable anti-slop guidance to AGENTS surfaces', () => {
+  it('keeps only the compact anti-slop guardrails in AGENTS surfaces', () => {
     const templateContent = read('templates/AGENTS.md');
     assertMatchesAll(templateContent, antiSlopWorkingAgreementPatterns);
-    assertMatchesAll(templateContent, antiSlopWorkflowPatterns);
 
     if (existsSync(join(repoRoot, 'AGENTS.md'))) {
       const content = read('AGENTS.md');

@@ -1258,4 +1258,31 @@ describe('stripOmxFeatureFlags', () => {
     assert.match(result, /^goals\s*=\s*true$/m);
     assert.match(result, /web_search = true/);
   });
+
+  it('can preserve hook feature flags independently from plugin-scoped runtime flags', async () => {
+    const { stripOmxFeatureFlags } = await import('../../config/generator.js');
+
+    const config = [
+      '[features]',
+      'multi_agent = true',
+      'child_agents_md = true',
+      'plugin_hooks = true',
+      'hooks = true',
+      'goals = true',
+      'goal = true',
+      'web_search = true',
+      '',
+    ].join('\n');
+
+    const result = stripOmxFeatureFlags(config, {
+      preserveHookFeatureFlags: true,
+    });
+    assert.doesNotMatch(result, /multi_agent/);
+    assert.doesNotMatch(result, /child_agents_md/);
+    assert.doesNotMatch(result, /^plugin_hooks\s*=/m);
+    assert.match(result, /^hooks\s*=\s*true$/m);
+    assert.doesNotMatch(result, /^goals\s*=/m);
+    assert.doesNotMatch(result, /^goal\s*=/m);
+    assert.match(result, /web_search = true/);
+  });
 });

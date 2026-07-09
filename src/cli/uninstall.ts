@@ -878,8 +878,8 @@ export async function uninstall(options: UninstallOptions = {}): Promise<void> {
   );
   console.log();
 
-  // Step 3: Remove installed prompts
-  console.log("[3/6] Removing agent prompts...");
+  // Step 3: Remove installed prompt copies
+  console.log("[3/6] Removing agent prompt copies...");
   summary.promptsRemoved = await removeInstalledPrompts(
     scopeDirs.promptsDir,
     pkgRoot,

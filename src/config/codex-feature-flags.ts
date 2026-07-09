@@ -3,6 +3,12 @@ export const CODEX_PLUGIN_SCOPED_HOOKS_FEATURE_FLAG = "plugin_hooks";
 
 export type CodexHookFeatureFlag = (typeof CODEX_HOOK_FEATURE_FLAGS)[number];
 
+interface ParsedCodexFeatureRow {
+  effective: boolean;
+  name: string;
+  stage: string;
+}
+
 /**
  * Current Codex CLI releases expose lifecycle hooks as `[features].hooks`.
  * Older releases used `[features].codex_hooks`. Keep the default on the
@@ -27,11 +33,28 @@ export function parseCodexFeatureNames(
   featuresListOutput: string | null | undefined,
 ): Set<string> {
   const names = new Set<string>();
-  for (const rawLine of (featuresListOutput ?? "").split(/\r?\n/)) {
-    const match = rawLine.trim().match(/^([A-Za-z0-9_]+)\s+/);
-    if (match) names.add(match[1]);
+  for (const feature of parseCodexFeatureRows(featuresListOutput).values()) {
+    names.add(feature.name);
   }
   return names;
+}
+
+function parseCodexFeatureRows(
+  featuresListOutput: string | null | undefined,
+): Map<string, ParsedCodexFeatureRow> {
+  const rows = new Map<string, ParsedCodexFeatureRow>();
+  for (const rawLine of (featuresListOutput ?? "").split(/\r?\n/)) {
+    const trimmed = rawLine.trim();
+    const match = trimmed.match(/^([A-Za-z0-9_]+)\s+(.+?)\s+(true|false)$/);
+    if (!match) continue;
+    const feature = {
+      effective: match[3] === "true",
+      name: match[1],
+      stage: match[2].trim(),
+    };
+    rows.set(feature.name, feature);
+  }
+  return rows;
 }
 
 export function parseCodexCliVersion(
@@ -58,9 +81,11 @@ export function isCodexCliVersionAtLeast(
 export function supportsCodexPluginScopedHooks(options: {
   featuresListOutput?: string | null;
 } = {}): boolean {
-  return parseCodexFeatureNames(options.featuresListOutput).has(
+  const feature = parseCodexFeatureRows(options.featuresListOutput).get(
     CODEX_PLUGIN_SCOPED_HOOKS_FEATURE_FLAG,
   );
+  if (!feature) return false;
+  return feature.stage.toLowerCase() !== "removed";
 }
 
 export function resolveCodexHookFeatureFlag(options: {

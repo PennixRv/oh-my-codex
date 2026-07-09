@@ -39,9 +39,11 @@ import {
 	hasLegacyOmxTeamRunTable,
 	appendManagedOmxDeveloperInstructions,
 	hasCurrentOmxPluginDeveloperInstructionsFragment,
+	HISTORICAL_OMX_DEVELOPER_INSTRUCTIONS,
 	isHistoricalOmxPluginDeveloperInstructionsFragment,
 	isCurrentOmxPluginDeveloperInstructionsFragment,
-	LEGACY_OMX_PLUGIN_DEVELOPER_INSTRUCTIONS,
+	LEGACY_HISTORICAL_OMX_DEVELOPER_INSTRUCTIONS,
+	LEGACY_OMX_DEVELOPER_INSTRUCTIONS,
 	stripExistingOmxBlocks,
 	stripExistingSharedMcpRegistryBlock,
 	stripManagedOmxDeveloperInstructions,
@@ -122,6 +124,7 @@ import {
 	OMX_PLUGIN_NAME,
 	materializePackagedOmxPluginCache,
 	omxLocalPluginCacheDir,
+	requirePackagedOmxMarketplace,
 	resolvePackagedOmxMarketplace,
 	upsertLocalOmxMarketplaceRegistration,
 	upsertLocalOmxPluginEnablement,
@@ -316,21 +319,19 @@ function applyPluginModeWordingToAgentsTemplate(
 	scope: SetupScope,
 ): string {
 	const scopedContent = applyScopePathRewritesToAgentsTemplate(content, scope);
-	const userSkillPath =
-		scope === "project"
-			? "`./.codex/skills` for project scope, or `~/.codex/skills` for user-installed skills"
-			: "`~/.codex/skills`";
-	return scopedContent.replace(
-		/<surface_resolution>[\s\S]*?<\/surface_resolution>/,
-		[
-			"<surface_resolution>",
-			"Role prompts and installed workflow surfaces are narrower execution surfaces. They must follow this file, not override it.",
-			`Registered Codex plugin marketplace surfaces supply ${OMX_FORK_USER_FACING_NAME} workflows and plugin-scoped companion resources when the plugin is installed. Setup still installs native agent role TOML files under the active Codex home so agent_type routing works.`,
-			"Do not assume bundled prompt/skill files are copied into local `prompts/` or `skills/` directories in plugin mode.",
-			`User-installed skills may still live under ${userSkillPath}.`,
-			"</surface_resolution>",
-		].join("\n"),
-	);
+	if (scope !== "project") {
+		return scopedContent;
+	}
+
+	return scopedContent
+		.replace(
+			"- Legacy setup and project-scope compatibility paths can still install local prompt copies, skills, and native-agent TOMLs under the active Codex home (`./.codex/...` or project-local `./.codex/...`).",
+			"- Legacy setup and project-scope compatibility paths can still install local prompt copies, skills, and native-agent TOMLs under the active project Codex home (`./.codex/...`).",
+		)
+		.replace(
+			"- User-installed skills may still live under the active Codex-home `skills/` directory.",
+			"- User-installed skills may still live under `./.codex/skills` for project scope, or `~/.codex/skills` for separately installed user-level skills.",
+		);
 }
 
 function stripNamedXmlSection(content: string, sectionName: string): string {
@@ -412,13 +413,19 @@ const REQUIRED_TEAM_CLI_API_MARKERS = [
 ] as const;
 
 const DEFAULT_SETUP_SCOPE: SetupScope = "user";
-const DEFAULT_SETUP_INSTALL_MODE: SetupInstallMode = "legacy";
+const DEFAULT_SETUP_INSTALL_MODE: SetupInstallMode = "plugin";
 const LEGACY_SETUP_MODEL = "gpt-5.3-codex";
 const DEFAULT_SETUP_MODEL = DEFAULT_FRONTIER_MODEL;
 const OBSOLETE_NATIVE_AGENT_FIELD = ["skill", "ref"].join("_");
 const GITHUB_AUTH_STATUS_TIMEOUT_MS = 2_000;
 
 let cachedGitHubCliConfigured: boolean | undefined;
+
+function canUseInteractiveSetupPrompts(): boolean {
+	const ci = (process.env.CI || "").trim().toLowerCase();
+	if (ci === "1" || ci === "true" || ci === "yes") return false;
+	return process.stdin.isTTY && process.stdout.isTTY;
+}
 
 function createEmptyCategorySummary(): SetupCategorySummary {
 	return {
@@ -648,7 +655,7 @@ async function buildLegacySkillOverlapNotice(
 	if (overlap.overlappingSkillNames.length === 0) {
 		return {
 			shouldWarn: true,
-			message: `Legacy ~/.agents/skills still exists (${overlap.legacySkillCount} skills) alongside canonical ${overlap.canonicalDir}. Codex may still discover both roots; archive or remove ~/.agents/skills if Enable/Disable Skills shows duplicates.`,
+			message: `Legacy ~/.agents/skills still exists (${overlap.legacySkillCount} skills) alongside OMX's active skill root ${overlap.canonicalDir}. Codex may still discover both roots; archive or remove ~/.agents/skills if Enable/Disable Skills shows duplicates.`,
 		};
 	}
 
@@ -658,7 +665,7 @@ async function buildLegacySkillOverlapNotice(
 			: "";
 	return {
 		shouldWarn: true,
-		message: `Detected ${overlap.overlappingSkillNames.length} overlapping skill names between canonical ${overlap.canonicalDir} and legacy ${overlap.legacyDir}.${mismatchSuffix} Remove or archive ~/.agents/skills after confirming ${overlap.canonicalDir} is the version you want Codex to load.`,
+		message: `Detected ${overlap.overlappingSkillNames.length} overlapping skill names between OMX's active skill root ${overlap.canonicalDir} and legacy ${overlap.legacyDir}.${mismatchSuffix} Remove or archive ~/.agents/skills after confirming ${overlap.canonicalDir} is the version you want Codex to load.`,
 	};
 }
 
@@ -697,7 +704,7 @@ function logCategorySummary(name: string, summary: SetupCategorySummary): void {
 async function promptForSetupScope(
 	defaultScope: SetupScope,
 ): Promise<SetupScope> {
-	if (!process.stdin.isTTY || !process.stdout.isTTY) {
+	if (!canUseInteractiveSetupPrompts()) {
 		return defaultScope;
 	}
 	const rl = createInterface({
@@ -731,7 +738,7 @@ async function promptForSetupScope(
 async function promptForSetupInstallMode(
 	defaultMode: SetupInstallMode,
 ): Promise<SetupInstallMode> {
-	if (!process.stdin.isTTY || !process.stdout.isTTY) {
+	if (!canUseInteractiveSetupPrompts()) {
 		return defaultMode;
 	}
 	const rl = createInterface({
@@ -764,7 +771,7 @@ async function promptForFirstPartyMcpRemoval(
 	configPath: string,
 	registrationKinds: string[],
 ): Promise<boolean> {
-	if (!process.stdin.isTTY || !process.stdout.isTTY) {
+	if (!canUseInteractiveSetupPrompts()) {
 		return false;
 	}
 	const rl = createInterface({
@@ -810,7 +817,7 @@ function formatPersistedSetupPreferenceSummary(
 async function promptForPersistedSetupReview(
 	preferences: Partial<PersistedSetupScope>,
 ): Promise<PersistedSetupReviewDecision> {
-	if (!process.stdin.isTTY || !process.stdout.isTTY) {
+	if (!canUseInteractiveSetupPrompts()) {
 		return "keep";
 	}
 	const rl = createInterface({
@@ -846,7 +853,7 @@ async function promptForModelUpgrade(
 	currentModel: string,
 	targetModel: string,
 ): Promise<boolean> {
-	if (!process.stdin.isTTY || !process.stdout.isTTY) {
+	if (!canUseInteractiveSetupPrompts()) {
 		return false;
 	}
 	const rl = createInterface({
@@ -884,8 +891,8 @@ function normalizePluginDeveloperInstructionsPromptDecision(
 }
 
 async function promptForPluginDeveloperInstructionsAction(
-	configPath: string,
-	state: "missing" | "historical",
+	_configPath: string,
+	_state: "missing" | "historical",
 	prompt?:
 		| ((
 				configPath: string,
@@ -894,57 +901,17 @@ async function promptForPluginDeveloperInstructionsAction(
 ): Promise<PluginDeveloperInstructionsDecisionAction> {
 	if (prompt) {
 		return normalizePluginDeveloperInstructionsPromptDecision(
-			state,
-			await prompt(configPath),
+			_state,
+			await prompt(_configPath),
 		);
 	}
-	if (!process.stdin.isTTY || !process.stdout.isTTY) {
-		return "preserve";
-	}
-	const rl = createInterface({
-		input: process.stdin,
-		output: process.stdout,
-	});
-	try {
-		if (state === "missing") {
-			console.log("Optional plugin-mode developer_instructions bootstrap:");
-			console.log(`  ${configPath}`);
-			console.log(
-				"  AGENTS.md remains the primary orchestration contract; this bootstrap is optional.",
-			);
-			const answer = (
-				await rl.question(
-					"Add the OMX plugin-mode developer_instructions bootstrap now? [y/N]: ",
-				)
-			)
-				.trim()
-				.toLowerCase();
-			return answer === "y" || answer === "yes" ? "add" : "preserve";
-		}
-		console.log("Historical OMX developer_instructions detected:");
-		console.log(`  ${configPath}`);
-		console.log(
-			"  Refreshing updates only the OMX-managed bootstrap wording and leaves user-owned config untouched.",
-		);
-		const answer = (
-			await rl.question(
-				"Refresh the OMX plugin-mode developer_instructions bootstrap to the current wording? [Y/n]: ",
-			)
-		)
-			.trim()
-			.toLowerCase();
-		return answer === "" || answer === "y" || answer === "yes"
-			? "update"
-			: "preserve";
-	} finally {
-		rl.close();
-	}
+	return "preserve";
 }
 
 async function promptForAgentsOverwrite(
 	destinationPath: string,
 ): Promise<boolean> {
-	if (!process.stdin.isTTY || !process.stdout.isTTY) {
+	if (!canUseInteractiveSetupPrompts()) {
 		return false;
 	}
 	const rl = createInterface({
@@ -982,7 +949,9 @@ function classifyPluginDeveloperInstructions(
 	}
 	if (
 		normalized === normalizeDeveloperInstructionsText(OMX_DEVELOPER_INSTRUCTIONS)
-		|| normalized === normalizeDeveloperInstructionsText(LEGACY_OMX_PLUGIN_DEVELOPER_INSTRUCTIONS)
+		|| normalized === normalizeDeveloperInstructionsText(LEGACY_OMX_DEVELOPER_INSTRUCTIONS)
+		|| normalized === normalizeDeveloperInstructionsText(HISTORICAL_OMX_DEVELOPER_INSTRUCTIONS)
+		|| normalized === normalizeDeveloperInstructionsText(LEGACY_HISTORICAL_OMX_DEVELOPER_INSTRUCTIONS)
 	) {
 		return "historical";
 	}
@@ -1094,7 +1063,7 @@ async function resolveSetupScope(
 	}
 	if (
 		typeof setupScopePrompt === "function" ||
-		(process.stdin.isTTY && process.stdout.isTTY)
+		canUseInteractiveSetupPrompts()
 	) {
 		const defaultScope =
 			persistedReviewDecision === "review" && persisted?.scope
@@ -1388,6 +1357,33 @@ function getParsedPluginMarketplaceConfig(content: string): {
 	};
 }
 
+function hasExpectedLocalOmxPluginMarketplaceRegistration(
+	configContent: string,
+	packageRoot: string,
+	options: {
+		mcpMode: SetupMcpMode;
+		removeFirstPartyMcp: boolean;
+	},
+): boolean {
+	const { marketplace, plugin } = getParsedPluginMarketplaceConfig(configContent);
+	if (
+		marketplace?.source_type !== "local"
+		|| marketplace.source !== packageRoot
+		|| plugin?.enabled !== true
+	) {
+		return false;
+	}
+
+	const hasPluginMcpServers = hasLocalOmxPluginMcpServerRegistrations(configContent);
+	if (options.mcpMode === "compat") {
+		return hasPluginMcpServers;
+	}
+	if (options.removeFirstPartyMcp) {
+		return !hasPluginMcpServers;
+	}
+	return true;
+}
+
 async function isTrustedOmxPluginMarketplaceSource(
 	source: unknown,
 	packageRoot: string,
@@ -1516,7 +1512,7 @@ async function resolveSetupInstallMode(
 
 	if (
 		typeof installModePrompt === "function" ||
-		(process.stdin.isTTY && process.stdout.isTTY)
+		canUseInteractiveSetupPrompts()
 	) {
 		if (discoveredPluginCacheDir) {
 			console.log(
@@ -1870,6 +1866,21 @@ async function ensurePluginMarketplaceRegistration(
 	const existingConfig = existsSync(configPath)
 		? await readFile(configPath, "utf-8")
 		: "";
+	if (
+		existingConfig
+		&& hasExpectedLocalOmxPluginMarketplaceRegistration(
+			existingConfig,
+			registration.packageRoot,
+			{ mcpMode, removeFirstPartyMcp },
+		)
+	) {
+		summary.unchanged += 1;
+		return {
+			status: "unchanged",
+			packageRoot: registration.packageRoot,
+			preservedExistingSource: registration.preservedExistingSource,
+		};
+	}
 	const nextConfig = upsertLocalOmxMarketplaceRegistration(
 		upsertLocalOmxPluginMcpServerEnablement(
 			upsertLocalOmxPluginEnablement(existingConfig),
@@ -2214,11 +2225,10 @@ async function cleanupPluginModeLegacyConfig(
 	}
 
 	const original = await readFile(configPath, "utf-8");
-	const preservedFirstPartyMcp = options.preserveFirstPartyMcp
-		? extractFirstPartyOmxMcpSections(original)
-		: "";
 	let config = original;
-	config = stripFirstPartyOmxMcpSections(config);
+	if (!options.preserveFirstPartyMcp) {
+		config = stripFirstPartyOmxMcpSections(config);
+	}
 	config = stripExistingOmxBlocks(config).cleaned;
 	config = stripExistingSharedMcpRegistryBlock(config).cleaned;
 	config = stripPluginModeLegacyRootDefaults(config, {
@@ -2226,12 +2236,12 @@ async function cleanupPluginModeLegacyConfig(
 			options.developerInstructionsDecision.action === "preserve",
 	});
 	config = stripOmxSeededBehavioralDefaults(config);
-	config = stripOmxFeatureFlags(config);
+	config = stripOmxFeatureFlags(config, {
+		preserveCodexManagedFlags: true,
+		preserveHookFeatureFlags: true,
+	});
 	config = stripManagedCodexHookTrustState(config);
 	config = stripOmxEnvSettings(config);
-	if (preservedFirstPartyMcp) {
-		config = `${config.trimEnd()}\n\n${preservedFirstPartyMcp}\n`;
-	}
 	config = config.trim();
 	const nextConfig = config.length > 0 ? `${config}\n` : "";
 
@@ -2297,11 +2307,11 @@ export async function setup(options: SetupOptions = {}): Promise<void> {
 		Boolean(persistedPreferences?.teamMode) &&
 		(!persistedPreferences?.scope ||
 			persistedPreferences.scope === effectiveScopeForInstallMode);
-	const shouldReviewPersistedSetup =
-		hasPersistedSetupPreferences(persistedPreferences) &&
-		(wouldUsePersistedScope || wouldUsePersistedInstallMode || wouldUsePersistedMcpMode || wouldUsePersistedTeamMode) &&
-		(typeof persistedSetupReviewPrompt === "function" ||
-			(process.stdin.isTTY && process.stdout.isTTY));
+		const shouldReviewPersistedSetup =
+			hasPersistedSetupPreferences(persistedPreferences) &&
+			(wouldUsePersistedScope || wouldUsePersistedInstallMode || wouldUsePersistedMcpMode || wouldUsePersistedTeamMode) &&
+			(typeof persistedSetupReviewPrompt === "function" ||
+				canUseInteractiveSetupPrompts());
 	if (shouldReviewPersistedSetup) {
 		persistedReviewDecision = persistedSetupReviewPrompt
 			? await persistedSetupReviewPrompt(persistedPreferences)
@@ -2363,7 +2373,7 @@ export async function setup(options: SetupOptions = {}): Promise<void> {
 	if (shouldOfferFirstPartyMcpRemoval) {
 		const canPrompt =
 			typeof firstPartyMcpRemovalPrompt === "function" ||
-			(process.stdin.isTTY && process.stdout.isTTY);
+			canUseInteractiveSetupPrompts();
 		if (canPrompt) {
 			removeFirstPartyMcpRegistrations = firstPartyMcpRemovalPrompt
 				? await firstPartyMcpRemovalPrompt(
@@ -2380,6 +2390,17 @@ export async function setup(options: SetupOptions = {}): Promise<void> {
 		resolvedScope.source === "persisted" ? " (from .omx/setup-scope.json)" : "";
 	const backupContext = getBackupContext(resolvedScope.scope, projectRoot);
 	const isPluginInstallMode = resolvedInstallMode?.installMode === "plugin";
+	const packagedPluginMarketplace = isPluginInstallMode
+		? await requirePackagedOmxMarketplace(pkgRoot)
+		: null;
+	const tmuxStatusPackageRoot = isPluginInstallMode
+		? (
+			await resolveMarketplaceRegistrationPackageRoot(
+				scopeDirs.codexConfigFile,
+				pkgRoot,
+			)
+		).packageRoot
+		: pkgRoot;
 	const pluginAgentsMdDst =
 		resolvedScope.scope === "project"
 			? join(projectRoot, "AGENTS.md")
@@ -2506,8 +2527,8 @@ export async function setup(options: SetupOptions = {}): Promise<void> {
 	const catalogCounts = getCatalogHeadlineCounts();
 	const summary = createEmptyRunSummary();
 
-	// Step 2: Install agent prompts
-	console.log("[2/8] Installing agent prompts...");
+	// Step 2: Reconcile role prompt assets
+	console.log("[2/8] Reconciling role prompt assets...");
 	{
 		const promptsSrc = join(pkgRoot, "prompts");
 		const promptsDst = scopeDirs.promptsDir;
@@ -2730,29 +2751,29 @@ export async function setup(options: SetupOptions = {}): Promise<void> {
 				pluginScopedHooks: pluginScopedHooksSupported,
 			},
 		);
-			const pluginMarketplaceResult = await ensurePluginMarketplaceRegistration(
-				scopeDirs.codexConfigFile,
-				pkgRoot,
+		const pluginMarketplaceResult = await ensurePluginMarketplaceRegistration(
+			scopeDirs.codexConfigFile,
+			pkgRoot,
 			resolvedMcpMode.mcpMode,
 			removeFirstPartyMcpRegistrations,
-				backupContext,
-				summary.config,
-				{ dryRun, verbose },
+			backupContext,
+			summary.config,
+			{ dryRun, verbose },
+		);
+		if (pluginMarketplaceResult.status === "unavailable") {
+			throw new Error(
+				`Plugin install mode could not register packaged ${OMX_LOCAL_MARKETPLACE_NAME} marketplace metadata. The package layout is incomplete or malformed.`,
 			);
-			if (pluginMarketplaceResult.status === "unavailable") {
-				console.log(
-					`  warning: packaged ${OMX_LOCAL_MARKETPLACE_NAME} Codex plugin marketplace metadata not found; /skills plugin discovery was not registered.`,
-				);
-			} else if (pluginMarketplaceResult.status === "updated") {
-				console.log(
-					`  ${dryRun ? "Would register" : "Registered"} local Codex plugin marketplace ${OMX_LOCAL_MARKETPLACE_NAME} (${pluginMarketplaceResult.packageRoot})${pluginMarketplaceResult.preservedExistingSource ? " [preserved existing trusted install source]" : ""}.`,
-				);
-			} else {
-				console.log(
-					`  Local Codex plugin marketplace ${OMX_LOCAL_MARKETPLACE_NAME} already registered (${pluginMarketplaceResult.packageRoot})${pluginMarketplaceResult.preservedExistingSource ? " [preserved existing trusted install source]" : ""}.`,
-				);
-			}
-		const packagedMarketplace = await resolvePackagedOmxMarketplace(pkgRoot);
+		}
+		if (pluginMarketplaceResult.status === "updated") {
+			console.log(
+				`  ${dryRun ? "Would register" : "Registered"} local Codex plugin marketplace ${OMX_LOCAL_MARKETPLACE_NAME} (${pluginMarketplaceResult.packageRoot})${pluginMarketplaceResult.preservedExistingSource ? " [preserved existing trusted install source]" : ""}.`,
+			);
+		} else {
+			console.log(
+				`  Local Codex plugin marketplace ${OMX_LOCAL_MARKETPLACE_NAME} already registered (${pluginMarketplaceResult.packageRoot})${pluginMarketplaceResult.preservedExistingSource ? " [preserved existing trusted install source]" : ""}.`,
+			);
+		}
 		const pluginCacheRefresh = await refreshOmxPluginDiscoveryCache(
 			pkgRoot,
 			{
@@ -2767,10 +2788,14 @@ export async function setup(options: SetupOptions = {}): Promise<void> {
 			);
 		} else if (pluginCacheRefresh.status === "unchanged") {
 			console.log("  Codex plugin discovery cache already matches packaged plugin metadata.");
+		} else {
+			throw new Error(
+				`Plugin install mode could not inspect packaged ${OMX_LOCAL_MARKETPLACE_NAME} discovery metadata. The package layout is incomplete or malformed.`,
+			);
 		}
 		const pluginCacheMaterialize = await materializePackagedOmxPluginCache(
 			scopeDirs.codexHomeDir,
-			packagedMarketplace,
+			packagedPluginMarketplace,
 			{ dryRun, teamMode: resolvedTeamMode },
 		);
 		if (pluginCacheMaterialize.status === "materialized") {
@@ -2779,6 +2804,10 @@ export async function setup(options: SetupOptions = {}): Promise<void> {
 			);
 		} else if (pluginCacheMaterialize.status === "unchanged") {
 			console.log("  Local Codex plugin cache already exposes packaged OMX skills.");
+		} else {
+			throw new Error(
+				`Plugin install mode could not materialize the packaged ${OMX_PLUGIN_NAME} plugin cache. The package layout is incomplete or malformed.`,
+			);
 		}
 		if (shouldSyncSharedMcpRegistry) {
 			resolvedConfig = await syncSharedMcpRegistryIntoConfig(
@@ -2942,7 +2971,7 @@ export async function setup(options: SetupOptions = {}): Promise<void> {
 	const tmuxStatusInstall = await installManagedTmuxStatusArtifacts({
 		scope: resolvedScope.scope,
 		scopeCodexHomeDir: scopeDirs.codexHomeDir,
-		packageRoot: pkgRoot,
+		packageRoot: tmuxStatusPackageRoot,
 		homeDir: homedir(),
 		backupContext,
 		summary: summary.config,
@@ -3352,9 +3381,9 @@ export async function setup(options: SetupOptions = {}): Promise<void> {
 			`  2. Registered Codex marketplace ${OMX_LOCAL_MARKETPLACE_NAME} supplies OMX skills and workflow surfaces`,
 		);
 		console.log("  3. Browse plugin-provided skills with /skills");
-		console.log(
-			"  4. Plugin-mode AGENTS.md defaults provide persistent orchestration guidance; developer_instructions is an optional bootstrap",
-		);
+			console.log(
+				"  4. Plugin-mode AGENTS.md defaults provide the persistent OMX bootstrap; developer_instructions stays user-owned and is not injected by default",
+			);
 		console.log(
 			"  5. Native agent role TOML files written to .codex/agents/ for agent_type routing",
 		);
@@ -3366,7 +3395,7 @@ export async function setup(options: SetupOptions = {}): Promise<void> {
 			"  3. Browse skills with /skills; AGENTS keyword routing can also activate them implicitly",
 		);
 		console.log(
-			"  4. The AGENTS.md orchestration brain is loaded automatically",
+			"  4. The scope AGENTS.md bootstrap contract is loaded automatically",
 		);
 		console.log(
 			"  5. Native agent defaults configured in config.toml [agents] and TOML files written to .codex/agents/",
@@ -4432,7 +4461,7 @@ async function updateManagedConfig(
 	if (currentModel === LEGACY_SETUP_MODEL) {
 		const shouldPrompt =
 			typeof options.modelUpgradePrompt === "function" ||
-			(process.stdin.isTTY && process.stdout.isTTY);
+			canUseInteractiveSetupPrompts();
 		if (shouldPrompt) {
 			const shouldUpgrade = options.modelUpgradePrompt
 				? await options.modelUpgradePrompt(currentModel, DEFAULT_SETUP_MODEL)

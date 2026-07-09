@@ -16,42 +16,25 @@ npm install
 npm run build
 npm link
 
-# Run setup (installs prompts, skills, configures Codex CLI)
-omx setup
+# Run setup (recommended user-scope plugin mode)
+omx setup --scope user --plugin
 ```
 
-**Expected output:**
+**Expected shape:**
 ```
-omx setup
-=================
-
-[1/7] Creating directories...
-  Done.
-
-[2/7] Installing agent prompts...
-  Installed 30 agent prompts.
-
-[3/7] Installing skills...
-  Installed 40 skills.
-
-[4/7] Updating config.toml...
-  Done.
-
-[4.5/7] Verifying Team MCP comm tools...
-  omx_state exports: team_send_message, team_broadcast, team_mailbox_list, team_mailbox_mark_delivered
-
-[5/7] Generating AGENTS.md...
-  Generated AGENTS.md in project root.
-  # (or: AGENTS.md already exists, use --force to overwrite)
-
-[6/7] Configuring notification hook...
-  Done.
-
-[7/7] Configuring HUD...
-  HUD config created (preset: focused).
-  StatusLine configured in config.toml via [tui] section.
-
-Setup complete! Run "omx doctor" to verify installation.
+omx setup --scope user --plugin
+...
+Using setup scope: user
+Using setup install mode: plugin
+...
+Native agent role refresh complete (.../.codex/agents); plugin mode still installs role TOML so agent_type routing works.
+...
+Generated plugin-mode AGENTS.md defaults in .../.codex.
+...
+Registered local Codex plugin marketplace ...
+Installed local Codex plugin cache ...
+...
+Setup complete. Run "omx doctor" to verify installation.
 ```
 
 ## Verify Installation
@@ -69,11 +52,11 @@ omx doctor
   [OK] Node.js: v20+
   [OK] Codex home: ~/.codex
   [OK] Config: config.toml has OMX entries
-  [OK] Prompts: 30 agent prompts installed
-  [OK] Skills: 40 skills installed
-  [OK] AGENTS.md: found in project root
+  [OK] Prompts: plugin mode intentionally omits setup-owned prompts; packaged role prompts remain available
+  [OK] Skills: plugin-discovered OMX skills available
+  [OK] AGENTS.md: persistent bootstrap found in ~/.codex
   [OK] State dir: .omx/state
-  [OK] MCP Servers: 4 servers configured (OMX present)
+  [OK] Native hooks: plugin-scoped hooks healthy
 
 Results: 9 passed, 0 warnings, 0 failed
 ```
@@ -106,18 +89,17 @@ Then use role and workflow keywords:
 
 **Expected:** Structural codebase search with file listings and pattern summaries.
 
-## Demo 2: AGENTS.md Orchestration Brain
+## Demo 2: AGENTS.md Bootstrap Contract
 
-The generated `AGENTS.md` in your project root acts as the orchestration brain. It provides:
+The persistent `~/.codex/AGENTS.md` installed by recommended setup acts as the OMX bootstrap contract. It provides:
 
-- Delegation rules (when to use which agent)
-- Model routing guidance in AGENTS.md (complexity/role-based routing)
-- 30-agent catalog with descriptions
-- 40 skill descriptions with trigger patterns
-- Team compositions for common workflows
-- Verification protocols
+- Delegation and mode-selection rules
+- Surface ownership boundaries
+- Verification and escalation rules
+- Runtime marker ownership
 
-Codex CLI loads this automatically at session start.
+Detailed workflow playbooks live in skills, role-local behavior lives in packaged
+prompts, and runtime overlays are composed under `.omx/state/.../AGENTS.md`.
 
 ## Demo 3: CLI Status Commands
 
@@ -379,17 +361,17 @@ Expected:
 
 | Component | Count | Location |
 |-----------|-------|----------|
-| Agent prompts | 30 | `~/.codex/prompts/*.md` |
-| Skills | 40 | `~/.codex/skills/*/SKILL.md` |
+| Role prompt assets | 37 | Packaged `prompts/*.md` with optional compatibility copies under the active `.codex/prompts/` root |
+| Workflow skills | 29 canonical | Plugin-delivered from the OMX plugin cache in the recommended user/plugin setup; optional compatibility copies can still exist under `.codex/skills/` |
 | MCP servers | 4 | Configured in `~/.codex/config.toml` |
 | CLI commands | 11+ | `omx (launch), setup, doctor, team, version, tmux-hook, hud, status, cancel, reasoning, help` |
-| AGENTS.md | 1 | Project root (generated) |
+| AGENTS bootstrap | 1 persistent default | `~/.codex/AGENTS.md` in the recommended user/plugin setup; repo-root `AGENTS.md` remains repo-owned unless you opt into project scope or explicit merge flows |
 
 ## Troubleshooting
 
 **Codex CLI not found:** Install with `npm install -g @openai/codex`
 
-**Slash commands not appearing:** Run `omx setup --force` to reinstall prompts
+**Slash commands or OMX skills not appearing:** Run `omx setup --scope user --plugin`, then `omx doctor`, and confirm `/skills` shows the OMX plugin-delivered surfaces. Legacy installs can still repopulate local `.codex/prompts/` and `.codex/skills/` copies, but that is no longer the recommended default path.
 
 **MCP servers not connecting:** Check `~/.codex/config.toml` for `[mcp_servers.omx_state]`, `[mcp_servers.omx_memory]`, `[mcp_servers.omx_code_intel]`, and `[mcp_servers.omx_trace]` entries
 

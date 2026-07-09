@@ -252,7 +252,11 @@ describe("omx setup scope behavior", () => {
       assert.match(agentsMd, /<surface_resolution>/);
       assert.match(
         agentsMd,
-        /Legacy setup installs prompts, skills, and native-agent TOMLs under the active Codex home \(`\.\/\.codex\/\.\.\.` or project-local `\.\/\.codex\/\.\.\.` when project scope is active\)\./,
+        /User-scope plugin setup is the preferred OMX install path\./,
+      );
+      assert.match(
+        agentsMd,
+        /Legacy setup and project-scope compatibility paths can still install local prompt copies, skills, and native-agent TOMLs under the active Codex home/,
       );
       assert.match(
         agentsMd,
@@ -373,21 +377,32 @@ describe("omx setup scope behavior", () => {
       if (shouldSkipForSpawnPermissions(res.error)) return;
       assert.equal(res.status, 0, res.stderr || res.stdout);
       assert.match(res.stdout, /Using setup scope: user/);
+      assert.match(res.stdout, /Using setup install mode: plugin/);
       assert.match(
         res.stdout,
-        /User scope leaves project AGENTS\.md unchanged\./,
+        /Plugin-mode AGENTS\.md defaults provide the persistent OMX bootstrap; developer_instructions stays user-owned and is not injected by default/,
       );
 
-      assert.equal(existsSync(join(home, ".codex", "prompts")), true);
-      assert.equal(existsSync(join(home, ".codex", "skills")), true);
+      assert.equal(existsSync(join(home, ".codex", "prompts")), false);
+      assert.equal(existsSync(join(home, ".codex", "skills")), false);
       assert.equal(existsSync(join(home, ".codex", "agents")), true);
-      assert.equal(existsSync(join(home, ".codex", "hooks.json")), true);
       assert.equal(existsSync(join(home, ".codex", "AGENTS.md")), true);
       assert.equal(existsSync(join(wd, ".omx", "setup-scope.json")), true);
       const persistedScope = JSON.parse(
         await readFile(join(wd, ".omx", "setup-scope.json"), "utf-8"),
       ) as { scope: string };
       assert.equal(persistedScope.scope, "user");
+      const configToml = await readFile(
+        join(home, ".codex", "config.toml"),
+        "utf-8",
+      );
+      const hooksJsonExists = existsSync(join(home, ".codex", "hooks.json"));
+      if (hooksJsonExists) {
+        assert.match(configToml, /^hooks = true$/m);
+        assert.doesNotMatch(configToml, /^plugin_hooks = true$/m);
+      } else {
+        assert.match(configToml, /^plugin_hooks = true$/m);
+      }
       const agentsMd = await readFile(
         join(home, ".codex", "AGENTS.md"),
         "utf-8",
@@ -395,7 +410,7 @@ describe("omx setup scope behavior", () => {
       assert.match(agentsMd, /<surface_resolution>/);
       assert.match(
         agentsMd,
-        /Legacy setup installs prompts, skills, and native-agent TOMLs under the active Codex home \(`~\/\.codex\/\.\.\.` or project-local `\.\/\.codex\/\.\.\.` when project scope is active\)\./,
+        /User-scope plugin setup is the preferred OMX install path\./,
       );
       assert.equal(
         await readFile(join(wd, "AGENTS.md"), "utf-8"),

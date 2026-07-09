@@ -51,27 +51,29 @@ unset OMX_TEAM_WORKER OMX_TEAM_STATE_ROOT OMX_TEAM_LEADER_CWD OMX_TEAM_WORKER_CL
 ## Project structure
 
 - `src/` -- TypeScript source (CLI, config, agents, MCP servers, hooks, modes, team, verification)
-- `prompts/` -- 30 agent prompt markdown files (installed to `~/.codex/prompts/`)
-- `skills/` -- 39 skill directories with `SKILL.md` (installed to `~/.codex/skills/`)
-- `templates/` -- `AGENTS.md` orchestration brain template
+- `prompts/` -- canonical packaged role prompt markdown files (plugin mode resolves these directly; legacy mode may also copy them into `${CODEX_HOME:-~/.codex}/prompts/`)
+- `skills/` -- canonical workflow skill directories with `SKILL.md` (plugin mode discovers packaged skills; legacy mode may also copy them into `${CODEX_HOME:-~/.codex}/skills/`)
+- `templates/` -- persistent `AGENTS.md` bootstrap contract template
 
 ### Adding a new agent prompt
 
 1. Create `prompts/my-agent.md` with the agent's system prompt
-2. Run `omx setup --force` to install it to `~/.codex/prompts/`
-3. Use `/prompts:my-agent` in Codex CLI
+2. Treat that packaged prompt file as canonical. For plugin mode, test it through OMX runtime resolution such as `omx ask --agent-prompt my-agent "..."` or a native agent that composes the role prompt.
+3. If you specifically need to test legacy local prompt copies, run `omx setup --force --legacy` and verify `${CODEX_HOME:-~/.codex}/prompts/my-agent.md`.
 
 ### Prompt guidance contract
 
 Before changing `AGENTS.md`, `templates/AGENTS.md`, `prompts/*.md`, or the generated `developer_instructions` text in `src/config/generator.ts`, read [`docs/prompt-guidance-contract.md`](./docs/prompt-guidance-contract.md).
 
-That document defines the GPT-5.4 behavior contract contributors should preserve across prompt surfaces and explains how it differs from posture-aware routing metadata.
+That document defines the GPT-5.5 behavior contract contributors should preserve across prompt surfaces and explains how it differs from posture-aware routing metadata.
+
+Also read [`docs/codex-surface-boundaries.md`](./docs/codex-surface-boundaries.md) before moving behavior between `AGENTS.md`, prompts, skills, hooks, and setup-owned bootstrap hints.
 
 ### Adding a new skill
 
 1. Create `skills/my-skill/SKILL.md` with the skill workflow
-2. Run `omx setup --force` to install it to `~/.codex/skills/`
-3. Use `$my-skill` in Codex CLI
+2. Treat that packaged skill directory as canonical. In plugin mode, verify discovery through `/skills`; in legacy mode, use `omx setup --force --legacy` if you need a local compatibility copy under `${CODEX_HOME:-~/.codex}/skills/`.
+3. Use `$my-skill` in Codex CLI once discovery is confirmed.
 
 
 ### Document refresh warnings

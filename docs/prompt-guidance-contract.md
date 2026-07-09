@@ -16,7 +16,9 @@ Use it when you edit any of these surfaces:
 
 ## Scope and current source of truth
 
-The current prompt sources in this repository live in **`prompts/*.md`** and **`skills/*/SKILL.md`**, then get installed to `~/.codex/prompts/`, `~/.codex/skills/`, and native agent wrappers. Treat the source markdown body as canonical; launcher-specific TOML or runtime wrappers should preserve the same behavior.
+The current prompt sources in this repository live in **`prompts/*.md`** and **`skills/*/SKILL.md`**. Treat those packaged markdown files as canonical. Native-agent TOMLs and runtime wrappers should preserve the same behavior. Legacy setup may also install local prompt copies under `~/.codex/prompts/` or `./.codex/prompts/`, but user-scope plugin mode should not depend on those copies existing.
+
+The persistent root `AGENTS.md` surface is intentionally bootstrap-sized. It should carry mode selection, routing, verification, and runtime-marker ownership, while detailed workflow playbooks live in `skills/*/SKILL.md`, role prompts, and docs.
 
 The GPT-5.5 contract is distributed across:
 
@@ -159,7 +161,7 @@ When editing `templates/AGENTS.md`, any tracked root `AGENTS.md`, or other root 
 2. **Leader and worker responsibilities stay separate.** Leaders choose the mode, own verification, and integrate work; workers execute assigned slices and report blockers upward.
 3. **Stop/escalate rules are explicit.** The prompt should say when to stop, when to escalate to the user, and when workers must escalate back to the leader.
 4. **Output contract stays tight.** Default progress/final updates should be compact: current mode, action/result, and evidence or blocker/next step. Avoid repeating full-plan rationale unless the risk or decision changed.
-5. **Bootstrap stays bootstrap-sized.** Keep only instructions that must be available before the first tool call or first repository action: autonomy posture, mode/delegation routing, safety boundaries, marker contracts, verification, cancellation, and state ownership. Move workflow walkthroughs, deprecated workflow descriptions, and catalog-sized role lists to `SKILL.md`, role prompts, or docs.
+5. **Bootstrap stays bootstrap-sized.** Keep only instructions that must be available before the first tool call or first repository action: autonomy posture, mode/delegation routing, safety boundaries, marker contracts, verification, cancellation, and state ownership. Move workflow walkthroughs, cleanup playbooks, deprecated workflow descriptions, and catalog-sized role lists to `SKILL.md`, role prompts, or docs.
 
 ## Relationship to the guidance schema
 

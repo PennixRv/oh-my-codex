@@ -4,6 +4,17 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+## [0.18.82] - 2026-07-09
+
+Patch release for the Pennix fork user-scope plugin-mode boundary and setup-idempotence line: OMX now treats user-scope plugin setup as the primary install story, narrows `AGENTS.md` to a durable bootstrap contract instead of a catch-all prompt dump, resolves active role prompts from the live Codex/plugin surfaces, and closes the two setup regressions that were still mutating real user environments.
+
+- User-scope plugin mode is now the documented and generated default onboarding path. The persistent `AGENTS.md` contract is intentionally smaller, while detailed behavior stays on the narrower surfaces that actually own it: installed skills, role prompts, hooks, developer instructions, and runtime overlays.
+- New docs make the surface split explicit: `docs/user-scope-plugin-mode.md` documents the preferred install/uninstall path, and `docs/codex-surface-boundaries.md` explains what belongs to `AGENTS.md`, prompts, skills, hooks, `developer_instructions`, native-agent TOMLs, and plugin-delivered assets.
+- Role-prompt resolution now follows the active Codex-home / plugin-delivered prompt sources instead of stale repo-local leftovers, so helper surfaces such as `omx ask --agent-prompt ...` no longer silently read shadow copies from the wrong prompt root.
+- Plugin install mode now fails closed when the packaged marketplace/plugin metadata is incomplete, instead of silently succeeding with a broken plugin surface.
+- Setup now preserves a trusted installed OMX package root for tmux-status assets when setup is launched from a source checkout, so `~/.codex/.omx/tmux-status/render.sh` no longer gets rewritten to a transient source-tree path.
+- Setup now treats `plugin_hooks` as unsupported when the installed Codex only lists it as `removed`, preserves existing `hooks = true` / `goals = true` state, and avoids unnecessary plugin marketplace rewrites when the existing registration already matches the intended installed source.
+
 ## [0.18.81] - 2026-07-05
 
 Patch release for the Pennix fork tmux-status formatting and release-pipeline recovery line: numeric status metrics now use fixed two-decimal formatting everywhere except the compact `Ctx` token pair, GitHub Releases once again attach the native archives plus `native-release-manifest.json`, and the documented `dev` sync step now matches the repo's real `fast-forward-or-reconcile` branch model.

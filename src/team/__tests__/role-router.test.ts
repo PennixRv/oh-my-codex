@@ -5,10 +5,14 @@ import { join } from 'path';
 import { tmpdir } from 'os';
 import { fileURLToPath } from 'url';
 import {
+  activeRolePromptDirs,
+  defaultRolePromptDirs,
   loadRolePrompt,
   isKnownRole,
   listAvailableRoles,
+  listAvailableRolesFromPromptDirs,
   routeTaskToRole,
+  resolveRolePrompt,
 } from '../role-router.js';
 
 const repoRoot = join(fileURLToPath(new URL('../../../', import.meta.url)));
@@ -47,6 +51,20 @@ describe('role-router', () => {
         assert.equal(content, null);
       } finally {
         await rm(dir, { recursive: true, force: true });
+      }
+    });
+
+    it('resolves from later prompt dirs when the earlier dirs do not contain the role', async () => {
+      const firstDir = await mkdtemp(join(tmpdir(), 'omx-role-router-'));
+      const secondDir = await mkdtemp(join(tmpdir(), 'omx-role-router-'));
+      try {
+        await writeFile(join(secondDir, 'executor.md'), '# Executor\n\nPackaged fallback.');
+        const content = await resolveRolePrompt('executor', [firstDir, secondDir]);
+        assert.ok(content);
+        assert.match(content, /Packaged fallback/);
+      } finally {
+        await rm(firstDir, { recursive: true, force: true });
+        await rm(secondDir, { recursive: true, force: true });
       }
     });
   });
@@ -95,6 +113,56 @@ describe('role-router', () => {
     it('does not expose command-specific AGENTS instruction files as roles from the repo prompts directory', async () => {
       const roles = await listAvailableRoles(join(repoRoot, 'prompts'));
       assert.equal(roles.some((role) => role.endsWith('-AGENTS')), false);
+    });
+
+    it('dedupes roles across multiple prompt directories', async () => {
+      const firstDir = await mkdtemp(join(tmpdir(), 'omx-role-router-'));
+      const secondDir = await mkdtemp(join(tmpdir(), 'omx-role-router-'));
+      try {
+        await writeFile(join(firstDir, 'executor.md'), '# Executor');
+        await writeFile(join(secondDir, 'executor.md'), '# Executor override');
+        await writeFile(join(secondDir, 'planner.md'), '# Planner');
+        const roles = await listAvailableRolesFromPromptDirs([firstDir, secondDir]);
+        assert.deepEqual(roles, ['executor', 'planner']);
+      } finally {
+        await rm(firstDir, { recursive: true, force: true });
+        await rm(secondDir, { recursive: true, force: true });
+      }
+    });
+
+    it('includes packaged prompts in the default prompt dir chain', () => {
+      const dirs = defaultRolePromptDirs(repoRoot).map((dir) => dir.replaceAll('\\', '/'));
+      assert.ok(dirs.some((dir) => dir.endsWith('/prompts')));
+      assert.ok(dirs.some((dir) => dir.includes('/.codex/prompts')));
+    });
+
+    it('omits repo-local prompt overrides from the active dir chain without persisted project scope', async () => {
+      const wd = await mkdtemp(join(tmpdir(), 'omx-role-router-'));
+      try {
+        const dirs = activeRolePromptDirs(wd).map((dir) => dir.replaceAll('\\', '/'));
+        assert.equal(dirs.some((dir) => dir === `${wd.replaceAll('\\', '/')}/.codex/prompts`), false);
+        assert.ok(dirs.some((dir) => dir.endsWith('/prompts')));
+      } finally {
+        await rm(wd, { recursive: true, force: true });
+      }
+    });
+
+    it('includes repo-local prompt overrides in the active dir chain when persisted scope is project', async () => {
+      const wd = await mkdtemp(join(tmpdir(), 'omx-role-router-'));
+      const nested = join(wd, 'nested', 'deeper');
+      try {
+        await mkdir(join(wd, '.omx'), { recursive: true });
+        await mkdir(nested, { recursive: true });
+        await writeFile(
+          join(wd, '.omx', 'setup-scope.json'),
+          JSON.stringify({ scope: 'project' }),
+        );
+
+        const dirs = activeRolePromptDirs(nested).map((dir) => dir.replaceAll('\\', '/'));
+        assert.ok(dirs.includes(`${wd.replaceAll('\\', '/')}/.codex/prompts`));
+      } finally {
+        await rm(wd, { recursive: true, force: true });
+      }
     });
   });
 

@@ -73,7 +73,14 @@ export async function resolvePackagedOmxMarketplace(
 		) as PluginManifest;
 		if (
 			pluginManifest.name !== OMX_PLUGIN_NAME ||
-			pluginManifest.skills !== "./skills/"
+			pluginManifest.skills !== "./skills/" ||
+			pluginManifest.hooks !== "./hooks/hooks.json"
+		) {
+			return null;
+		}
+		if (
+			!existsSync(join(pluginRoot, "hooks", "hooks.json")) ||
+			!existsSync(join(pluginRoot, "hooks", "codex-native-hook.mjs"))
 		) {
 			return null;
 		}
@@ -82,6 +89,31 @@ export async function resolvePackagedOmxMarketplace(
 	}
 
 	return { marketplacePath, packageRoot, pluginRoot, pluginManifestPath };
+}
+
+export async function requirePackagedOmxMarketplace(
+	packageRoot: string,
+): Promise<PackagedOmxMarketplace> {
+	const packagedMarketplace = await resolvePackagedOmxMarketplace(packageRoot);
+	if (!packagedMarketplace) {
+		throw new Error(
+			`Plugin install mode requires packaged ${OMX_LOCAL_MARKETPLACE_NAME} marketplace metadata under ${join(
+				packageRoot,
+				".agents",
+				"plugins",
+				"marketplace.json",
+			)} and a valid ${OMX_PLUGIN_NAME} plugin manifest.`,
+		);
+	}
+
+	const packagedVersion = await packagedOmxPluginVersion(packagedMarketplace);
+	if (!packagedVersion) {
+		throw new Error(
+			`Plugin install mode requires a packaged ${OMX_PLUGIN_NAME} plugin manifest version at ${packagedMarketplace.pluginManifestPath}.`,
+		);
+	}
+
+	return packagedMarketplace;
 }
 
 async function readPluginManifest(

@@ -5,7 +5,7 @@ description: Setup and configure Pennix OMX using current CLI behavior
 
 # OMX Setup
 
-Use this skill when users want to install or refresh Pennix OMX for the **current project plus user-level OMX directories**.
+Use this skill when users want to install or refresh Pennix OMX. The recommended path is **user-scope plugin mode**; treat project scope and legacy prompt copies as compatibility paths.
 
 ## Command
 
@@ -39,10 +39,10 @@ Supported setup flags (current implementation):
    - explicit `--plugin`, `--legacy`, or `--install-mode legacy|plugin`, if present
    - persisted install mode in `./.omx/setup-scope.json`, if present and the TTY review decision is `keep`
    - else discovered installed plugin cache under `${CODEX_HOME:-~/.codex}/plugins/cache/**/.codex-plugin/plugin.json` with `name: oh-my-codex` makes `plugin` the default
-   - else interactive prompt on TTY (`legacy` by default, or `plugin` when a plugin cache is discovered)
-   - else default `legacy` unless a plugin cache is discovered
+   - else interactive prompt on TTY (`plugin` by default)
+   - else default `plugin`
 3. Create directories and persist effective scope/install mode
-4. In legacy mode, install prompts/native agents/skills and merge full config.toml. In plugin mode, archive/remove legacy OMX-managed prompts/skills, refresh installable native agent TOMLs for `agent_type` routing, clean up stale generated non-installable native agents, and keep native Codex hooks installed.
+4. In plugin mode, register plugin delivery, archive/remove legacy OMX-managed prompts/skills, refresh installable native agent TOMLs for `agent_type` routing, clean up stale generated non-installable native agents, and prefer plugin-scoped Codex hooks when supported while keeping the legacy `hooks.json` fallback on older Codex builds. In legacy mode, install prompts/native agents/skills and merge full config.toml as a compatibility path.
 5. Verify Team CLI API interop markers exist in built `dist/cli/team.js`
 6. Generate AGENTS.md defaults only when selected/allowed (or legacy behavior outside plugin mode)
 7. Configure notify hook references outside plugin mode and write `./.omx/hud-config.json`
@@ -51,19 +51,19 @@ Supported setup flags (current implementation):
 
 - `omx setup` prompts for scope when no scope is provided and stdin/stdout are TTY. If `./.omx/setup-scope.json` already exists, setup now summarizes the saved choices first and asks whether to keep them, review/change them, or reset and behave like a fresh setup run.
 - Non-interactive setup never blocks for this review prompt: it keeps deterministic CLI/persisted/default behavior for CI and scripted installs.
-- In `user` scope, `omx setup` also prompts for skill delivery mode when no prior install mode is kept; installed plugin cache discovery makes plugin mode the default prompt/non-interactive choice.
-- Local project orchestration file is `./AGENTS.md` (project root).
+- In `user` scope, `omx setup` also prompts for skill delivery mode when no prior install mode is kept; plugin mode is now the default prompt/non-interactive choice.
+- Persistent scope bootstrap file is `~/.codex/AGENTS.md` for user setup and `./AGENTS.md` for project setup.
 - If `AGENTS.md` exists and neither `--force` nor `--merge-agents` is used, interactive TTY runs ask whether to overwrite. Non-interactive runs preserve the file.
 - Use `--merge-agents` to keep existing project guidance while allowing setup to refresh OMX-managed AGENTS sections and the generated model capability table idempotently.
 - Scope targets:
-  - `user`: user directories (`~/.codex`, `~/.codex/skills`, `~/.omx/agents`)
-  - `project`: local directories (`./.codex`, `./.codex/skills`, `./.omx/agents`)
+  - `user`: recommended default; user directories (`~/.codex`, `~/.codex/skills`, `~/.omx/agents`)
+  - `project`: advanced/compatibility path; local directories (`./.codex`, `./.codex/skills`, `./.omx/agents`)
 - User-scope skill delivery targets:
   - `legacy`: keep installing/updating OMX skills in the resolved user skill root
   - `plugin`: rely on Codex plugin discovery for bundled skills and plugin-scoped lifecycle hooks when Codex reports `plugin_hooks`; archive/remove legacy OMX-managed prompts/skills, refresh installable setup-owned native agent TOMLs for `agent_type` routing, and remove only stale generated/non-installable native agents. Setup still enables setup-owned runtime feature flags (`plugin_hooks = true` and `goals = true` when supported, or legacy setup-managed `hooks`/`codex_hooks` fallback when plugin hooks are not reported).
-- Migration hint: in `user` scope, if historical `~/.agents/skills` still exists alongside `${CODEX_HOME:-~/.codex}/skills`, current setup prints a cleanup hint. **Why the paths differ**: `${CODEX_HOME:-~/.codex}/skills/` is the path current Codex CLI natively loads as its skill root; `~/.agents/skills/` was the skill root in an older Codex CLI release before `~/.codex` became the standard home directory. OMX writes only to the canonical `${CODEX_HOME:-~/.codex}/skills/` path. When both directories exist simultaneously, Codex discovers skills from both trees and may show duplicate entries in Enable/Disable Skills. Archive or remove `~/.agents/skills/` to resolve this.
+- Migration hint: in `user` scope, if historical `~/.agents/skills` still exists alongside `${CODEX_HOME:-~/.codex}/skills`, current setup prints a cleanup hint. **Why the paths differ**: OMX currently writes bundled compatibility skill copies to `${CODEX_HOME:-~/.codex}/skills/`, while official docs and older Codex installs may still reference `~/.agents/skills/`. When both directories exist simultaneously, Codex can discover skills from both trees and may show duplicate entries in Enable/Disable Skills. Archive or remove `~/.agents/skills/` after confirming `${CODEX_HOME:-~/.codex}/skills/` is the OMX root you want to keep.
 - If persisted scope is `project`, `omx` launch automatically uses `CODEX_HOME=./.codex` unless user explicitly overrides `CODEX_HOME`.
-- Plugin mode prompts separately for optional AGENTS.md defaults and optional `developer_instructions` defaults. If `developer_instructions` already exists, setup asks before overwriting it; non-interactive runs preserve it.
+- Plugin mode can write AGENTS.md bootstrap defaults, but it does not inject `developer_instructions` by default. Existing custom or historical OMX-managed `developer_instructions` stays preserved unless an explicit advanced path chooses to rewrite it.
 - With `--force` or `--merge-agents`, AGENTS updates may still be skipped if an active OMX session is detected (safety guard).
 - Legacy persisted scope values (`project-local`) are automatically migrated to `project` with a one-time warning.
 
@@ -80,6 +80,14 @@ Use this map when reconciling setup behavior or debugging a confusing install:
 | `AGENTS.md` | `omx setup` with overwrite safety | Generated defaults or managed refreshes are guarded by force/session checks. |
 | `./.omx/hud-config.json` | `omx setup` / `$hud` | Setup creates the focused default; `$hud` can adjust it later. |
 | notification hooks | `omx setup` / `$configure-notifications` | Setup wires defaults outside plugin skill delivery; notification skill owns deeper provider configuration. |
+
+## Best-practice install and uninstall
+
+- Recommended install: `omx setup --scope user --plugin`
+- Recommended verification: `omx doctor`, then `codex login status` plus `omx exec --skip-git-repo-check -C . "Reply with exactly OMX-EXEC-OK"`
+- Recommended uninstall: `omx uninstall --scope user`
+- Optional runtime purge during uninstall: add `--purge` when you also want project `.omx/` runtime state removed
+- Compatibility reinstall: `omx setup --scope user --legacy`
 
 ## If `$omx-setup` is missing or stale
 
@@ -110,9 +118,9 @@ omx doctor
 ## Expected verification indicators
 
 From `omx doctor`, expect:
-- Prompts installed (scope-dependent: user or project)
-- Skills installed (scope-dependent: user or project)
-- AGENTS.md found in project root
+- Plugin mode: packaged skill/plugin discovery active, native-agent TOMLs present for `agent_type`, and local prompt copies not required
+- Legacy mode: prompts and skills installed into the selected scope
+- Persistent scope AGENTS.md found in the resolved setup target (`~/.codex/AGENTS.md` or `./AGENTS.md`)
 - `.omx/state` exists
 - CLI-first config present in the scope target `config.toml`; first-party OMX MCP servers and shared MCP registry sync are omitted by default unless setup was run with `--mcp compat`
 

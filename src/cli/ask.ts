@@ -1,10 +1,13 @@
 import { spawnSync } from 'child_process';
-import { existsSync, readFileSync } from 'fs';
-import { readFile, readdir } from 'fs/promises';
+import { existsSync } from 'fs';
 import { isAbsolute, join } from 'path';
 import { constants as osConstants } from 'os';
 import { getPackageRoot } from '../utils/package.js';
-import { codexPromptsDir } from '../utils/paths.js';
+import {
+  activeRolePromptDirs,
+  listAvailableRolesFromPromptDirs,
+  resolveRolePrompt,
+} from '../team/role-router.js';
 
 export const ASK_USAGE = [
   'Usage: omx ask <claude|gemini> <question or task>',
@@ -33,59 +36,37 @@ function askUsageError(reason: string): Error {
   return new Error(`${reason}\n${ASK_USAGE}`);
 }
 
-function resolveAskPromptsDir(cwd: string, env: NodeJS.ProcessEnv = process.env): string {
-  const codexHomeOverride = env.CODEX_HOME?.trim();
-  if (codexHomeOverride) {
-    return join(codexHomeOverride, 'prompts');
-  }
-
-  try {
-    const scopePath = join(cwd, '.omx', 'setup-scope.json');
-    if (existsSync(scopePath)) {
-      const parsed = JSON.parse(readFileSync(scopePath, 'utf-8')) as Partial<{ scope: string }>;
-      if (parsed.scope === 'project' || parsed.scope === 'project-local') {
-        return join(cwd, '.codex', 'prompts');
-      }
-    }
-  } catch {
-    // Ignore malformed persisted scope and fall back to user prompts.
-  }
-
-  return codexPromptsDir();
-}
-
 async function resolveAgentPromptContent(
   role: string,
-  promptsDir: string,
+  promptDirs: readonly string[],
 ): Promise<string> {
   const normalizedRole = role.trim().toLowerCase();
   if (!SAFE_ROLE_PATTERN.test(normalizedRole)) {
     throw new Error(`[ask] invalid --agent-prompt role "${role}". Expected lowercase role names like "executor" or "test-engineer".`);
   }
 
-  if (!existsSync(promptsDir)) {
-    throw new Error(`[ask] prompts directory not found: ${promptsDir}. Run "omx setup" to install prompts.`);
-  }
+  const content = await resolveRolePrompt(normalizedRole, promptDirs);
+  if (content) return content;
 
-  const promptPath = join(promptsDir, `${normalizedRole}.md`);
-  if (!existsSync(promptPath)) {
-    const files = await readdir(promptsDir).catch(() => [] as string[]);
-    const availableRoles = files
-      .filter((file) => file.endsWith('.md'))
-      .map((file) => file.slice(0, -3))
-      .sort();
-    const availableSuffix = availableRoles.length > 0
-      ? ` Available roles: ${availableRoles.join(', ')}.`
-      : '';
-    throw new Error(`[ask] --agent-prompt role "${normalizedRole}" not found in ${promptsDir}.${availableSuffix}`);
-  }
+  const availableRoles = await listAvailableRolesFromPromptDirs(promptDirs);
+  const availableSuffix = availableRoles.length > 0
+    ? ` Available roles: ${availableRoles.join(', ')}.`
+    : '';
+  const searchedDirs = promptDirs.join(', ');
+  throw new Error(
+    `[ask] --agent-prompt role "${normalizedRole}" not found in active role prompt sources (${searchedDirs}).${availableSuffix}`,
+  );
+}
 
-  const content = (await readFile(promptPath, 'utf-8')).trim();
-  if (!content) {
-    throw new Error(`[ask] --agent-prompt role "${normalizedRole}" is empty: ${promptPath}`);
-  }
+function resolveAskPromptDirs(cwd: string): string[] {
+  return activeRolePromptDirs(cwd);
+}
 
-  return content;
+export async function resolveAskAgentPromptContent(
+  role: string,
+  cwd: string,
+): Promise<string> {
+  return resolveAgentPromptContent(role, resolveAskPromptDirs(cwd));
 }
 
 export function parseAskArgs(args: readonly string[]): ParsedAskArgs {
@@ -175,7 +156,6 @@ export async function askCommand(args: string[]): Promise<void> {
   const parsed = parseAskArgs(args);
   const packageRoot = getPackageRoot();
   const advisorScriptPath = resolveAskAdvisorScriptPath(packageRoot);
-  const promptsDir = resolveAskPromptsDir(process.cwd(), process.env);
 
   if (!existsSync(advisorScriptPath)) {
     throw new Error(`[ask] advisor script not found: ${advisorScriptPath}`);
@@ -183,7 +163,10 @@ export async function askCommand(args: string[]): Promise<void> {
 
   let finalPrompt = parsed.prompt;
   if (parsed.agentPromptRole) {
-    const agentPromptContent = await resolveAgentPromptContent(parsed.agentPromptRole, promptsDir);
+    const agentPromptContent = await resolveAskAgentPromptContent(
+      parsed.agentPromptRole,
+      process.cwd(),
+    );
     finalPrompt = `${agentPromptContent}\n\n${parsed.prompt}`;
   }
 

@@ -53,8 +53,8 @@ This standard is additive and migration-safe: it does not change task-state APIs
 
 | Surface | Role & Intent | Operating Principles | Execution Protocol | Constraints & Safety | Verification & Completion | Recovery & Lifecycle |
 |---|---|---|---|---|---|---|
-| `AGENTS.md` (workspace root, optional tracked copy) | Title + opening intro | `<operating_principles>` | mode selection + delegation/model-routing/skills/team sections + leader/worker split | compact hook-backed keyword/cancellation/state contract + stop/escalate rules | `<verification>` + continuation checklist + concise output contract | cancel + recovery/state guidance + runtime/team markers |
-| `templates/AGENTS.md` | Title + opening intro | `<operating_principles>` | same canonical orchestration sections as the tracked root copy when one exists | same safety constraints | same verification section | runtime/team overlays added later via markers |
+| `AGENTS.md` (workspace root, optional tracked copy) | Title + opening intro | terse `<operating_principles>` bootstrap | mode selection + delegation/model-routing/skills/team sections + leader/worker split, kept bootstrap-sized | compact hook-backed keyword/cancellation/state contract + stop/escalate rules | `<verification>` + concise output contract | cancel + state guidance + runtime/team markers |
+| `templates/AGENTS.md` | Title + opening intro | same terse bootstrap posture | same mode selection + delegation/model-routing/skills/team sections + leader/worker split when a tracked root copy exists, still kept bootstrap-sized | same safety constraints | same verification section | runtime/team overlays added later via markers |
 | `prompts/*.md` canonical role prompt surfaces | role-local identity + remit | role-local operating posture | task execution steps for that specialist | role boundaries / tool rules / handoff limits (report upward, do not recursively orchestrate) | evidence required before role-local completion claims | scenario handling + final checklist |
 | Runtime AGENTS overlay block | session context identity | compaction protocol directives | checkpoint flow | overlay marker boundaries and size/lock gates | checkpoint evidence before compaction | runtime apply/strip lifecycle |
 | Team worker overlay block | worker identity + team scope | worker protocol intent | ACK → read task → claim → execute → complete → idle | file ownership + blocked-state rules | write task result + status updates | mailbox polling + shutdown handling |
@@ -62,7 +62,7 @@ This standard is additive and migration-safe: it does not change task-state APIs
 
 ## Adoption Notes
 
-- Keep root AGENTS/bootstrap surfaces terse: preserve the required schema sections and marker contracts, but move long workflow walkthroughs, deprecated workflow history, and catalog-sized role descriptions into the relevant `SKILL.md`, role prompt, or docs page.
+- Keep root AGENTS/bootstrap surfaces terse: preserve the required schema sections and marker contracts, but move long workflow walkthroughs, cleanup playbooks, deprecated workflow history, and catalog-sized role descriptions into the relevant `SKILL.md`, role prompt, or docs page.
 - Preserve all marker-bounded overlay text contracts while aligning language to this schema.
 - Role prompts should recommend handoffs upward to the orchestrator instead of spawning or requesting other agents directly.
 - Root orchestration surfaces should choose one mode clearly (`$deep-interview`, `$ralplan`, `$team`, or solo execute) before mixing lanes.

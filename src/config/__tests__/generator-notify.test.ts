@@ -119,12 +119,12 @@ describe.skip('config generator', () => {
 
       assert.doesNotMatch(toml, /^model_reasoning_effort = /m);
       assert.match(toml, /^developer_instructions = "You have oh-my-codex installed/m);
-      assert.match(toml, /AGENTS\.md is the orchestration brain and main control surface/);
-      assert.match(toml, /Follow AGENTS\.md for skill\/keyword routing, \$name workflow invocation, and role-specialized subagents/);
-      assert.match(toml, /Native subagents live in \.codex\/agents/);
+      assert.match(toml, /AGENTS\.md is the persistent OMX bootstrap contract/);
+      assert.match(toml, /Follow AGENTS\.md for mode selection, skill\/keyword routing, and agent-surface boundaries/);
+      assert.match(toml, /Prefer installed SKILL\.md files and role prompts for detailed workflow behavior/);
       assert.match(toml, /prefer setting `agent_type` to the narrowest installed role/);
       assert.match(toml, /full-history fork mode inherits agent settings from the parent/);
-      assert.match(toml, /Treat installed prompts as narrower execution surfaces under AGENTS\.md authority/);
+      assert.match(toml, /verify before claiming completion/);
       assert.match(toml, new RegExp(`^developer_instructions = "${OMX_DEVELOPER_INSTRUCTIONS.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}"$`, 'm'));
     } finally {
       await rm(wd, { recursive: true, force: true });
