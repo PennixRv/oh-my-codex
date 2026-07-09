@@ -4,9 +4,9 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
-## [0.18.82] - 2026-07-09
+## [0.18.83] - 2026-07-09
 
-Patch release for the Pennix fork user-scope plugin-mode boundary and setup-idempotence line: OMX now treats user-scope plugin setup as the primary install story, narrows `AGENTS.md` to a durable bootstrap contract instead of a catch-all prompt dump, resolves active role prompts from the live Codex/plugin surfaces, and closes the two setup regressions that were still mutating real user environments.
+Patch release for the Pennix fork user-scope plugin-mode boundary, setup-idempotence, and Linux x86-only release-pipeline line: OMX keeps the unpublished `0.18.82` plugin-mode and setup fixes, but narrows the native release matrix to `x86_64-unknown-linux-gnu` plus `x86_64-unknown-linux-musl` so publication no longer depends on unnecessary macOS, Windows, or hosted ARM runners.
 
 - User-scope plugin mode is now the documented and generated default onboarding path. The persistent `AGENTS.md` contract is intentionally smaller, while detailed behavior stays on the narrower surfaces that actually own it: installed skills, role prompts, hooks, developer instructions, and runtime overlays.
 - New docs make the surface split explicit: `docs/user-scope-plugin-mode.md` documents the preferred install/uninstall path, and `docs/codex-surface-boundaries.md` explains what belongs to `AGENTS.md`, prompts, skills, hooks, `developer_instructions`, native-agent TOMLs, and plugin-delivered assets.
@@ -14,6 +14,7 @@ Patch release for the Pennix fork user-scope plugin-mode boundary and setup-idem
 - Plugin install mode now fails closed when the packaged marketplace/plugin metadata is incomplete, instead of silently succeeding with a broken plugin surface.
 - Setup now preserves a trusted installed OMX package root for tmux-status assets when setup is launched from a source checkout, so `~/.codex/.omx/tmux-status/render.sh` no longer gets rewritten to a transient source-tree path.
 - Setup now treats `plugin_hooks` as unsupported when the installed Codex only lists it as `removed`, preserves existing `hooks = true` / `goals = true` state, and avoids unnecessary plugin marketplace rewrites when the existing registration already matches the intended installed source.
+- The tag-triggered native release matrix is now intentionally Linux x86-only: `x86_64-unknown-linux-gnu` plus `x86_64-unknown-linux-musl`. macOS, Windows, and ARM release artifacts are no longer built or published from this fork's standard release workflow.
 
 ## [0.18.81] - 2026-07-05
 

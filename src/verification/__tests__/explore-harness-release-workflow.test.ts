@@ -4,7 +4,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 describe('native release workflow', () => {
-  it('defines a unified tag workflow that publishes both Rust binaries before npm publish', () => {
+  it('defines a Linux x86-only tag workflow that publishes Rust binaries before npm publish', () => {
     const workflowPath = join(process.cwd(), '.github', 'workflows', 'release.yml');
     assert.equal(existsSync(workflowPath), true, `missing workflow: ${workflowPath}`);
 
@@ -14,17 +14,10 @@ describe('native release workflow', () => {
     assert.match(workflow, /permissions:\s*\n\s*contents:\s*write/);
     assert.match(workflow, /id-token:\s*write/);
     assert.match(workflow, /ubuntu-24\.04/);
-    assert.match(workflow, /ubuntu-24\.04-arm/);
     assert.match(workflow, /x86_64-unknown-linux-gnu/);
     assert.match(workflow, /x86_64-unknown-linux-musl/);
-    assert.match(workflow, /aarch64-unknown-linux-gnu/);
-    assert.match(workflow, /aarch64-unknown-linux-musl/);
-    assert.match(workflow, /macos-15-intel/);
-    assert.match(workflow, /macos-14/);
-    assert.match(workflow, /windows-latest/);
     assert.match(workflow, /musl-tools/);
     assert.match(workflow, /CC_x86_64_unknown_linux_musl=musl-gcc/);
-    assert.match(workflow, /CC_aarch64_unknown_linux_musl=musl-gcc/);
     assert.match(workflow, /cargo install cargo-dist/);
     assert.match(workflow, /dist build -a local/);
     assert.match(workflow, /dist plan --output-format=json/);
@@ -66,10 +59,13 @@ describe('native release workflow', () => {
     assert.equal(existsSync(distWorkspacePath), true, `missing cargo-dist config: ${distWorkspacePath}`);
 
     const config = readFileSync(distWorkspacePath, 'utf-8');
-    assert.match(config, /aarch64-unknown-linux-gnu/);
-    assert.match(config, /aarch64-unknown-linux-musl/);
     assert.match(config, /x86_64-unknown-linux-gnu/);
     assert.match(config, /x86_64-unknown-linux-musl/);
+    assert.doesNotMatch(config, /aarch64-unknown-linux-gnu/);
+    assert.doesNotMatch(config, /aarch64-unknown-linux-musl/);
+    assert.doesNotMatch(config, /x86_64-apple-darwin/);
+    assert.doesNotMatch(config, /aarch64-apple-darwin/);
+    assert.doesNotMatch(config, /x86_64-pc-windows-msvc/);
   });
 
   it('retires the old explore-only release workflow', () => {

@@ -44,7 +44,7 @@
 
 ## CI / publication evidence
 
-- [ ] tag-triggered `Release` workflow
+- [x] tag-triggered `Release` workflow ran and failed (`Release` run `#85`, GitHub Actions run `29018065935`)
 - [ ] GitHub release exists and is non-draft/non-prerelease
 - [ ] published npm version returns `0.18.82`
 - [ ] post-publish packed-install smoke passes
@@ -52,6 +52,7 @@
 
 ## Known gaps
 
+- The tag-triggered `Release` workflow failed before publication because `Build native (aarch64-unknown-linux-gnu)` was never acquired by a hosted runner (`ubuntu-24.04-arm`), so downstream release-asset, smoke, and npm jobs were skipped.
 - Final compare-aware release-body generation still depends on the local `v0.18.82` tag existing on the candidate commit.
 - npm publication and GitHub release asset proof remain external post-tag gates.
 
