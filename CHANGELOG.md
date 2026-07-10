@@ -4,6 +4,15 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+## [0.18.84] - 2026-07-10
+
+Corrective patch release for the Pennix fork after `v0.18.83` created a GitHub release but failed before npm publication. This cut keeps the intended plugin-mode/setup payload, then fixes the full publish gate drift that `npm run test:node` exposed during the `Publish npm Package` job.
+
+- Restores prompt-guidance contract alignment between `templates/AGENTS.md` and the prompt-guidance fragment source, so the release gate no longer fails on generated guidance drift.
+- Updates the scaling contract test to match the current multiline role-prompt shape instead of the previous narrower string assumption.
+- Syncs plugin bundle metadata and workspace lockfiles to `0.18.84`, including `plugins/oh-my-codex/.codex-plugin/plugin.json` and the workspace package entries in `Cargo.lock`.
+- Preserves the narrow Linux x86-only native publication matrix from `0.18.83`; this corrective cut addresses publish-gate correctness, not a new platform-matrix change.
+
 ## [0.18.83] - 2026-07-09
 
 Patch release for the Pennix fork user-scope plugin-mode boundary, setup-idempotence, and Linux x86-only release-pipeline line: OMX keeps the unpublished `0.18.82` plugin-mode and setup fixes, but narrows the native release matrix to `x86_64-unknown-linux-gnu` plus `x86_64-unknown-linux-musl` so publication no longer depends on unnecessary macOS, Windows, or hosted ARM runners.

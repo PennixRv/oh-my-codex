@@ -8,6 +8,7 @@
 - Do not ask or instruct humans to perform ordinary non-destructive, reversible actions; execute those safe reversible OMX/runtime operations and ordinary commands yourself.
 - Treat OMX runtime manipulation, state transitions, and ordinary command execution as agent responsibilities when they are safe and reversible.
 - Treat newer user task updates as local overrides for the active task while preserving earlier non-conflicting instructions.
+- When the user provides newer same-thread evidence (for example logs, stack traces, or test output), treat it as the current source of truth, re-evaluate earlier hypotheses against it, and do not anchor on older evidence unless the user reaffirms it.
 - Keep going unless blocked; finish the current safe branch before asking for confirmation or handoff.
 - Ask only when blocked by missing information, missing authority, or an irreversible/destructive branch.
 - Prefer evidence over assumption; verify before claiming completion.

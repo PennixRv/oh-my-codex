@@ -1,39 +1,36 @@
-# oh-my-codex-pennix v0.18.83
+# oh-my-codex-pennix v0.18.84
 
 > Release notes template for the Pennix fork. The tag workflow regenerates this file into the final GitHub release body.
 
 ## Summary
 
-This release keeps the unpublished `0.18.82` user-scope plugin-mode and setup-fidelity fixes, then narrows the tag-triggered native publication matrix to Linux x86 only so releases no longer depend on macOS, Windows, or hosted ARM runner acquisition.
+This corrective patch follows the failed `v0.18.83` npm publication. It keeps the intended plugin-mode/setup payload, then fixes the release-gate contract drift that caused `Publish npm Package -> npm run test:node` to fail before npm publication completed.
 
 ## Highlights
 
-- README, setup guidance, and new docs keep `omx setup --scope user --plugin` as the preferred onboarding path.
-- Persistent `AGENTS.md` stays a bootstrap contract, while detailed behavior remains on the narrower surfaces that actually own it.
-- Active role prompts keep resolving from the live Codex/plugin surfaces instead of stale repo-local leftovers.
-- Plugin install mode still fails closed when packaged marketplace/plugin metadata is incomplete.
-- Setup still preserves trusted installed package roots for tmux-status assets and ignores `plugin_hooks` rows that Codex still lists by name but already marks as `removed`.
-- The standard release workflow now publishes only `x86_64-unknown-linux-gnu` and `x86_64-unknown-linux-musl` native assets before continuing to smoke verification and npm publication.
+- The release gate now passes with prompt-guidance fragments and `templates/AGENTS.md` back in sync.
+- The scaling contract test now reflects the current multiline role-prompt layout instead of the older single-shape assertion.
+- Plugin bundle metadata and workspace lockfiles are fully synchronized to `0.18.84`, including the checked-in plugin manifest used by plugin-bundle SSOT verification.
+- The reduced Linux x86-only native publication matrix from `0.18.83` remains unchanged; this patch fixes publish correctness, not target coverage.
 
 ## Fixes / compatibility
 
-- Existing trusted plugin marketplace registrations are preserved without unnecessary config rewrites when they already match the intended installed source.
-- Running `omx setup` from a source checkout no longer rewrites `~/.codex/.omx/tmux-status/render.sh` to the transient checkout path when a trusted installed OMX package root is already known.
-- Current Codex builds that report `plugin_hooks` only as `removed` now stay on the supported `hooks` path without rewriting an existing `hooks = true` / `goals = true` config.
-- The failed `v0.18.82` candidate never published because GitHub could not acquire the hosted `ubuntu-24.04-arm` runner for `aarch64-unknown-linux-gnu`; trimming the release matrix removes that external blocker from the standard publication path.
+- `v0.18.83` created a GitHub release, but npm stayed at `0.18.81` because the publish job failed inside `npm run test:node`.
+- The failing gate was not native publication or the Linux target matrix. It was checked-in contract drift: prompt-guidance content, a stale scaling assertion, and plugin bundle version metadata.
+- The safe recovery path is a new patch release instead of rewriting the existing `v0.18.83` tag or release.
 
 ## Validation
 
 - `npm run build`
-- `node dist/scripts/run-test-files.js dist/verification/__tests__/explore-harness-release-workflow.test.js dist/verification/__tests__/release-workflow-release-body.test.js dist/verification/__tests__/native-release-manifest.test.js`
+- `npm run test:node`
 - `npm run verify:native-agents`
 - `npm run verify:plugin-bundle`
 - `npm pack --dry-run`
 - `git diff --check`
-- `node dist/scripts/check-version-sync.js --tag v0.18.83`
+- `node dist/scripts/check-version-sync.js --tag v0.18.84`
 
 ## Contributors
 
 Thanks to the contributors who made this release possible.
 
-**Full Changelog**: [`v0.18.81...v0.18.83`](https://github.com/PennixRv/oh-my-codex/compare/v0.18.81...v0.18.83)
+**Full Changelog**: [`v0.18.83...v0.18.84`](https://github.com/PennixRv/oh-my-codex/compare/v0.18.83...v0.18.84)

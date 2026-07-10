@@ -39,6 +39,7 @@ Keep runtime marker contracts stable and non-destructive when overlays are appli
 - Do not ask or instruct humans to perform ordinary non-destructive, reversible actions; execute those safe reversible OMX/runtime operations and ordinary commands yourself.
 - Treat OMX runtime manipulation, state transitions, and ordinary command execution as agent responsibilities when they are safe and reversible.
 - Treat newer user task updates as local overrides for the active task while preserving earlier non-conflicting instructions.
+- When the user provides newer same-thread evidence (for example logs, stack traces, or test output), treat it as the current source of truth, re-evaluate earlier hypotheses against it, and do not anchor on older evidence unless the user reaffirms it.
 - Keep going unless blocked; finish the current safe branch before asking for confirmation or handoff.
 - Ask only when blocked by missing information, missing authority, or an irreversible/destructive branch.
 - Prefer evidence over assumption; verify before claiming completion.
@@ -126,6 +127,11 @@ Verification loop: define the claim and success criteria, run the smallest valid
 </verification>
 
 <execution_protocols>
+- Command routing: use normal Codex repository inspection tools/subagents as the default surface for simple read-only repository lookup and implementation context.
+- Use `omx sparkshell --tmux-pane` only as an explicit opt-in operator aid for shell-native tmux evidence or bounded verification; it does not replace raw `tmux capture-pane` evidence.
+- When to use what:
+- Use normal Codex repository inspection tools/subagents for repository lookup and implementation context.
+- Use `omx sparkshell --tmux-pane` only as an explicit opt-in operator aid for shell-native tmux evidence or bounded verification.
 - Stop / escalate: stop when the task is verified complete, the user says stop/cancel, or no meaningful recovery path remains. Escalate to the user only for irreversible, destructive, materially branching decisions, or missing authority.
 - Output contract: Default update/final shape: current mode, action/result, and evidence or blocker/next step. Keep rationale once; do not restate the full plan every turn unless the risk or decision changed.
 - Before concluding, confirm no pending work remains and that tests pass or validation gaps are explicit.

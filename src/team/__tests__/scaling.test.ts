@@ -1431,7 +1431,7 @@ exit 0
 
       const rootAgents = await readFile(join(cwd, '.omx', 'team', 'canonical-root', 'worktrees', 'worker-2', 'AGENTS.md'), 'utf-8');
       assert.match(rootAgents, /You are operating as the \*\*writer\*\* role/);
-      assert.match(rootAgents, /<identity>You are Writer\.<\/identity>/);
+      assert.match(rootAgents, /<identity>\s*You are Writer\./);
       assert.match(rootAgents, /exact gpt-5\.4-mini model/);
       assert.match(rootAgents, /strict execution order: inspect -> plan -> act -> verify/);
     } finally {
@@ -1515,7 +1515,7 @@ exit 0
 
       const workerAgents = await readFile(join(cwd, '.omx', 'state', 'team', 'frontier-role', 'workers', 'worker-2', 'AGENTS.md'), 'utf-8');
       assert.match(workerAgents, /You are operating as the \*\*test-engineer\*\* role/);
-      assert.match(workerAgents, /<identity>Test Engineer<\/identity>/);
+      assert.match(workerAgents, /<identity>\s*You are Test Engineer\./);
       assert.doesNotMatch(workerAgents, /exact gpt-5\.4-mini model/);
     } finally {
       if (typeof previousPath === 'string') process.env.PATH = previousPath;
@@ -1599,7 +1599,7 @@ exit 0
 
       const rootAgents = await readFile(join(cwd, '.omx', 'team', 'mini-tuned-root', 'worktrees', 'worker-2', 'AGENTS.md'), 'utf-8');
       assert.match(rootAgents, /You are operating as the \*\*writer\*\* role/);
-      assert.match(rootAgents, /<identity>You are Writer\.<\/identity>/);
+      assert.match(rootAgents, /<identity>\s*You are Writer\./);
       assert.doesNotMatch(rootAgents, /exact gpt-5\.4-mini model/);
     } finally {
       if (typeof previousPath === 'string') process.env.PATH = previousPath;
