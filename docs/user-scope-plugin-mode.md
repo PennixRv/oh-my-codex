@@ -25,7 +25,7 @@ omx exec --skip-git-repo-check -C . "Reply with exactly OMX-EXEC-OK"
 
 What this does:
 
-- Registers OMX plugin delivery for bundled skills and plugin-scoped hooks.
+- Registers OMX plugin delivery for bundled skills and plugin-cache hook assets.
 - Writes user-scope `~/.codex/AGENTS.md` as the persistent OMX bootstrap contract.
 - Refreshes `~/.codex/config.toml`.
 - Installs native-agent TOMLs under `~/.codex/agents/` so `agent_type` routing still works.
@@ -47,7 +47,7 @@ Persistent surfaces:
 - `~/.codex/AGENTS.md`: top-level OMX bootstrap contract
 - `~/.codex/config.toml`: setup-owned config blocks plus user edits
 - `~/.codex/agents/*.toml`: native agent routing metadata
-- plugin marketplace/cache entries under `~/.codex/plugins/...`: bundled skills, plugin hooks, companion metadata
+- plugin marketplace/cache entries under `~/.codex/plugins/...`: bundled skills, plugin-cache hook assets, companion metadata
 
 Runtime-composed surfaces:
 

@@ -121,6 +121,7 @@ import { writeCompletedSetupInstallStamp } from "./update.js";
 import {
 	OMX_LOCAL_MARKETPLACE_NAME,
 	OMX_LOCAL_PLUGIN_CACHE_KEY,
+	OMX_LOCAL_PLUGIN_CONFIG_KEY,
 	OMX_PLUGIN_NAME,
 	materializePackagedOmxPluginCache,
 	omxLocalPluginCacheDir,
@@ -1332,13 +1333,32 @@ function configEnablesPluginScopedHooks(configContent: string): boolean {
 	try {
 		const parsed = TOML.parse(configContent) as {
 			plugin_hooks?: unknown;
+			plugins?: Record<string, { enabled?: unknown }>;
+			marketplaces?: Record<string, { source_type?: unknown; source?: unknown }>;
 			features?: Record<string, unknown>;
 		};
-		return isEnabledTomlValue(parsed.plugin_hooks)
-			|| isEnabledTomlValue(parsed.features?.plugin_hooks);
+		if (
+			isEnabledTomlValue(parsed.plugin_hooks)
+			|| isEnabledTomlValue(parsed.features?.plugin_hooks)
+		) {
+			return true;
+		}
+		return (
+			parsed.marketplaces?.[OMX_LOCAL_MARKETPLACE_NAME]?.source_type === "local"
+			&& parsed.plugins?.[OMX_LOCAL_PLUGIN_CONFIG_KEY]?.enabled === true
+		);
 	} catch {
-		return /^\s*plugin_hooks\s*=\s*(?:true|1|"true"|"1"|"yes"|"on")\s*$/m.test(
-			configContent,
+		return (
+			/^\s*plugin_hooks\s*=\s*(?:true|1|"true"|"1"|"yes"|"on")\s*$/m.test(
+				configContent,
+			)
+			|| (
+				new RegExp(
+					`^\\s*\\[plugins\\.${JSON.stringify(OMX_LOCAL_PLUGIN_CONFIG_KEY).replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\]\\s*$`,
+					"m",
+				).test(configContent)
+				&& /^\s*enabled\s*=\s*true\s*$/m.test(configContent)
+			)
 		);
 	}
 }
@@ -1961,6 +1981,34 @@ async function cleanupPluginModeManagedHooksJson(
 	}
 }
 
+async function cleanupManagedWindowsNativeHookShim(
+	codexHomeDir: string,
+	backupContext: SetupBackupContext,
+	summary: SetupCategorySummary,
+	options: Pick<SetupOptions, "dryRun" | "verbose">,
+): Promise<void> {
+	if (process.platform !== "win32") return;
+
+	const shimPath = buildManagedCodexNativeHookWindowsShimPath(codexHomeDir);
+	if (!existsSync(shimPath)) {
+		summary.unchanged += 1;
+		return;
+	}
+
+	if (await ensureBackup(shimPath, true, backupContext, options)) {
+		summary.backedUp += 1;
+	}
+	if (!options.dryRun) {
+		await rm(shimPath, { force: true });
+	}
+	summary.removed += 1;
+	if (options.verbose) {
+		console.log(
+			`  ${options.dryRun ? "would remove" : "removed"} legacy native hook Windows shim ${shimPath}`,
+		);
+	}
+}
+
 function buildTrustStateTomlFromEntries(
 	entries: Record<string, { trusted_hash: string; enabled?: boolean }>,
 ): string {
@@ -2082,16 +2130,8 @@ async function applyPluginModeHooksConfig(
 	const nextConfigBase = upsertPluginModeRuntimeFeatureFlags(
 		stripManagedCodexHookTrustState(existingConfig, { managedTrustState }),
 		options.codexHookFeatureFlag,
-		{ pluginScopedHooks: options.pluginScopedHooks },
 	);
-	const nextConfig = options.pluginScopedHooks
-		? nextConfigBase
-		: upsertManagedCodexHookTrustState(
-			nextConfigBase,
-			pkgRoot,
-			hooksPath,
-			{ platform: process.platform, codexHomeDir },
-		);
+	const nextConfig = nextConfigBase;
 	if (nextConfig !== existingConfig) {
 		if (
 			await ensureBackup(
@@ -2115,42 +2155,22 @@ async function applyPluginModeHooksConfig(
 	const existingHooksContent = existsSync(hooksPath)
 		? await readFile(hooksPath, "utf-8")
 		: null;
-	if (options.pluginScopedHooks) {
-		await cleanupPluginModeManagedHooksJson(
-			existingHooksContent,
-			hooksPath,
-			backupContext,
-			summary,
-			options,
-		);
-	} else {
-		const hooksConfig = mergeManagedCodexHooksConfig(
-			existingHooksContent,
-			pkgRoot,
-			hooksPath,
-			{ platform: process.platform, codexHomeDir },
-		);
-		await syncManagedContent(
-			hooksConfig,
-			hooksPath,
-			summary,
-			backupContext,
-			options,
-			`native hooks ${hooksPath}`,
-		);
-		await syncManagedWindowsNativeHookShim(
-			codexHomeDir,
-			pkgRoot,
-			summary,
-			backupContext,
-			options,
-		);
-	}
+	await cleanupPluginModeManagedHooksJson(
+		existingHooksContent,
+		hooksPath,
+		backupContext,
+		summary,
+		options,
+	);
+	await cleanupManagedWindowsNativeHookShim(
+		codexHomeDir,
+		backupContext,
+		summary,
+		options,
+	);
 
 	if (options.verbose) {
-		const surface = options.pluginScopedHooks
-			? "official plugin-scoped hooks"
-			: `legacy native hooks at ${hooksPath}`;
+		const surface = "plugin-cache hooks";
 		console.log(
 			`  ${options.dryRun ? "would configure" : "configured"} plugin-mode ${surface} and runtime feature flags`,
 		);
@@ -2682,11 +2702,9 @@ export async function setup(options: SetupOptions = {}): Promise<void> {
 	const codexHookFeatureFlag = codexHookFeatureSupport.hookFeatureFlag;
 	const pluginScopedHooksSupported = codexHookFeatureSupport.pluginScopedHooks;
 	if (verbose) {
+		console.log(`  Native Codex hook feature flag: [features].${codexHookFeatureFlag}`);
 		console.log(
-			`  Native Codex hook feature flag: [features].${codexHookFeatureFlag}`,
-		);
-		console.log(
-			`  Plugin-scoped Codex hooks: ${pluginScopedHooksSupported ? "supported" : "not reported; using legacy setup fallback"}`,
+			`  Codex plugin hook capability probe: ${pluginScopedHooksSupported ? "reported" : "not reported"} (plugin mode still uses plugin-cache hooks without writing setup-managed hooks.json)`,
 		);
 	}
 	const shouldSyncSharedMcpRegistry = resolvedMcpMode.mcpMode === "compat";
@@ -2830,8 +2848,8 @@ export async function setup(options: SetupOptions = {}): Promise<void> {
 			? await readFile(scopeDirs.codexConfigFile, "utf-8")
 			: "";
 		console.log(
-			pluginScopedHooksSupported
-				? "  Plugin-scoped Codex hooks and runtime feature flags refresh complete (plugin_hooks, goals).\n"
+			isPluginInstallMode
+				? `  Plugin-mode Codex hooks refresh complete (plugin cache hooks + ${codexHookFeatureFlag}/goals flags; OMX-managed ${scopeDirs.codexHooksFile} wrappers removed).\n`
 				: `  Native Codex hooks fallback and runtime feature flags refresh complete (${scopeDirs.codexHooksFile}; hooks, goals).\n`,
 		);
 
@@ -3070,20 +3088,28 @@ export async function setup(options: SetupOptions = {}): Promise<void> {
 						);
 					}
 				}
-			} else if (usePluginAgentsMdDefault) {
-				const existingPluginAgentsMd = pluginAgentsMdExists
+			} else {
+				const existingPluginAgentsMd =
+					pluginAgentsMdExists && !pluginAgentsMdIsSymlink
 					? await readFile(pluginAgentsMdDst, "utf-8")
 					: "";
+				const shouldAutoRefreshManagedDefaults =
+					pluginAgentsMdExists &&
+					!pluginAgentsMdIsSymlink &&
+					isOmxGeneratedAgentsMd(existingPluginAgentsMd);
 				const pluginAgentsMdContent = pluginAgentsMdExists
 					? preserveUserOmxPolicyBlocks(existingPluginAgentsMd, rewritten)
 					: rewritten;
 				const defaultWouldChange = pluginAgentsMdExists
 					? existingPluginAgentsMd !== pluginAgentsMdContent
 					: true;
+				const shouldWriteDefaults =
+					usePluginAgentsMdDefault || shouldAutoRefreshManagedDefaults;
 				if (
 					resolvedScope.scope === "project" &&
 					sessionIsActive &&
-					defaultWouldChange
+					defaultWouldChange &&
+					shouldWriteDefaults
 				) {
 					summary.agentsMd.skipped += 1;
 					console.log(
@@ -3095,7 +3121,7 @@ export async function setup(options: SetupOptions = {}): Promise<void> {
 						"  Skipping AGENTS.md overwrite to avoid corrupting runtime overlay.",
 					);
 					console.log("  Stop the active session first, then re-run setup.");
-				} else {
+				} else if (shouldWriteDefaults) {
 					const result = await syncManagedAgentsContent(
 						pluginAgentsMdContent,
 						pluginAgentsMdDst,
@@ -3104,35 +3130,39 @@ export async function setup(options: SetupOptions = {}): Promise<void> {
 						{
 							agentsOverwritePrompt: options.agentsOverwritePrompt,
 							dryRun,
-							force,
+							force: force || shouldAutoRefreshManagedDefaults,
 							verbose,
 						},
 					);
 					if (result === "updated") {
-					console.log(
-						resolvedScope.scope === "project"
-							? "  Generated plugin-mode AGENTS.md defaults in project root."
-							: `  Generated plugin-mode AGENTS.md defaults in ${scopeDirs.codexHomeDir}.`,
-					);
-				} else if (result === "unchanged") {
-					console.log(
-						resolvedScope.scope === "project"
-							? "  Plugin-mode AGENTS.md defaults already up to date in project root."
-							: `  Plugin-mode AGENTS.md defaults already up to date in ${scopeDirs.codexHomeDir}.`,
-					);
+						console.log(
+							shouldAutoRefreshManagedDefaults
+								? resolvedScope.scope === "project"
+									? "  Refreshed plugin-mode AGENTS.md defaults in project root."
+									: `  Refreshed plugin-mode AGENTS.md defaults in ${scopeDirs.codexHomeDir}.`
+								: resolvedScope.scope === "project"
+									? "  Generated plugin-mode AGENTS.md defaults in project root."
+									: `  Generated plugin-mode AGENTS.md defaults in ${scopeDirs.codexHomeDir}.`,
+						);
+					} else if (result === "unchanged") {
+						console.log(
+							resolvedScope.scope === "project"
+								? "  Plugin-mode AGENTS.md defaults already up to date in project root."
+								: `  Plugin-mode AGENTS.md defaults already up to date in ${scopeDirs.codexHomeDir}.`,
+						);
 					} else {
 						console.log(
 							`  Skipped plugin-mode AGENTS.md defaults for ${pluginAgentsMdDst}.`,
 						);
 					}
+				} else {
+					summary.agentsMd.skipped += 1;
+					console.log(
+						pluginAgentsMdExists
+							? "  Plugin-mode AGENTS.md defaults skipped; existing AGENTS.md left untouched.\n"
+							: "  Plugin-mode AGENTS.md defaults skipped; no AGENTS.md was generated.\n",
+					);
 				}
-			} else {
-				summary.agentsMd.skipped += 1;
-				console.log(
-					pluginAgentsMdExists
-						? "  Plugin-mode AGENTS.md defaults skipped; existing AGENTS.md left untouched.\n"
-						: "  Plugin-mode AGENTS.md defaults skipped; no AGENTS.md was generated.\n",
-				);
 			}
 		} else {
 			summary.agentsMd.skipped += 1;

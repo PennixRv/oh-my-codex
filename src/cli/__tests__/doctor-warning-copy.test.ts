@@ -250,7 +250,7 @@ command = "node"
 				join(codexDir, "config.toml"),
 				[
 					'developer_instructions = "You have Pennix OMX installed through Codex plugin mode. AGENTS.md is the persistent OMX bootstrap contract."',
-					"plugin_hooks = true",
+					"hooks = true",
 					"goals = true",
 					"",
 				].join("\n"),
@@ -298,7 +298,7 @@ command = "node"
 					mcpMode: "none",
 				}),
 			);
-			await writeFile(join(codexDir, "config.toml"), "plugin_hooks = true\ngoals = true\n");
+			await writeFile(join(codexDir, "config.toml"), "hooks = true\ngoals = true\n");
 			await writeFile(join(codexDir, "AGENTS.md"), "# local instructions\n");
 
 			const res = runOmx(wd, ["doctor"], {
@@ -968,7 +968,7 @@ OMX_LORE_COMMIT_GUARD = "truee"
 			await writeFile(
 				join(codexDir, "config.toml"),
 				[
-					"plugin_hooks = true",
+					"hooks = true",
 					"goals = true",
 					"",
 					"[marketplaces.oh-my-codex-local]",
@@ -1028,7 +1028,7 @@ OMX_LORE_COMMIT_GUARD = "truee"
 			await writeFile(
 				join(codexDir, "config.toml"),
 				[
-					"plugin_hooks = true",
+					"hooks = true",
 					"goals = true",
 					"",
 					"[marketplaces.oh-my-codex-local]",
@@ -1071,7 +1071,7 @@ OMX_LORE_COMMIT_GUARD = "truee"
 			await writeFile(
 				join(codexDir, "config.toml"),
 				[
-					"plugin_hooks = true",
+					"hooks = true",
 					"goals = true",
 					"",
 					"[marketplaces.oh-my-codex-local]",
@@ -1101,7 +1101,7 @@ OMX_LORE_COMMIT_GUARD = "truee"
 			assert.match(
 				res.stdout,
 				new RegExp(
-					`\\[OK\\] Native hooks: plugin-scoped hooks are enabled; setup-owned hooks\\.json is intentionally absent at .*\\.codex[\\/]+hooks\\.json, and plugin cache native hook coverage smoke passed via ${join(cacheDir, "hooks", "hooks.json").replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`,
+					`\\[OK\\] Native hooks: plugin-mode hook registration uses the plugin cache; setup-owned hooks\\.json is intentionally absent at .*\\.codex[\\/]+hooks\\.json, and plugin cache native hook coverage smoke passed via ${join(cacheDir, "hooks", "hooks.json").replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`,
 				),
 			);
 			assert.match(
@@ -1115,10 +1115,6 @@ OMX_LORE_COMMIT_GUARD = "truee"
 			assert.doesNotMatch(
 				res.stdout,
 				/expected setup-owned hooks\.json is missing/,
-			);
-			assert.doesNotMatch(
-				res.stdout,
-				/plugin mode is using legacy native hook fallback/,
 			);
 			assert.doesNotMatch(
 				res.stdout,
@@ -1163,7 +1159,7 @@ OMX_LORE_COMMIT_GUARD = "truee"
 			await writeFile(
 				join(codexDir, "config.toml"),
 				[
-					"plugin_hooks = true",
+					"hooks = true",
 					"goals = true",
 					"",
 					"[marketplaces.oh-my-codex-local]",
@@ -1193,7 +1189,7 @@ OMX_LORE_COMMIT_GUARD = "truee"
 			assert.match(
 				res.stdout,
 				new RegExp(
-					`\\[OK\\] Native hooks: plugin-scoped hooks are enabled; setup-owned hooks\\.json is intentionally absent at .*\\.codex[\\/]+hooks\\.json, and plugin cache native hook coverage smoke passed via ${join(cacheDir, "hooks", "hooks.json").replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`,
+					`\\[OK\\] Native hooks: plugin-mode hook registration uses the plugin cache; setup-owned hooks\\.json is intentionally absent at .*\\.codex[\\/]+hooks\\.json, and plugin cache native hook coverage smoke passed via ${join(cacheDir, "hooks", "hooks.json").replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`,
 				),
 			);
 			assert.match(
@@ -1225,7 +1221,7 @@ OMX_LORE_COMMIT_GUARD = "truee"
 			await writeFile(
 				join(codexDir, "config.toml"),
 				[
-					"plugin_hooks = true",
+					"hooks = true",
 					"goals = true",
 					"",
 					"[marketplaces.oh-my-codex-local]",
@@ -1277,7 +1273,7 @@ OMX_LORE_COMMIT_GUARD = "truee"
 			await writeFile(
 				join(projectCodexDir, "config.toml"),
 				[
-					"plugin_hooks = true",
+					"hooks = true",
 					"goals = true",
 					"",
 					"[marketplaces.oh-my-codex-local]",
@@ -1341,7 +1337,7 @@ OMX_LORE_COMMIT_GUARD = "truee"
 			await writeFile(
 				join(codexDir, "config.toml"),
 				[
-					"plugin_hooks = true",
+					"hooks = true",
 					"goals = true",
 					"",
 					"[marketplaces.oh-my-codex-local]",
@@ -1367,7 +1363,7 @@ OMX_LORE_COMMIT_GUARD = "truee"
 			assert.match(
 				res.stdout,
 				new RegExp(
-					`\\[OK\\] Native hooks: plugin-scoped hooks are enabled; setup-owned hooks\\.json is intentionally absent at .*\\.codex[\\/]+hooks\\.json, and plugin cache native hook coverage smoke passed via ${join(cacheDir, "hooks", "hooks.json").replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`,
+					`\\[OK\\] Native hooks: plugin-mode hook registration uses the plugin cache; setup-owned hooks\\.json is intentionally absent at .*\\.codex[\\/]+hooks\\.json, and plugin cache native hook coverage smoke passed via ${join(cacheDir, "hooks", "hooks.json").replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`,
 				),
 			);
 			assert.match(
@@ -1376,6 +1372,51 @@ OMX_LORE_COMMIT_GUARD = "truee"
 			);
 			assert.doesNotMatch(res.stdout, /hooks\.json not found even though config\.toml has OMX entries/);
 			assert.doesNotMatch(res.stdout, /run "omx setup --force" to restore native hook coverage/);
+		} finally {
+			await rm(wd, { recursive: true, force: true });
+		}
+	});
+
+	it("warns when plugin mode is configured but native Codex hook features are disabled", async () => {
+		const wd = await mkdtemp(join(tmpdir(), "omx-doctor-plugin-hooks-disabled-"));
+		try {
+			const home = join(wd, "home");
+			const codexDir = join(home, ".codex");
+			await mkdir(codexDir, { recursive: true });
+			await installPluginCacheFixture(codexDir);
+			await writeFile(
+				join(codexDir, "config.toml"),
+				[
+					"goals = true",
+					"",
+					"[marketplaces.oh-my-codex-local]",
+					'source_type = "local"',
+					`source = ${JSON.stringify(repoRoot())}`,
+					"",
+					'[plugins."oh-my-codex@oh-my-codex-local"]',
+					"enabled = true",
+					"",
+				].join("\n"),
+			);
+
+			const res = runOmx(wd, ["doctor"], {
+				HOME: home,
+				CODEX_HOME: codexDir,
+			});
+			if (shouldSkipForSpawnPermissions(res.error)) return;
+			assert.equal(res.status, 0, res.stderr || res.stdout);
+			assert.match(
+				res.stdout,
+				/Resolved setup install mode: plugin \(inferred from Codex plugin config\)/,
+			);
+			assert.match(
+				res.stdout,
+				/\[!!\] Native hooks: plugin mode is configured, but native Codex hook feature flags are disabled or missing in config\.toml; enable \[features\]\.hooks = true \(or legacy \[features\]\.codex_hooks = true\) and rerun "omx setup --plugin --force"/,
+			);
+			assert.doesNotMatch(
+				res.stdout,
+				/plugin cache native hook coverage smoke passed/,
+			);
 		} finally {
 			await rm(wd, { recursive: true, force: true });
 		}
@@ -1407,7 +1448,7 @@ OMX_LORE_COMMIT_GUARD = "truee"
 			await writeFile(
 				join(codexDir, "config.toml"),
 				[
-					"plugin_hooks = true",
+					"hooks = true",
 					"goals = true",
 					"",
 					"[marketplaces.oh-my-codex-local]",
@@ -1429,7 +1470,7 @@ OMX_LORE_COMMIT_GUARD = "truee"
 			assert.match(
 				res.stdout,
 				new RegExp(
-					`\\[!!\\] Native hooks: plugin-scoped hooks are enabled, but cached plugin hook files or pinned hook launcher in ${cacheDir.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")} do not match the packaged plugin; setup-owned hooks\\.json is intentionally absent at .*\\.codex[\\/]+hooks\\.json; run "omx setup --plugin --force" to refresh the plugin cache`,
+					`\\[!!\\] Native hooks: plugin-mode hook registration should come from the plugin cache, but cached plugin hook files or pinned hook launcher in ${cacheDir.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")} do not match the packaged plugin; setup-owned hooks\\.json is intentionally absent at .*\\.codex[\\/]+hooks\\.json; run "omx setup --plugin --force" to refresh the plugin cache`,
 				),
 			);
 			assert.doesNotMatch(res.stdout, /plugin cache native hook coverage smoke passed/);
@@ -1453,7 +1494,7 @@ OMX_LORE_COMMIT_GUARD = "truee"
 			await writeFile(
 				join(codexDir, "config.toml"),
 				[
-					"plugin_hooks = true",
+					"hooks = true",
 					"goals = true",
 					"",
 					"[marketplaces.oh-my-codex-local]",
@@ -1497,7 +1538,7 @@ OMX_LORE_COMMIT_GUARD = "truee"
 			assert.match(
 				res.stdout,
 				new RegExp(
-					`\\[OK\\] Native hooks: plugin-scoped hooks are enabled; existing hooks\\.json at .*\\.codex[\\/]+hooks\\.json is treated as user-owned because plugin-scoped hooks are enabled, and plugin cache native hook coverage smoke passed via ${join(cacheDir, "hooks", "hooks.json").replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`,
+					`\\[OK\\] Native hooks: plugin-mode hook registration uses the plugin cache; existing hooks\\.json at .*\\.codex[\\/]+hooks\\.json is treated as user-owned residue while plugin-mode hook registration comes from the plugin cache, and plugin cache native hook coverage smoke passed via ${join(cacheDir, "hooks", "hooks.json").replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`,
 				),
 			);
 			assert.doesNotMatch(res.stdout, /hooks\.json is missing OMX-managed coverage/);

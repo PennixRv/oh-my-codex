@@ -396,13 +396,8 @@ describe("omx setup scope behavior", () => {
         join(home, ".codex", "config.toml"),
         "utf-8",
       );
-      const hooksJsonExists = existsSync(join(home, ".codex", "hooks.json"));
-      if (hooksJsonExists) {
-        assert.match(configToml, /^hooks = true$/m);
-        assert.doesNotMatch(configToml, /^plugin_hooks = true$/m);
-      } else {
-        assert.match(configToml, /^plugin_hooks = true$/m);
-      }
+      assert.match(configToml, /^hooks = true$/m);
+      assert.doesNotMatch(configToml, /^plugin_hooks = true$/m);
       const agentsMd = await readFile(
         join(home, ".codex", "AGENTS.md"),
         "utf-8",

@@ -4,6 +4,16 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+## [0.18.85] - 2026-07-10
+
+Patch release for the Pennix fork plugin-mode hook semantics correction line: plugin setup now keeps Codex hook feature flags on the canonical `hooks`/`codex_hooks` path, removes setup-managed `hooks.json` wrappers from the user Codex home, refreshes OMX-managed `AGENTS.md` defaults when they are already OMX-generated, and preserves user `developer_instructions` plus hidden `status_line = []` semantics during launch-time config repair.
+
+- Plugin-mode setup no longer writes or depends on `plugin_hooks = true` in user `config.toml`; it now keeps canonical Codex hook enablement on `hooks = true` (or legacy `codex_hooks = true` when that is the only installed feature name), while still relying on the plugin cache hook bundle for OMX lifecycle registration.
+- Plugin-mode setup now always removes stale setup-managed `~/.codex/hooks.json` wrappers and the Windows shim residue instead of reviving a fallback hook surface inside the user Codex home.
+- Launch-time config repair now preserves custom `developer_instructions` and keeps OMX’s hidden native status-line contract (`status_line = []`) instead of reintroducing visible default status segments during runtime repair.
+- Plugin-mode `AGENTS.md` refresh now auto-updates existing OMX-generated defaults without forcing a manual overwrite prompt, while still preserving user OMX policy blocks and avoiding active project-session overlay corruption.
+- `omx doctor`, setup regressions, scope regressions, and plugin-config inference coverage are updated to the current plugin-cache hook wording and canonical `hooks`-flag semantics.
+
 ## [0.18.84] - 2026-07-10
 
 Corrective patch release for the Pennix fork after `v0.18.83` created a GitHub release but failed before npm publication. This cut keeps the intended plugin-mode/setup payload, then fixes the full publish gate drift that `npm run test:node` exposed during the `Publish npm Package` job.

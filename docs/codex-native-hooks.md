@@ -6,15 +6,14 @@ This page is the canonical answer to:
 
 ## Install surface
 
-For plugin installs on Codex versions that report official plugin-scoped hook
-support, the packaged plugin is the hook registration surface:
+For plugin installs, the packaged plugin is the OMX hook registration surface:
 
 - `plugins/oh-my-codex/.codex-plugin/plugin.json` → points Codex at `./hooks/hooks.json`
 - `plugins/oh-my-codex/hooks/hooks.json` → registers the OMX lifecycle hook commands with `${PLUGIN_ROOT}`
-- `.codex/config.toml` → enables `[features].plugin_hooks = true` and `[features].goals = true`
+- `.codex/config.toml` → enables the installed-Codex hook flag (`[features].hooks = true`, or legacy `[features].codex_hooks = true` when that is the only reported feature) and `[features].goals = true`
 
 `omx setup` still owns the legacy/fallback native Codex artifacts for legacy
-installs and older Codex versions that do not report `plugin_hooks`:
+installs:
 
 - `.codex/config.toml` → enables the installed-Codex hook flag (`[features].hooks = true`, or legacy `[features].codex_hooks = true` when that is the only reported feature) and `[features].goals = true`
 - `.codex/hooks.json` → registers the OMX-managed native hook command while preserving non-OMX hook entries already in the file
@@ -30,7 +29,7 @@ Project launches use a session-scoped `.omx/runtime/codex-home/<session>/` mirro
 
 ## Ownership split
 
-- **Plugin-scoped Codex hooks**: `plugins/oh-my-codex/hooks/hooks.json` for plugin installs on Codex versions with `[features].plugin_hooks`
+- **Plugin-cache Codex hooks**: `plugins/oh-my-codex/hooks/hooks.json` for plugin installs; OMX does not need setup-managed user-home hook wrappers in this mode
 - **Legacy/fallback native Codex hooks**: `.codex/hooks.json`
 - **OMX plugin hooks**: `.omx/hooks/*.mjs`
 - **tmux/runtime fallbacks**: `omx tmux-hook`, notify-hook, derived watcher, idle/session-end reporters

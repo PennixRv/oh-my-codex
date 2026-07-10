@@ -1686,6 +1686,8 @@ export async function resolveLaunchConfigRepairOptions(
   includeFirstPartyMcp: boolean;
   sharedMcpServers?: UnifiedMcpRegistryServer[];
   sharedMcpRegistrySource?: string;
+  statusLinePreset?: null;
+  preserveDeveloperInstructions?: boolean;
 }> {
   let content: string | undefined;
   const readConfig = async (): Promise<string | undefined> => {
@@ -1708,7 +1710,12 @@ export async function resolveLaunchConfigRepairOptions(
       : {};
 
   if (readPersistedSetupPreferences(cwd)?.mcpMode === "compat") {
-    return { includeFirstPartyMcp: true, ...sharedMcpOptions };
+    return {
+      includeFirstPartyMcp: true,
+      statusLinePreset: null,
+      preserveDeveloperInstructions: true,
+      ...sharedMcpOptions,
+    };
   }
 
   if (existingContent) {
@@ -1716,12 +1723,19 @@ export async function resolveLaunchConfigRepairOptions(
       new RegExp(`^\\s*\\[mcp_servers\\.${name}\\]\\s*$`, "m").test(existingContent),
     );
     if (hasExistingFirstPartyMcp || sharedMcpRegistry.servers.length > 0) {
-      return { includeFirstPartyMcp: hasExistingFirstPartyMcp, ...sharedMcpOptions };
+      return {
+        includeFirstPartyMcp: hasExistingFirstPartyMcp,
+        statusLinePreset: null,
+        preserveDeveloperInstructions: true,
+        ...sharedMcpOptions,
+      };
     }
   }
 
   return {
     includeFirstPartyMcp: false,
+    statusLinePreset: null,
+    preserveDeveloperInstructions: true,
   };
 }
 

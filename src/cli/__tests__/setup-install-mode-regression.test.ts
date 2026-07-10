@@ -114,7 +114,7 @@ describe("omx setup install mode regressions", () => {
 					"local",
 				);
 				const config = upsertLocalOmxMarketplaceRegistration(
-					upsertLocalOmxPluginEnablement('plugin_hooks = true\n'),
+					upsertLocalOmxPluginEnablement('hooks = true\ngoals = true\n'),
 					packageRoot,
 				);
 				await writeFile(configPath, config);
@@ -199,7 +199,7 @@ describe("omx setup install mode regressions", () => {
 				assert.doesNotMatch(config, /^\[tui\.model_availability_nux\./m);
 				assert.doesNotMatch(config, /^"gpt-5\.5" = 4$/m);
 				assert.doesNotMatch(config, /^5 = 1$/m);
-				assert.match(config, /^plugin_hooks = true$/m);
+				assert.match(config, /^hooks = true$/m);
 				assert.match(config, /^goals = true$/m);
 			});
 		} finally {
@@ -235,7 +235,7 @@ describe("omx setup install mode regressions", () => {
 						join(codexHomeDir, "config.toml"),
 						"utf-8",
 					);
-					assert.match(config, /^plugin_hooks = true$/m);
+					assert.match(config, /^hooks = true$/m);
 					assert.match(config, /^goals = true$/m);
 					assert.doesNotMatch(config, /^developer_instructions\s*=/m);
 					assert.doesNotMatch(config, /^\s*\[mcp_servers[.\]]/m);

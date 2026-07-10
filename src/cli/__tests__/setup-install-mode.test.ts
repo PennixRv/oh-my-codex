@@ -48,8 +48,8 @@ before(async () => {
 			"#!/usr/bin/env node",
 			"if (process.argv[2] === 'features' && process.argv[3] === 'list') {",
 			"  console.log('hooks                                   stable             true');",
-			"  console.log('plugin_hooks                            experimental       true');",
-			"  console.log('goals                                   experimental       true');",
+			"  console.log('plugin_hooks                            removed            false');",
+			"  console.log('goals                                   stable             true');",
 			"  process.exit(0);",
 			"}",
 			"if (process.argv.includes('--version') || process.argv[2] === '--version') {",
@@ -2450,7 +2450,7 @@ describe.skip("omx setup install mode behavior", () => {
 			}
 		});
 
-		it("ignores removed plugin_hooks support and preserves an existing hooks feature flag", async () => {
+	it("ignores removed plugin_hooks support and preserves an existing hooks feature flag", async () => {
 			const wd = await mkdtemp(join(tmpdir(), "omx-setup-install-mode-"));
 			try {
 				await withIsolatedUserHome(wd, async (codexHomeDir) => {
@@ -2507,15 +2507,45 @@ describe.skip("omx setup install mode behavior", () => {
 						});
 
 						const config = await readFile(configPath, "utf-8");
-						assert.equal(config, initialConfig);
 						assert.match(config, /^hooks = true$/m);
 						assert.doesNotMatch(config, /^plugin_hooks = true$/m);
+						assert.equal(existsSync(hooksPath), false);
 					});
 				});
 			} finally {
 				await rm(wd, { recursive: true, force: true });
 			}
 		});
+
+	it("refreshes existing OMX-generated plugin AGENTS.md defaults without prompting", async () => {
+		const wd = await mkdtemp(join(tmpdir(), "omx-setup-install-mode-"));
+		try {
+			await withIsolatedUserHome(wd, async (codexHomeDir) => {
+				await withTempCwd(wd, async () => {
+					await setup({ scope: "user", installMode: "plugin", force: true });
+
+					const agentsMdPath = join(codexHomeDir, "AGENTS.md");
+					const before = await readFile(agentsMdPath, "utf-8");
+					const stale = before.replace(
+						"Role prompts and installed workflow surfaces are narrower execution surfaces. They must follow this file, not override it.",
+						"OLD OMX bootstrap sentence.",
+					);
+					await writeFile(agentsMdPath, stale);
+
+					await setup({ scope: "user", installMode: "plugin" });
+
+					const after = await readFile(agentsMdPath, "utf-8");
+					assert.doesNotMatch(after, /OLD OMX bootstrap sentence\./);
+					assert.match(
+						after,
+						/Role prompts, skill instructions, hook-injected routing context, and developer_instructions are narrower execution surfaces\./,
+					);
+				});
+			});
+		} finally {
+			await rm(wd, { recursive: true, force: true });
+		}
+	});
 
 		it("removes legacy setup-managed hook wrappers when plugin-scoped hooks are supported", async () => {
 			const wd = await mkdtemp(join(tmpdir(), "omx-setup-install-mode-"));

@@ -56,6 +56,7 @@ interface MergeOptions {
   verbose?: boolean;
   statusLinePreset?: HudPreset | null;
   forceStatusLinePreset?: boolean;
+  preserveDeveloperInstructions?: boolean;
   notifyCommand?: string[] | false;
   includeFirstPartyMcp?: boolean;
   preserveExistingFirstPartyMcp?: boolean;
@@ -1553,15 +1554,14 @@ export function upsertManagedCodexHookTrustState(
 export function upsertPluginModeRuntimeFeatureFlags(
   config: string,
   codexHookFeatureFlag: CodexHookFeatureFlag = DEFAULT_CODEX_HOOK_FEATURE_FLAG,
-  options: { pluginScopedHooks?: boolean } = {},
 ): string {
   const lines = config.split(/\r?\n/);
   const featuresStart = lines.findIndex((line) =>
     /^\s*\[features\]\s*$/.test(line),
   );
-  const hookFeatureFlagLine = options.pluginScopedHooks
-    ? `${CODEX_PLUGIN_SCOPED_HOOKS_FEATURE_FLAG} = true`
-    : formatCodexHookFeatureFlagLine(codexHookFeatureFlag);
+  const hookFeatureFlagLine = formatCodexHookFeatureFlagLine(
+    codexHookFeatureFlag,
+  );
 
   if (featuresStart < 0) {
     const base = config.trimEnd();
@@ -1594,14 +1594,12 @@ export function upsertPluginModeRuntimeFeatureFlags(
     }
   }
 
-  ({ sectionEnd } = options.pluginScopedHooks
-    ? upsertPluginScopedHookFeatureFlagInSection(lines, featuresStart, sectionEnd)
-    : upsertPluginModeCodexHookFeatureFlagInSection(
-        lines,
-        featuresStart,
-        sectionEnd,
-        codexHookFeatureFlag,
-      ));
+  ({ sectionEnd } = upsertPluginModeCodexHookFeatureFlagInSection(
+    lines,
+    featuresStart,
+    sectionEnd,
+    codexHookFeatureFlag,
+  ));
 
   let goalsIdx = -1;
   for (let i = featuresStart + 1; i < sectionEnd; i++) {
@@ -2798,7 +2796,12 @@ export function buildMergedConfig(
       ? getRootTomlArray(existing, "notify")
       : null;
   existing = stripManagedLegacyRootReasoning(existing);
-  existing = stripOmxTopLevelKeys(existing);
+  existing = stripOmxTopLevelKeys(
+    existing,
+    options.preserveDeveloperInstructions === true
+      ? ["notify"]
+      : OMX_TOP_LEVEL_KEYS,
+  );
   if (userNotifyToPreserve) {
     existing = `${`notify = ${formatTomlStringArray(userNotifyToPreserve)}`}\n${existing.trimStart()}`;
   }

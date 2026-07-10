@@ -218,8 +218,6 @@ async function inferPluginInstallModeFromConfigForScope(
 
 	try {
 		const configContent = await readFile(configPath, "utf-8");
-		if (!configEnablesPluginScopedHooks(configContent)) return null;
-
 		const { marketplace, plugin } = getParsedPluginMarketplaceConfig(configContent);
 		if (!marketplace || marketplace.source_type !== "local") return null;
 		if (!(await isTrustedOmxPluginMarketplaceSource(marketplace.source))) return null;
@@ -1448,9 +1446,38 @@ function configEnablesPluginScopedHooks(configContent: string): boolean {
 			plugin_hooks?: unknown;
 			features?: Record<string, unknown>;
 		};
-		return isEnabledTomlValue(parsed.plugin_hooks) || isEnabledTomlValue(parsed.features?.plugin_hooks);
+		return (
+			isEnabledTomlValue(parsed.plugin_hooks)
+			|| isEnabledTomlValue(parsed.features?.plugin_hooks)
+		);
 	} catch {
-		return /^\s*plugin_hooks\s*=\s*(?:true|1|"true"|"1"|"yes"|"on")\s*$/m.test(configContent);
+		return /^\s*plugin_hooks\s*=\s*(?:true|1|"true"|"1"|"yes"|"on")\s*$/m.test(
+			configContent,
+		);
+	}
+}
+
+function configEnablesCodexHookFeature(
+	configContent: string,
+): boolean {
+	try {
+		const parsed = parseToml(configContent) as {
+			hooks?: unknown;
+			codex_hooks?: unknown;
+			features?: Record<string, unknown>;
+		};
+		return (
+			isEnabledTomlValue(parsed.hooks)
+			|| isEnabledTomlValue(parsed.codex_hooks)
+			|| isEnabledTomlValue(parsed.features?.hooks)
+			|| isEnabledTomlValue(parsed.features?.codex_hooks)
+		);
+	} catch {
+		return (
+			/^\s*(?:hooks|codex_hooks)\s*=\s*(?:true|1|"true"|"1"|"yes"|"on")\s*$/m.test(
+				configContent,
+			)
+		);
 	}
 }
 
@@ -1484,7 +1511,7 @@ async function checkPluginScopedNativeHooks(
 	setupHooksPath: string,
 ): Promise<Check> {
 	const setupHooksPathDescription = existsSync(setupHooksPath)
-		? `existing hooks.json at ${setupHooksPath} is treated as user-owned because plugin-scoped hooks are enabled`
+		? `existing hooks.json at ${setupHooksPath} is treated as user-owned residue while plugin-mode hook registration comes from the plugin cache`
 		: `setup-owned hooks.json is intentionally absent at ${setupHooksPath}`;
 	const packagedMarketplace = await resolvePackagedOmxMarketplace(getPackageRoot());
 	if (!packagedMarketplace) {
@@ -1492,7 +1519,7 @@ async function checkPluginScopedNativeHooks(
 			name: "Native hooks",
 			status: "warn",
 			message:
-				`plugin-scoped hooks are enabled and ${setupHooksPathDescription}, but packaged ${OMX_LOCAL_MARKETPLACE_NAME} metadata was not found`,
+				`plugin-mode hook registration should come from the plugin cache and ${setupHooksPathDescription}, but packaged ${OMX_LOCAL_MARKETPLACE_NAME} metadata was not found`,
 		};
 	}
 
@@ -1507,7 +1534,7 @@ async function checkPluginScopedNativeHooks(
 				name: "Native hooks",
 				status: "warn",
 				message:
-					`plugin-scoped hooks are enabled, but the expected Codex plugin cache manifest is missing at ${join(expectedCacheDir, ".codex-plugin", "plugin.json")} (internal compatibility plugin cache path: ${OMX_PLUGIN_CACHE_PATH_HINT}); ${setupHooksPathDescription}; run "omx setup --plugin --force" to refresh the plugin cache`,
+					`plugin-mode hook registration should come from the plugin cache, but the expected Codex plugin cache manifest is missing at ${join(expectedCacheDir, ".codex-plugin", "plugin.json")} (internal compatibility plugin cache path: ${OMX_PLUGIN_CACHE_PATH_HINT}); ${setupHooksPathDescription}; run "omx setup --plugin --force" to refresh the plugin cache`,
 		};
 	}
 
@@ -1516,7 +1543,7 @@ async function checkPluginScopedNativeHooks(
 			name: "Native hooks",
 			status: "warn",
 			message:
-				`plugin-scoped hooks are enabled, but the Codex plugin cache manifest version at ${join(expectedCacheDir, ".codex-plugin", "plugin.json")} is ${String(state.manifestVersion)} instead of ${OMX_LOCAL_PLUGIN_CACHE_KEY}; ${setupHooksPathDescription}; run "omx setup --plugin --force" to refresh the plugin cache`,
+				`plugin-mode hook registration should come from the plugin cache, but the Codex plugin cache manifest version at ${join(expectedCacheDir, ".codex-plugin", "plugin.json")} is ${String(state.manifestVersion)} instead of ${OMX_LOCAL_PLUGIN_CACHE_KEY}; ${setupHooksPathDescription}; run "omx setup --plugin --force" to refresh the plugin cache`,
 		};
 	}
 
@@ -1525,7 +1552,7 @@ async function checkPluginScopedNativeHooks(
 				name: "Native hooks",
 				status: "warn",
 				message:
-					`plugin-scoped hooks are enabled, but the Codex plugin cache manifest points hooks to ${String(state.hooksPointer)} instead of ./hooks/hooks.json at ${expectedHooksPath} (internal compatibility plugin cache path: ${OMX_PLUGIN_CACHE_PATH_HINT}); run "omx setup --plugin --force" to refresh the plugin cache`,
+					`plugin-mode hook registration should come from the plugin cache, but the Codex plugin cache manifest points hooks to ${String(state.hooksPointer)} instead of ./hooks/hooks.json at ${expectedHooksPath} (internal compatibility plugin cache path: ${OMX_PLUGIN_CACHE_PATH_HINT}); run "omx setup --plugin --force" to refresh the plugin cache`,
 		};
 	}
 
@@ -1535,7 +1562,7 @@ async function checkPluginScopedNativeHooks(
 				name: "Native hooks",
 				status: "warn",
 				message:
-					`plugin-scoped hooks are enabled, but expected plugin hook file is missing at ${expectedPath}; ${setupHooksPathDescription}; run "omx setup --plugin --force" to refresh the plugin cache`,
+					`plugin-mode hook registration should come from the plugin cache, but expected plugin hook file is missing at ${expectedPath}; ${setupHooksPathDescription}; run "omx setup --plugin --force" to refresh the plugin cache`,
 			};
 		}
 	}
@@ -1545,7 +1572,7 @@ async function checkPluginScopedNativeHooks(
 			name: "Native hooks",
 			status: "warn",
 			message:
-				`plugin-scoped hooks are enabled, but cached plugin hook files or pinned hook launcher in ${expectedCacheDir} do not match the packaged plugin; ${setupHooksPathDescription}; run "omx setup --plugin --force" to refresh the plugin cache`,
+				`plugin-mode hook registration should come from the plugin cache, but cached plugin hook files or pinned hook launcher in ${expectedCacheDir} do not match the packaged plugin; ${setupHooksPathDescription}; run "omx setup --plugin --force" to refresh the plugin cache`,
 		};
 	}
 
@@ -1623,7 +1650,7 @@ async function checkPluginScopedNativeHooks(
 		name: "Native hooks",
 		status: "pass",
 		message:
-			`plugin-scoped hooks are enabled; ${setupHooksPathDescription}, and plugin cache native hook coverage smoke passed via ${expectedHooksPath}`,
+			`plugin-mode hook registration uses the plugin cache; ${setupHooksPathDescription}, and plugin cache native hook coverage smoke passed via ${expectedHooksPath}`,
 	};
 }
 
@@ -1632,33 +1659,29 @@ async function checkNativeHooks(
 	configPath: string,
 	context: NativeHookCheckContext,
 ): Promise<Check> {
-	if (existsSync(configPath) && context.installMode === "plugin") {
-		try {
-			const configContent = await readFile(configPath, "utf-8");
-			if (configEnablesPluginScopedHooks(configContent)) {
-				return checkPluginScopedNativeHooks(context.codexHomeDir, hooksPath);
+	if (context.installMode === "plugin") {
+		if (existsSync(configPath)) {
+			try {
+				const configContent = await readFile(configPath, "utf-8");
+				if (!configEnablesCodexHookFeature(configContent)) {
+					return {
+						name: "Native hooks",
+						status: "warn",
+						message:
+							'plugin mode is configured, but native Codex hook feature flags are disabled or missing in config.toml; enable [features].hooks = true (or legacy [features].codex_hooks = true) and rerun "omx setup --plugin --force"',
+					};
+				}
+			} catch {
+				// Fall through to plugin cache checks; the dedicated config check reports read failures.
 			}
-		} catch {
-			// Fall through to the hooks.json checks; the dedicated config check will
-			// report read failures separately.
 		}
+		return checkPluginScopedNativeHooks(context.codexHomeDir, hooksPath);
 	}
 
 	if (!existsSync(hooksPath)) {
 		if (existsSync(configPath)) {
 			try {
 				const configContent = await readFile(configPath, "utf-8");
-				if (context.installMode === "plugin") {
-					if (configHasOmxEntries(configContent)) {
-						return {
-							name: "Native hooks",
-							status: "warn",
-							message:
-								`plugin mode is using legacy native hook fallback, but expected setup-owned hooks.json is missing at ${hooksPath}; run "omx setup --plugin --force" to restore the fallback hook file, or upgrade Codex to plugin_hooks support so setup can use plugin-scoped hooks`,
-						};
-					}
-				}
-
 				if (configHasOmxEntries(configContent)) {
 					return {
 						name: "Native hooks",

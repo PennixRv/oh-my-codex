@@ -2204,6 +2204,31 @@ describe.skip("project launch scope helpers", () => {
     }
   });
 
+  it("resolveLaunchConfigRepairOptions preserves developer_instructions and hidden status line semantics", async () => {
+    const wd = await mkdtemp(join(tmpdir(), "omx-launch-scope-"));
+    try {
+      const configPath = join(wd, "global-codex", "config.toml");
+      await mkdir(dirname(configPath), { recursive: true });
+      await writeFile(
+        configPath,
+        [
+          'developer_instructions = "custom"',
+          "[features]",
+          "hooks = true",
+          "",
+        ].join("\n"),
+      );
+
+      const options = await resolveLaunchConfigRepairOptions(wd, configPath);
+
+      assert.equal(options.includeFirstPartyMcp, false);
+      assert.equal(options.statusLinePreset, null);
+      assert.equal(options.preserveDeveloperInstructions, true);
+    } finally {
+      await rm(wd, { recursive: true, force: true });
+    }
+  });
+
   it("marks only persisted project CODEX_HOME as project-local cleanup target", async () => {
     const wd = await mkdtemp(join(tmpdir(), "omx-launch-scope-"));
     try {

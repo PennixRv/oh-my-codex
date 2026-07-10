@@ -1555,4 +1555,41 @@ describe.skip("config generator idempotency (#384)", () => {
     }
   });
 
+  it("repairConfigIfNeeded preserves custom developer_instructions when explicitly requested", async () => {
+    const wd = await mkdtemp(join(tmpdir(), "omx-idem-"));
+    try {
+      const configPath = join(wd, "config.toml");
+      await writeFile(
+        configPath,
+        [
+          'developer_instructions = """Custom instructions.',
+          'Keep this content.',
+          'Done."""',
+          "",
+          "[tui]",
+          'status_line = ["git-branch"]',
+          "",
+          "[tui]",
+          'status_line = ["context-remaining"]',
+          "",
+        ].join("\n"),
+      );
+
+      const repaired = await repairConfigIfNeeded(configPath, wd, {
+        preserveDeveloperInstructions: true,
+        statusLinePreset: null,
+      });
+      const config = await readFile(configPath, "utf-8");
+
+      assert.equal(repaired, true);
+      assert.match(config, /^developer_instructions = """Custom instructions\.$/m);
+      assert.match(config, /Keep this content\./);
+      assert.equal((config.match(/^developer_instructions\s*=/gm) ?? []).length, 1);
+      assert.match(config, /^status_line = \[\]$/m);
+      assert.doesNotThrow(() => TOML.parse(config));
+    } finally {
+      await rm(wd, { recursive: true, force: true });
+    }
+  });
+
 });
