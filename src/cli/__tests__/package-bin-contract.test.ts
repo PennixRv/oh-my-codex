@@ -8,20 +8,12 @@ import { getInstallableNativeAgentNames } from '../../agents/policy.js';
 import { getSetupInstallableSkillNames } from '../../catalog/installable.js';
 import { readCatalogManifest } from '../../catalog/reader.js';
 import { OMX_FIRST_PARTY_MCP_PLUGIN_TARGETS } from '../../config/omx-first-party-mcp.js';
+import { parseNpmPackJsonOutput } from '../../scripts/smoke-packed-install.js';
 
 type PackageJson = {
   files?: string[];
   bin?: string | Record<string, string>;
   scripts?: Record<string, string>;
-};
-
-type NpmPackDryRunFile = {
-  path: string;
-  mode?: number;
-};
-
-type NpmPackDryRunResult = {
-  files?: NpmPackDryRunFile[];
 };
 
 describe('package bin contract', () => {
@@ -186,10 +178,7 @@ describe('package bin contract', () => {
 
     assert.equal(packed.status, 0, packed.stderr || packed.stdout);
 
-    const jsonStart = packed.stdout.indexOf('[');
-    assert.notEqual(jsonStart, -1, `expected npm pack --json output in stdout\n${packed.stdout}`);
-    const results = JSON.parse(packed.stdout.slice(jsonStart)) as NpmPackDryRunResult[];
-    assert.equal(Array.isArray(results), true, 'expected npm pack --json array output');
+    const results = parseNpmPackJsonOutput(packed.stdout);
 
     const binEntry = results[0]?.files?.find((file) => file.path === 'dist/cli/omx.js');
     assert.ok(binEntry, 'expected npm pack output to include dist/cli/omx.js');

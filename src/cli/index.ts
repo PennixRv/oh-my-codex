@@ -138,7 +138,7 @@ import { OMX_FIRST_PARTY_MCP_SERVER_NAMES } from "../config/omx-first-party-mcp.
 import { HUD_TMUX_HEIGHT_LINES, HUD_TMUX_MIN_LAUNCH_WINDOW_HEIGHT_LINES, isTmuxWindowTooCrampedForHudSplit } from "../hud/constants.js";
 import { OMX_TMUX_HUD_OWNER_ENV } from "../hud/reconcile.js";
 import { normalizeHudConfig, readUltragoalState } from "../hud/state.js";
-import { DEFAULT_HUD_CONFIG } from "../hud/types.js";
+import { DEFAULT_HUD_CONFIG, type StatusLinePreset } from "../hud/types.js";
 import {
   createHudWatchPane as createSharedHudWatchPane,
   killTmuxPane as killSharedTmuxPane,
@@ -1686,7 +1686,7 @@ export async function resolveLaunchConfigRepairOptions(
   includeFirstPartyMcp: boolean;
   sharedMcpServers?: UnifiedMcpRegistryServer[];
   sharedMcpRegistrySource?: string;
-  statusLinePreset?: null;
+  statusLinePreset?: StatusLinePreset;
   preserveDeveloperInstructions?: boolean;
 }> {
   let content: string | undefined;
@@ -1712,7 +1712,7 @@ export async function resolveLaunchConfigRepairOptions(
   if (readPersistedSetupPreferences(cwd)?.mcpMode === "compat") {
     return {
       includeFirstPartyMcp: true,
-      statusLinePreset: null,
+      statusLinePreset: DEFAULT_HUD_CONFIG.statusLine.preset,
       preserveDeveloperInstructions: true,
       ...sharedMcpOptions,
     };
@@ -1725,7 +1725,7 @@ export async function resolveLaunchConfigRepairOptions(
     if (hasExistingFirstPartyMcp || sharedMcpRegistry.servers.length > 0) {
       return {
         includeFirstPartyMcp: hasExistingFirstPartyMcp,
-        statusLinePreset: null,
+        statusLinePreset: DEFAULT_HUD_CONFIG.statusLine.preset,
         preserveDeveloperInstructions: true,
         ...sharedMcpOptions,
       };
@@ -1734,7 +1734,7 @@ export async function resolveLaunchConfigRepairOptions(
 
   return {
     includeFirstPartyMcp: false,
-    statusLinePreset: null,
+    statusLinePreset: DEFAULT_HUD_CONFIG.statusLine.preset,
     preserveDeveloperInstructions: true,
   };
 }

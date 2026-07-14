@@ -30,8 +30,6 @@ const DEFAULT_CCH_ADMIN_TOKEN_RELATIVE_PATHS = [
 const LEGACY_CCH_ADMIN_TOKEN_FILE = join(homedir(), '.claude', 'cch-admin-token');
 
 interface TmuxThemePalette {
-  model: string;
-  effort: string;
   cost: string;
   context: string;
   total: string;
@@ -47,9 +45,7 @@ interface TmuxThemePalette {
 }
 
 interface ParsedCodexConfig {
-  model?: string;
   modelProvider?: string;
-  modelReasoningEffort?: string;
   modelContextWindow?: number;
   providerBaseUrl?: string;
 }
@@ -65,8 +61,6 @@ interface PaneContext {
 
 interface RolloutSnapshot {
   sessionId?: string;
-  model?: string;
-  effort?: string;
   ctxUsed?: number;
   ctxMax?: number;
   totalTokens?: number;
@@ -105,7 +99,6 @@ type TeamSupplement = TeamLeaderSupplement | TeamWorkerSupplement;
 
 interface CchSessionSummary {
   sessionId: string;
-  model?: string;
   costUsd?: number;
   inputTokens?: number;
   cacheReadInputTokens?: number;
@@ -122,8 +115,6 @@ interface ResolvedUsageMetrics {
 
 export interface TmuxStatusRenderSnapshot {
   visible: boolean;
-  model?: string;
-  effort?: string;
   costUsd?: number;
   ctxUsed?: number;
   ctxMax?: number;
@@ -138,8 +129,6 @@ export interface TmuxStatusRenderSnapshot {
 }
 
 const STATUS_LABELS = {
-  model: 'Model',
-  effort: 'Effort',
   cost: 'Cost',
   context: 'Ctx',
   total: 'Total',
@@ -151,8 +140,7 @@ const STATUS_LABELS = {
   git: 'Git',
 } as const;
 
-const BASE_THEME_PALETTE: Omit<TmuxThemePalette, 'model'> = {
-  effort: 'colour181',
+const BASE_THEME_PALETTE: TmuxThemePalette = {
   cost: 'colour150',
   context: 'colour117',
   total: 'colour180',
@@ -169,15 +157,12 @@ const BASE_THEME_PALETTE: Omit<TmuxThemePalette, 'model'> = {
 
 const THEMES: Record<TmuxStatusTheme, TmuxThemePalette> = {
   nord: {
-    model: 'colour111',
     ...BASE_THEME_PALETTE,
   },
   dracula: {
-    model: 'colour147',
     ...BASE_THEME_PALETTE,
   },
   catppuccin: {
-    model: 'colour153',
     ...BASE_THEME_PALETTE,
   },
 };
@@ -363,18 +348,6 @@ export function renderTmuxStatusLeft(
   if (!snapshot.visible) return '';
   const theme = THEMES[themeName];
   const parts = [
-    renderLabeledSegment(
-      theme,
-      STATUS_LABELS.model,
-      sanitizeTmuxText(snapshot.model ?? '?'),
-      theme.model,
-    ),
-    renderLabeledSegment(
-      theme,
-      STATUS_LABELS.effort,
-      sanitizeTmuxText(snapshot.effort ?? '?'),
-      theme.effort,
-    ),
     renderLabeledSegment(
       theme,
       STATUS_LABELS.cost,
@@ -890,9 +863,7 @@ async function readCodexConfig(
         )
       : undefined;
     return {
-      model: sanitizeOptionalString(parsed.model),
       modelProvider,
-      modelReasoningEffort: sanitizeOptionalString(parsed.model_reasoning_effort),
       modelContextWindow: normalizeNumber(parsed.model_context_window),
       providerBaseUrl,
     };
@@ -1014,12 +985,6 @@ export function extractRolloutSnapshotFromLines(
     sessionId:
       sanitizeOptionalString(sessionMeta?.id)
       ?? sanitizeOptionalString(sessionMeta?.session_id),
-    model:
-      sanitizeOptionalString(turnContext?.model)
-      ?? sanitizeOptionalString(tokenInfo.model),
-    effort:
-      sanitizeOptionalString(turnContext?.effort)
-      ?? sanitizeOptionalString(turnContext?.reasoning_effort),
     // Match Codex upstream context semantics: use last_token_usage.total_tokens.
     ctxUsed:
       normalizeNumber(lastUsage.total_tokens)
@@ -1238,7 +1203,6 @@ async function readExactCchSession(
   if (!match) return null;
   return {
     sessionId,
-    model: sanitizeOptionalString(match.model),
     costUsd: normalizeNumber(match.costUsd),
     inputTokens: normalizeNumber(match.inputTokens),
     cacheReadInputTokens: normalizeNumber(match.cacheReadInputTokens),
@@ -1445,20 +1409,10 @@ async function buildRenderSnapshot(
     codexConfig,
   });
 
-  const snapshotModel =
-    cchSession?.model
-    ?? rollout.model
-    ?? codexConfig.model;
-  const snapshotEffort =
-    rollout.effort
-    ?? codexConfig.modelReasoningEffort;
-
   return {
     config,
     snapshot: {
       visible,
-      model: snapshotModel,
-      effort: snapshotEffort,
       costUsd: usage.costUsd,
       ctxUsed: usage.ctxUsed,
       ctxMax: usage.ctxMax,

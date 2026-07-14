@@ -35,7 +35,7 @@ import {
   type ManagedCodexHookTrustState,
   type ManagedCodexHookOptions,
 } from "./codex-hooks.js";
-import type { HudPreset } from "../hud/types.js";
+import type { HudPreset, StatusLinePreset } from "../hud/types.js";
 import {
   OMX_DISPLAY_NAME,
   OMX_LEGACY_DISPLAY_NAME,
@@ -54,7 +54,7 @@ interface MergeOptions {
   sharedMcpServers?: UnifiedMcpRegistryServer[];
   sharedMcpRegistrySource?: string;
   verbose?: boolean;
-  statusLinePreset?: HudPreset | null;
+  statusLinePreset?: StatusLinePreset | null;
   forceStatusLinePreset?: boolean;
   preserveDeveloperInstructions?: boolean;
   notifyCommand?: string[] | false;
@@ -217,16 +217,17 @@ const STATUS_LINE_FOCUSED_FIELDS: readonly string[] = [
 
 // `full` is currently identical to `focused`. It is reserved for future
 // expansion as Codex CLI adds support for additional status_line fields.
-export const STATUS_LINE_PRESETS: Record<HudPreset, readonly string[]> = {
+export const STATUS_LINE_PRESETS: Record<StatusLinePreset, readonly string[]> = {
+  model: ["model-with-reasoning"],
   minimal: ["model-with-reasoning", "git-branch"],
   focused: STATUS_LINE_FOCUSED_FIELDS,
   full: STATUS_LINE_FOCUSED_FIELDS,
 };
 
-export const DEFAULT_STATUS_LINE_PRESET: HudPreset = "focused";
+export const DEFAULT_STATUS_LINE_PRESET: StatusLinePreset = "model";
 
 export function statusLineForPreset(
-  preset: HudPreset = DEFAULT_STATUS_LINE_PRESET,
+  preset: StatusLinePreset = DEFAULT_STATUS_LINE_PRESET,
 ): string {
   const fields =
     STATUS_LINE_PRESETS[preset] ??
@@ -237,7 +238,7 @@ export function statusLineForPreset(
 const HIDDEN_STATUS_LINE = "status_line = []";
 
 function statusLineForManagedValue(
-  preset: HudPreset | null = DEFAULT_STATUS_LINE_PRESET,
+  preset: StatusLinePreset | null = DEFAULT_STATUS_LINE_PRESET,
 ): string {
   return preset === null ? HIDDEN_STATUS_LINE : statusLineForPreset(preset);
 }
@@ -254,7 +255,7 @@ const OMX_MANAGED_STATUS_LINE_MARKER = "# omx:managed-status-line";
 // upgrades/preset switches still strip the legacy line. Any other preset
 // literal without the marker is assumed user-written.
 const LEGACY_OMX_STATUS_LINE = statusLineForPreset(
-  DEFAULT_STATUS_LINE_PRESET,
+  "focused",
 );
 
 // Set of every status_line literal OMX itself can emit today. Used together
@@ -263,7 +264,7 @@ const LEGACY_OMX_STATUS_LINE = statusLineForPreset(
 // present but the value is something else, the user edited the value (and
 // left the marker untouched) — treat as a user customization and preserve.
 const OMX_MANAGED_STATUS_LINE_VALUES: ReadonlySet<string> = new Set([
-  ...(Object.keys(STATUS_LINE_PRESETS) as HudPreset[]).map((preset) =>
+  ...(Object.keys(STATUS_LINE_PRESETS) as StatusLinePreset[]).map((preset) =>
     statusLineForPreset(preset),
   ),
   HIDDEN_STATUS_LINE,
@@ -2164,7 +2165,7 @@ function extractCustomizedTuiSectionsFromOmxBlocks(config: string): string[] {
 
 function upsertTuiStatusLine(
   config: string,
-  preset: HudPreset | null = DEFAULT_STATUS_LINE_PRESET,
+  preset: StatusLinePreset | null = DEFAULT_STATUS_LINE_PRESET,
   options: { forceStatusLinePreset?: boolean } = {},
 ): {
   cleaned: string;
@@ -2678,7 +2679,7 @@ export function mergeSharedMcpRegistryBlock(
 function getOmxTablesBlock(
   pkgRoot: string,
   includeTui = true,
-  statusLinePreset: HudPreset | null = null,
+  statusLinePreset: StatusLinePreset | null = DEFAULT_STATUS_LINE_PRESET,
   codexHooksFile?: string,
   hookOptions: ManagedCodexHookOptions = {},
   includeFirstPartyMcp = false,

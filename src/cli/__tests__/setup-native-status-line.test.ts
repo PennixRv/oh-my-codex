@@ -24,7 +24,7 @@ async function runSetupInTempDir(
 }
 
 describe("setup native status line management", () => {
-  it("writes an empty [tui].status_line on fresh setup to suppress the Codex default footer", async () => {
+  it("writes the model-only native status line on fresh setup", async () => {
     const wd = await mkdtemp(join(tmpdir(), "omx-setup-native-status-"));
     try {
       await mkdir(join(wd, ".omx", "state"), { recursive: true });
@@ -39,10 +39,10 @@ describe("setup native status line management", () => {
       };
       assert.match(config, /^\[tui\]$/m);
       assert.match(config, /^# omx:managed-status-line$/m);
-      assert.match(config, /^status_line = \[\]$/m);
+      assert.match(config, /^status_line = \["model-with-reasoning"\]$/m);
       assert.doesNotMatch(
         config,
-        /^status_line = \["model-with-reasoning", "context-remaining", "current-dir"\]$/m,
+        /^status_line = \["model-with-reasoning", "git-branch"\]$/m,
       );
       assert.equal(omxConfig.tmuxStatusBar?.cch?.sessionsCacheSeconds, 5);
     } finally {
@@ -73,7 +73,7 @@ describe("setup native status line management", () => {
         "utf-8",
       );
       assert.match(managedRefresh, /^theme = "night"$/m);
-      assert.match(managedRefresh, /^status_line = \[\]$/m);
+      assert.match(managedRefresh, /^status_line = \["model-with-reasoning"\]$/m);
       assert.doesNotMatch(
         managedRefresh,
         /^status_line = \["model-with-reasoning", "git-branch"\]$/m,
@@ -94,7 +94,56 @@ describe("setup native status line management", () => {
       const userOwned = await readFile(join(wd, ".codex", "config.toml"), "utf-8");
       assert.match(userOwned, /^theme = "night"$/m);
       assert.match(userOwned, /^status_line = \["git-branch"\]$/m);
-      assert.doesNotMatch(userOwned, /^status_line = \[\]$/m);
+      assert.doesNotMatch(userOwned, /^status_line = \["model-with-reasoning"\]$/m);
+    } finally {
+      await rm(wd, { recursive: true, force: true });
+    }
+  });
+
+  it("migrates the marked legacy hidden status line to the model-only value", async () => {
+    const wd = await mkdtemp(join(tmpdir(), "omx-setup-native-status-"));
+    try {
+      await mkdir(join(wd, ".omx", "state"), { recursive: true });
+      await mkdir(join(wd, ".codex"), { recursive: true });
+      await writeFile(
+        join(wd, ".codex", "config.toml"),
+        [
+          "[tui]",
+          "# omx:managed-status-line",
+          "status_line = []",
+          "",
+        ].join("\n"),
+      );
+
+      await runSetupInTempDir(wd, { scope: "project" });
+
+      const migrated = await readFile(join(wd, ".codex", "config.toml"), "utf-8");
+      assert.match(migrated, /^status_line = \["model-with-reasoning"\]$/m);
+      assert.doesNotMatch(migrated, /^status_line = \[\]$/m);
+    } finally {
+      await rm(wd, { recursive: true, force: true });
+    }
+  });
+
+  it("migrates the unmarked legacy focused status line to the model-only value", async () => {
+    const wd = await mkdtemp(join(tmpdir(), "omx-setup-native-status-"));
+    try {
+      await mkdir(join(wd, ".omx", "state"), { recursive: true });
+      await mkdir(join(wd, ".codex"), { recursive: true });
+      await writeFile(
+        join(wd, ".codex", "config.toml"),
+        [
+          "[tui]",
+          'status_line = ["model-with-reasoning", "git-branch", "context-remaining", "total-input-tokens", "total-output-tokens", "five-hour-limit", "weekly-limit"]',
+          "",
+        ].join("\n"),
+      );
+
+      await runSetupInTempDir(wd, { scope: "project" });
+
+      const migrated = await readFile(join(wd, ".codex", "config.toml"), "utf-8");
+      assert.match(migrated, /^status_line = \["model-with-reasoning"\]$/m);
+      assert.doesNotMatch(migrated, /"weekly-limit"/);
     } finally {
       await rm(wd, { recursive: true, force: true });
     }

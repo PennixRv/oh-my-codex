@@ -75,6 +75,20 @@ test('parseNpmPackJsonOutput ignores prepack logs before npm pack JSON', () => {
   assert.deepEqual(parsed, [{ filename: 'oh-my-codex-0.15.0.tgz' }]);
 });
 
+test('parseNpmPackJsonOutput accepts npm map results after prepack logs', () => {
+  const parsed = parseNpmPackJsonOutput([
+    '[sync-plugin-mirror] synced 29 canonical skill directories and plugin metadata',
+    '{',
+    '  "oh-my-codex-pennix": {',
+    '    "filename": "oh-my-codex-pennix-0.18.86.tgz"',
+    '  }',
+    '}',
+    '',
+  ].join('\n'));
+
+  assert.deepEqual(parsed, [{ filename: 'oh-my-codex-pennix-0.18.86.tgz' }]);
+});
+
 test('resolveGitCommonDir resolves relative git common dir output against the repo root', () => {
   const commonDir = resolveGitCommonDir('/tmp/worktree', () => ({
     status: 0,

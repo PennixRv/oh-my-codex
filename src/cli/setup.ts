@@ -105,7 +105,7 @@ import {
 	preserveUserOmxPolicyBlocks,
 	upsertManagedAgentsBlock,
 } from "../utils/agents-md.js";
-import { DEFAULT_HUD_CONFIG, type HudPreset } from "../hud/types.js";
+import { DEFAULT_HUD_CONFIG, type StatusLinePreset } from "../hud/types.js";
 import {
 	SETUP_INSTALL_MODES,
 	SETUP_MCP_MODES,
@@ -145,7 +145,7 @@ import { shouldSourceLiveTmuxStatusForCurrentProcess } from "../tmux-status/inst
 async function resolveStatusLinePresetForSetup(
 	projectRoot: string,
 	options: Pick<SetupOptions, "force">,
-): Promise<HudPreset | undefined> {
+): Promise<StatusLinePreset | undefined> {
 	if (options.force) {
 		return DEFAULT_HUD_CONFIG.statusLine.preset;
 	}
@@ -156,7 +156,12 @@ async function resolveStatusLinePresetForSetup(
 			statusLine?: { preset?: unknown };
 		};
 		const preset = raw?.statusLine?.preset;
-		if (preset === "minimal" || preset === "focused" || preset === "full") {
+		if (
+			preset === "model"
+			|| preset === "minimal"
+			|| preset === "focused"
+			|| preset === "full"
+		) {
 			return preset;
 		}
 	} catch {
@@ -4472,7 +4477,7 @@ async function updateManagedConfig(
 	summary: SetupCategorySummary,
 	backupContext: SetupBackupContext,
 	options: Pick<SetupOptions, "dryRun" | "verbose" | "modelUpgradePrompt"> & {
-		statusLinePreset?: HudPreset | null;
+		statusLinePreset?: StatusLinePreset | null;
 		forceStatusLinePreset?: boolean;
 		codexHookFeatureFlag: CodexHookFeatureFlag;
 	},
@@ -4518,7 +4523,7 @@ async function updateManagedConfig(
 		sharedMcpServers: sharedMcpRegistry.servers,
 		sharedMcpRegistrySource: sharedMcpRegistry.sourcePath,
 		verbose: options.verbose,
-		statusLinePreset: null, // Pennix fork: hide Codex native status line
+		statusLinePreset: options.statusLinePreset,
 		forceStatusLinePreset: true, // rewrite only OMX-managed lines; preserve user customizations
 		notifyCommand: notifyPlan.notifyCommand,
 		includeFirstPartyMcp: mcpMode === "compat",

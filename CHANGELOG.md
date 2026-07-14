@@ -4,6 +4,15 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+## [0.18.86] - 2026-07-14
+
+Patch release that moves model and reasoning display to Codex's native footer while retaining OMX's focused tmux operational status line. New and OMX-managed Codex configurations now use the native model-only status line, and general OMX role defaults move to `gpt-5.6-terra`.
+
+- Native status-line setup and launch repair now write `status_line = ["model-with-reasoning"]` for OMX-managed values, migrate known historical OMX footer presets, and preserve user-owned status-line customizations.
+- The tmux status renderer no longer duplicates model or effort. It continues to provide cost, context, token/cache, team, session, path, git, and time data.
+- Default frontier and standard role routes, generated native-agent TOMLs, `omx agents add`, and doctor guidance now use `gpt-5.6-terra`; explicit mini and spark routes remain unchanged.
+- `npm pack --json` processing now supports both legacy array output and the npm 12 package-name mapping output used by packed-install and packaging-contract validation.
+
 ## [0.18.85] - 2026-07-10
 
 Patch release for the Pennix fork plugin-mode hook semantics correction line: plugin setup now keeps Codex hook feature flags on the canonical `hooks`/`codex_hooks` path, removes setup-managed `hooks.json` wrappers from the user Codex home, refreshes OMX-managed `AGENTS.md` defaults when they are already OMX-generated, and preserves user `developer_instructions` plus hidden `status_line = []` semantics during launch-time config repair.

@@ -187,8 +187,8 @@ describe('team model contract', () => {
   it('maps worker roles to configured default model lanes', () => {
     withIsolatedDefaultModelEnv(() => {
       assert.equal(resolveAgentDefaultModel('explore'), expectedLowComplexityModel());
-      assert.equal(resolveAgentDefaultModel('writer'), 'gpt-5.5');
-      assert.equal(resolveAgentDefaultModel('executor'), 'gpt-5.5');
+      assert.equal(resolveAgentDefaultModel('writer'), 'gpt-5.6-terra');
+      assert.equal(resolveAgentDefaultModel('executor'), 'gpt-5.6-terra');
       assert.equal(resolveAgentDefaultModel('architect'), 'gpt-5.4-mini');
       assert.equal(resolveAgentDefaultModel('does-not-exist'), undefined);
     });

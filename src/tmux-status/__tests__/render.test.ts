@@ -17,8 +17,6 @@ function makeSnapshot(
 ): TmuxStatusRenderSnapshot {
   return {
     visible: true,
-    model: 'gpt-5.4',
-    effort: 'xhigh',
     costUsd: 0.125,
     ctxUsed: 42000,
     ctxMax: 250000,
@@ -34,7 +32,7 @@ function makeSnapshot(
 }
 
 describe('tmux status left renderer', () => {
-  it('renders the fixed model metrics for leader panes', () => {
+  it('renders the fixed telemetry metrics for leader panes', () => {
     const rendered = renderTmuxStatusLeft(
       makeSnapshot({
         teamSupplement: {
@@ -47,10 +45,8 @@ describe('tmux status left renderer', () => {
       'nord',
     );
 
-    assert.match(rendered, /Model/);
-    assert.match(rendered, /gpt-5\.4/);
-    assert.match(rendered, /Effort/);
-    assert.match(rendered, /xhigh/);
+    assert.doesNotMatch(rendered, /Model/);
+    assert.doesNotMatch(rendered, /Effort/);
     assert.match(rendered, /Cost/);
     assert.match(rendered, /\$0\.13/);
     assert.match(rendered, /Ctx/);
@@ -168,10 +164,7 @@ describe('tmux status rollout helpers', () => {
       }),
       JSON.stringify({
         type: 'turn_context',
-        payload: {
-          model: 'gpt-5.4',
-          effort: 'xhigh',
-        },
+        payload: {},
       }),
       JSON.stringify({
         type: 'event_msg',
@@ -196,8 +189,6 @@ describe('tmux status rollout helpers', () => {
     ]);
 
     assert.equal(snapshot.sessionId, '019f20ec-cab5-7e82-bf5f-faee5753c79f');
-    assert.equal(snapshot.model, 'gpt-5.4');
-    assert.equal(snapshot.effort, 'xhigh');
     assert.equal(snapshot.ctxUsed, 174_139);
     assert.equal(snapshot.ctxMax, 258_400);
     assert.equal(snapshot.inputTokens, 2_862_682);

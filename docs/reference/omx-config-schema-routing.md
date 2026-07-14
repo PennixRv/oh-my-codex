@@ -60,13 +60,13 @@ The model-routing reader supports `env`, `models`, and the role-reasoning overri
     "critic": "xhigh"
   },
   "env": {
-    "OMX_DEFAULT_FRONTIER_MODEL": "gpt-5.5",
+    "OMX_DEFAULT_FRONTIER_MODEL": "gpt-5.6-terra",
     "OMX_DEFAULT_STANDARD_MODEL": "gpt-5.4-mini",
     "OMX_DEFAULT_SPARK_MODEL": "gpt-5.3-codex-spark"
   },
   "models": {
-    "default": "gpt-5.5",
-    "team": "gpt-5.5",
+    "default": "gpt-5.6-terra",
+    "team": "gpt-5.6-terra",
     "team_low_complexity": "gpt-5.3-codex-spark"
   }
 }
@@ -138,7 +138,7 @@ The main default resolves in this order:
 1. Shell `OMX_DEFAULT_FRONTIER_MODEL`
 2. `.omx-config.json` `env.OMX_DEFAULT_FRONTIER_MODEL`
 3. Active Codex `config.toml` root `model`
-4. Built-in default: `gpt-5.5`
+4. Built-in default: `gpt-5.6-terra`
 
 ### Mode-specific model lookup
 
@@ -148,7 +148,7 @@ When code asks for `getModelForMode(mode)`, the mode model resolves in this orde
 2. `.omx-config.json` `models.default`
 3. Main/frontier default above
 
-Example: with `models.team = "gpt-5.5"` and `models.default = "gpt-5.4-mini"`, `team` uses `gpt-5.5`; a mode without its own key uses `gpt-5.4-mini`.
+Example: with `models.team = "gpt-5.6-terra"` and `models.default = "gpt-5.4-mini"`, `team` uses `gpt-5.6-terra`; a mode without its own key uses `gpt-5.4-mini`.
 
 ### Standard-lane agents
 
@@ -229,13 +229,13 @@ This keeps orchestration on the frontier default, routes standard workers to a c
 ```json
 {
   "env": {
-    "OMX_DEFAULT_FRONTIER_MODEL": "gpt-5.5",
+    "OMX_DEFAULT_FRONTIER_MODEL": "gpt-5.6-terra",
     "OMX_DEFAULT_STANDARD_MODEL": "gpt-5.4-mini",
     "OMX_DEFAULT_SPARK_MODEL": "gpt-5.3-codex-spark"
   },
   "models": {
     "default": "gpt-5.4-mini",
-    "team": "gpt-5.5",
+    "team": "gpt-5.6-terra",
     "team_low_complexity": "gpt-5.3-codex-spark"
   }
 }
@@ -252,14 +252,14 @@ This keeps standard agents inheriting the frontier model by omitting `OMX_DEFAUL
     "critic": "xhigh"
   },
   "env": {
-    "OMX_DEFAULT_FRONTIER_MODEL": "gpt-5.5",
+    "OMX_DEFAULT_FRONTIER_MODEL": "gpt-5.6-terra",
     "OMX_DEFAULT_SPARK_MODEL": "gpt-5.3-codex-spark"
   },
   "models": {
-    "default": "gpt-5.5",
-    "team": "gpt-5.5",
-    "autopilot": "gpt-5.5",
-    "ralph": "gpt-5.5",
+    "default": "gpt-5.6-terra",
+    "team": "gpt-5.6-terra",
+    "autopilot": "gpt-5.6-terra",
+    "ralph": "gpt-5.6-terra",
     "team_low_complexity": "gpt-5.3-codex-spark"
   }
 }

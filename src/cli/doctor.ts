@@ -1206,7 +1206,7 @@ function formatContextRecommendationWarning(
 ): string {
 	return `${configuredValues.join(
 		", ",
-	)} exceeds the OMX setup recommendation for gpt-5.5 (${recommendedContextWindow} / ${recommendedAutoCompactLimit}); doctor does not rewrite user config, so lower these values or verify your active Codex runtime/provider behavior if this customization is intentional`;
+	)} exceeds the OMX setup recommendation for gpt-5.6-terra (${recommendedContextWindow} / ${recommendedAutoCompactLimit}); doctor does not rewrite user config, so lower these values or verify your active Codex runtime/provider behavior if this customization is intentional`;
 }
 
 async function checkModelContextRecommendation(

@@ -6,19 +6,12 @@ import { arch, platform } from 'node:os';
 import { delimiter, dirname, join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { spawnSync } from 'node:child_process';
+import { parseNpmPackJsonOutput } from '../../scripts/smoke-packed-install.js';
 
 type PackageJson = {
   bin?: string | Record<string, string>;
   scripts?: Record<string, string>;
   files?: string[];
-};
-
-type NpmPackDryRunFile = {
-  path: string;
-};
-
-type NpmPackDryRunResult = {
-  files?: NpmPackDryRunFile[];
 };
 
 describe('sparkshell packaging scaffold', () => {
@@ -107,7 +100,7 @@ describe('sparkshell packaging scaffold', () => {
       });
       assert.equal(packed.status, 0, packed.stderr || packed.stdout);
 
-      const results = JSON.parse(packed.stdout) as NpmPackDryRunResult[];
+      const results = parseNpmPackJsonOutput(packed.stdout);
       const packedFiles = new Set((results[0]?.files ?? []).map((file) => file.path));
 
       assert.equal(packedFiles.has('dist/scripts/build-sparkshell.js'), true);

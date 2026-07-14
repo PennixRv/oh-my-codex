@@ -217,13 +217,40 @@ function smokeInstalledNativeHookDist(prefixDir: string): void {
   }
 }
 
-export function parseNpmPackJsonOutput(stdout: string): Array<{ filename: string }> {
-  const start = stdout.lastIndexOf('\n[');
-  const jsonText = (start >= 0 ? stdout.slice(start + 1) : stdout).trim();
-  if (!jsonText.startsWith('[')) {
-    throw new Error(`npm pack did not return JSON output: ${stdout.trim()}`);
-  }
-  return JSON.parse(jsonText) as Array<{ filename: string }>;
+export type NpmPackJsonFile = {
+	path: string;
+	mode?: number;
+};
+
+export type NpmPackJsonResult = {
+	filename?: string;
+	files?: NpmPackJsonFile[];
+};
+
+function isNpmPackJsonResult(value: unknown): value is NpmPackJsonResult {
+	return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+export function parseNpmPackJsonOutput(stdout: string): NpmPackJsonResult[] {
+	const lines = stdout.trim().split(/\r?\n/);
+	for (let startIndex = 0; startIndex < lines.length; startIndex += 1) {
+		const jsonText = lines.slice(startIndex).join('\n').trim();
+		if (!jsonText.startsWith('[') && !jsonText.startsWith('{')) continue;
+
+		try {
+			const parsed = JSON.parse(jsonText) as unknown;
+			const results = Array.isArray(parsed)
+				? parsed
+				: isNpmPackJsonResult(parsed)
+					? Object.values(parsed)
+					: null;
+			if (results && results.every(isNpmPackJsonResult)) return results;
+		} catch {
+			continue;
+		}
+	}
+
+	throw new Error(`npm pack did not return JSON output: ${stdout.trim()}`);
 }
 
 async function main(): Promise<void> {

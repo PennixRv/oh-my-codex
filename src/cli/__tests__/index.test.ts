@@ -2204,7 +2204,7 @@ describe.skip("project launch scope helpers", () => {
     }
   });
 
-  it("resolveLaunchConfigRepairOptions preserves developer_instructions and hidden status line semantics", async () => {
+  it("resolveLaunchConfigRepairOptions preserves developer_instructions and the model-only status line", async () => {
     const wd = await mkdtemp(join(tmpdir(), "omx-launch-scope-"));
     try {
       const configPath = join(wd, "global-codex", "config.toml");
@@ -2222,7 +2222,7 @@ describe.skip("project launch scope helpers", () => {
       const options = await resolveLaunchConfigRepairOptions(wd, configPath);
 
       assert.equal(options.includeFirstPartyMcp, false);
-      assert.equal(options.statusLinePreset, null);
+      assert.equal(options.statusLinePreset, "model");
       assert.equal(options.preserveDeveloperInstructions, true);
     } finally {
       await rm(wd, { recursive: true, force: true });

@@ -1,10 +1,9 @@
 /**
  * Tests for the [tui].status_line preset feature.
  *
- * The OMX default for [tui].status_line is now derived from a HudPreset
- * (minimal | focused | full). The default preset is "focused", which must
- * remain byte-identical to the legacy hard-coded array so existing installs
- * see no behavior change after this feature lands.
+ * The OMX default for [tui].status_line is the model-only StatusLinePreset.
+ * The older minimal, focused, and full HUD presets remain available for
+ * explicit operator configuration and legacy configuration migration.
  */
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
@@ -19,20 +18,25 @@ import {
   DEFAULT_STATUS_LINE_PRESET,
 } from "../generator.js";
 
-const LEGACY_DEFAULT_STATUS_LINE =
+const DEFAULT_STATUS_LINE = 'status_line = ["model-with-reasoning"]';
+const LEGACY_FOCUSED_STATUS_LINE =
   'status_line = ["model-with-reasoning", "git-branch", "context-remaining", "total-input-tokens", "total-output-tokens", "five-hour-limit", "weekly-limit"]';
 
 describe.skip("status_line preset matrix", () => {
-  it("default preset is 'focused'", () => {
-    assert.equal(DEFAULT_STATUS_LINE_PRESET, "focused");
+  it("default preset is 'model'", () => {
+    assert.equal(DEFAULT_STATUS_LINE_PRESET, "model");
   });
 
-  it("focused preset is byte-identical to the legacy hard-coded default", () => {
-    assert.equal(statusLineForPreset("focused"), LEGACY_DEFAULT_STATUS_LINE);
+  it("focused preset remains byte-identical to the legacy hard-coded value", () => {
+    assert.equal(statusLineForPreset("focused"), LEGACY_FOCUSED_STATUS_LINE);
   });
 
-  it("calling statusLineForPreset() with no argument returns the focused string", () => {
-    assert.equal(statusLineForPreset(), LEGACY_DEFAULT_STATUS_LINE);
+  it("calling statusLineForPreset() with no argument returns the model-only string", () => {
+    assert.equal(statusLineForPreset(), DEFAULT_STATUS_LINE);
+  });
+
+  it("model preset emits only model-with-reasoning", () => {
+    assert.equal(statusLineForPreset("model"), DEFAULT_STATUS_LINE);
   });
 
   it("minimal preset emits exactly model-with-reasoning and git-branch", () => {
@@ -46,10 +50,10 @@ describe.skip("status_line preset matrix", () => {
     assert.equal(statusLineForPreset("full"), statusLineForPreset("focused"));
   });
 
-  it("STATUS_LINE_PRESETS exposes every HudPreset key", () => {
+  it("STATUS_LINE_PRESETS exposes every StatusLinePreset key", () => {
     assert.deepEqual(
       Object.keys(STATUS_LINE_PRESETS).sort(),
-      ["focused", "full", "minimal"],
+      ["focused", "full", "minimal", "model"],
     );
   });
 
@@ -62,12 +66,12 @@ describe.skip("status_line preset matrix", () => {
 });
 
 describe.skip("buildMergedConfig with statusLinePreset", () => {
-  it("emits the focused (legacy default) status_line when no preset is passed", () => {
+  it("emits the model-only status_line when no preset is passed", () => {
     const wd = "/tmp/omx-preset-noop";
     const toml = buildMergedConfig("", wd, {});
     assert.match(
       toml,
-      /^status_line = \["model-with-reasoning", "git-branch", "context-remaining", "total-input-tokens", "total-output-tokens", "five-hour-limit", "weekly-limit"\]$/m,
+      /^status_line = \["model-with-reasoning"\]$/m,
     );
   });
 
@@ -111,10 +115,10 @@ describe.skip("buildMergedConfig with statusLinePreset", () => {
     const wd = await mkdtemp(join(tmpdir(), "omx-preset-upgrade-"));
     try {
       const configPath = join(wd, "config.toml");
-      // First populate with the focused (legacy) default via a no-preset merge.
+      // First populate with the model-only default via a no-preset merge.
       await mergeConfig(configPath, wd, {});
       let toml = await readFile(configPath, "utf-8");
-      assert.match(toml, /^status_line = \["model-with-reasoning", "git-branch", "context-remaining"/m);
+      assert.match(toml, /^status_line = \["model-with-reasoning"\]$/m);
 
       // Now request minimal — the OMX-managed status_line should be replaced
       // because it is detected as a known preset value, not a user override.

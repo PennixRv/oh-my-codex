@@ -401,7 +401,7 @@ describe.skip("omx setup refresh summary and dry-run behavior", () => {
     }
   });
 
-  it("offers an upgrade from gpt-5.3-codex to gpt-5.5 when accepted", async () => {
+  it("offers an upgrade from gpt-5.3-codex to gpt-5.6-terra when accepted", async () => {
     const wd = await mkdtemp(join(tmpdir(), "omx-setup-refresh-"));
     try {
       await mkdir(join(wd, ".omx", "state"), { recursive: true });
@@ -417,7 +417,7 @@ describe.skip("omx setup refresh summary and dry-run behavior", () => {
         modelUpgradePrompt: async (currentModel, targetModel) => {
           promptCalls += 1;
           assert.equal(currentModel, "gpt-5.3-codex");
-          assert.equal(targetModel, "gpt-5.5");
+          assert.equal(targetModel, "gpt-5.6-terra");
           return true;
         },
       });

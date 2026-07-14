@@ -55,6 +55,12 @@ function isValidPreset(value: unknown): value is ResolvedHudConfig['preset'] {
   return value === 'minimal' || value === 'focused' || value === 'full';
 }
 
+function isValidStatusLinePreset(
+  value: unknown,
+): value is ResolvedHudConfig['statusLine']['preset'] {
+  return isValidPreset(value) || value === 'model';
+}
+
 function isValidGitDisplay(value: unknown): value is HudGitDisplay {
   return value === 'branch' || value === 'repo-branch';
 }
@@ -100,7 +106,7 @@ export function normalizeHudConfig(raw: HudConfig | null | undefined): ResolvedH
   }
 
   if (raw.statusLine && typeof raw.statusLine === 'object') {
-    if (isValidPreset(raw.statusLine.preset)) {
+    if (isValidStatusLinePreset(raw.statusLine.preset)) {
       normalized.statusLine.preset = raw.statusLine.preset;
     }
   }

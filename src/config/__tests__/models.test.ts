@@ -83,6 +83,10 @@ describe('getModelForMode', () => {
     await writeFile(join(tempDir, '.omx-config.json'), JSON.stringify(config));
   }
 
+  it('uses gpt-5.6-terra as the unconfigured frontier default', () => {
+    assert.equal(DEFAULT_FRONTIER_MODEL, 'gpt-5.6-terra');
+  });
+
   it('returns frontier default when config file does not exist', () => {
     assert.equal(getModelForMode('team'), DEFAULT_FRONTIER_MODEL);
   });

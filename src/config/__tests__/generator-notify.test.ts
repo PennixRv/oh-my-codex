@@ -16,7 +16,7 @@ describe.skip('config generator', () => {
       // Top-level keys must appear before the first [table] header
       const notifyIdx = toml.indexOf('notify =');
       const devInstrIdx = toml.indexOf('developer_instructions =');
-      const modelIdx = toml.indexOf('model = "gpt-5.5"');
+      const modelIdx = toml.indexOf('model = "gpt-5.6-terra"');
       const seededStartIdx = toml.indexOf(
         '# oh-my-codex seeded behavioral defaults (uninstall removes unchanged defaults)',
       );
@@ -66,7 +66,7 @@ describe.skip('config generator', () => {
     }
   });
 
-  it('seeds gpt-5.5 model and context defaults for fresh configs', async () => {
+  it('seeds gpt-5.6-terra model and context defaults for fresh configs', async () => {
     const wd = await mkdtemp(join(tmpdir(), 'omx-config-gen-'));
     try {
       const configPath = join(wd, 'config.toml');
@@ -102,7 +102,7 @@ describe.skip('config generator', () => {
       assert.match(toml, /^model_auto_compact_token_limit = 200000$/m);
       assert.match(toml, /^# End oh-my-codex seeded behavioral defaults$/m);
 
-      const modelIdx = toml.indexOf('model = "gpt-5.5"');
+      const modelIdx = toml.indexOf('model = "gpt-5.6-terra"');
       const featuresIdx = toml.indexOf('[features]');
       assert.ok(modelIdx >= 0 && modelIdx < featuresIdx, 'seeded model must come before [features]');
     } finally {
@@ -192,13 +192,13 @@ describe.skip('config generator', () => {
     }
   });
 
-  it('seeds only the missing gpt-5.5 context key while preserving an existing partner value', async () => {
+  it('seeds only the missing gpt-5.6-terra context key while preserving an existing partner value', async () => {
     const wd = await mkdtemp(join(tmpdir(), 'omx-config-gen-'));
     try {
       const configPath = join(wd, 'config.toml');
       await writeFile(
         configPath,
-        ['model = "gpt-5.5"', 'model_context_window = 640000', ''].join('\n'),
+        ['model = "gpt-5.6-terra"', 'model_context_window = 640000', ''].join('\n'),
       );
 
       await mergeConfig(configPath, wd);
@@ -212,7 +212,7 @@ describe.skip('config generator', () => {
     }
   });
 
-  it('does not seed 250k context keys for non-gpt-5.5 models', async () => {
+  it('does not seed 250k context keys for non-gpt-5.6-terra models', async () => {
     const wd = await mkdtemp(join(tmpdir(), 'omx-config-gen-'));
     try {
       const configPath = join(wd, 'config.toml');

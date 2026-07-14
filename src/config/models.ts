@@ -19,12 +19,12 @@
  *   },
  *   "roleModels": {
  *     "architect": {
- *       "model": "gpt-5.4",
+ *       "model": "gpt-5.6-terra",
  *       "reasoning": "xhigh"
  *     }
  *   },
  *   "agentModels": {
- *     "architect": "gpt-5.4"
+ *     "architect": "gpt-5.6-terra"
  *   }
  * }
  *
@@ -106,7 +106,7 @@ function readModelsBlock(codexHomeOverride?: string): ModelsConfig | null {
   return null;
 }
 
-export const DEFAULT_FRONTIER_MODEL = 'gpt-5.5';
+export const DEFAULT_FRONTIER_MODEL = 'gpt-5.6-terra';
 export const DEFAULT_STANDARD_MODEL = 'gpt-5.4-mini';
 export const DEFAULT_SPARK_MODEL = 'gpt-5.3-codex-spark';
 export const DEFAULT_TEAM_CHILD_MODEL = DEFAULT_STANDARD_MODEL;

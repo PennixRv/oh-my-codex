@@ -1,6 +1,6 @@
 # Wiki Index
 
-> 42 pages | Last updated: 2026-07-08T15:53:37.773Z
+> 43 pages | Last updated: 2026-07-10T06:49:58.000Z
 
 ## architecture
 
@@ -21,6 +21,7 @@
 ## debugging
 
 - [AgentMemory 0.9.27-r1 发布与 NAS 上线记录 2026-07-08](agentmemory-0-9-27-r1-发布与-nas-上线记录-2026-07-08.md) — # AgentMemory 0.9.27-r1 发布与 NAS 上线记录 2026-07-08
+- [AgentMemory GPT-5.4-mini 故障归因与 Qwen3-Embedding-8B 切换动作 2026-07-10](agentmemory-gpt-5-4-mini-incident-and-qwen3-embedding-8b-switch-plan-2026-07-10.md) — # AgentMemory GPT-5.4-mini 故障归因与 Qwen3-Embedding-8B 切换动作 2026-07-10
 - [OMX 0.18.41 release-prep block summary](omx-0-18-41-release-prep-block-summary-2026-06-28.md) — # OMX 0.18.41 release-prep block summary
 - [OMX leader mailbox notification chain analysis 2026-06-28](omx-leader-mailbox-notification-chain-analysis-2026-06-28.md) — # OMX leader mailbox notification chain analysis 2026-06-28
 - [OMX team lifecycle restart smoke failures 2026-06-24](omx-team-lifecycle-restart-smoke-failures-2026-06-24.md) — # OMX team lifecycle restart smoke failures 2026-06-24

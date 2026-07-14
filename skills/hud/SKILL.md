@@ -46,14 +46,14 @@ The OMX HUD uses a two-layer architecture:
 `omx setup` automatically configures both layers:
 - Adds `[tui] status_line` to `~/.codex/config.toml` (Layer 1)
 - Writes `.omx/hud-config.json` with default preset (Layer 2)
-- Default preset is `focused`; if HUD/statusline changes do not appear, restart Codex CLI once.
+- The HUD preset defaults to `focused`; the native status line defaults to model-only. Restart Codex CLI once if either change does not appear.
 
 ## Layer 1: Codex Built-in StatusLine
 
 Configured in `~/.codex/config.toml`:
 ```toml
 [tui]
-status_line = ["model-with-reasoning", "git-branch", "context-remaining"]
+status_line = ["model-with-reasoning"]
 ```
 
 Available built-in items (Codex CLI v0.101.0+):

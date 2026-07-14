@@ -603,7 +603,7 @@ describe('runtime', () => {
         { OMX_TEAM_WORKER_LAUNCH_ARGS: '--no-alt-screen' },
         'executor',
       );
-      assert.deepEqual(args, ['--no-alt-screen', '--model', 'gpt-5.5']);
+    assert.deepEqual(args, ['--no-alt-screen', '--model', 'gpt-5.6-terra']);
     });
   });
 
@@ -616,7 +616,7 @@ describe('runtime', () => {
         resolveAgentReasoningEffort('executor'),
         'codex',
       );
-      assert.deepEqual(args, ['--no-alt-screen', '-c', 'model_reasoning_effort="medium"', '--model', 'gpt-5.5']);
+    assert.deepEqual(args, ['--no-alt-screen', '-c', 'model_reasoning_effort="medium"', '--model', 'gpt-5.6-terra']);
     });
   });
 
@@ -753,8 +753,8 @@ describe('runtime', () => {
           'high',
           'codex',
         );
-        assert.deepEqual(lowArgs, ['--no-alt-screen', '-c', 'model_reasoning_effort="low"', '--model', 'gpt-5.5']);
-        assert.deepEqual(highArgs, ['--no-alt-screen', '-c', 'model_reasoning_effort="high"', '--model', 'gpt-5.5']);
+    assert.deepEqual(lowArgs, ['--no-alt-screen', '-c', 'model_reasoning_effort="low"', '--model', 'gpt-5.6-terra']);
+    assert.deepEqual(highArgs, ['--no-alt-screen', '-c', 'model_reasoning_effort="high"', '--model', 'gpt-5.6-terra']);
       });
     } finally {
       console.log = originalLog;
@@ -879,7 +879,7 @@ describe('runtime', () => {
         'low',
         'gemini',
       );
-      assert.deepEqual(codexArgs, ['--no-alt-screen', '-c', 'model_reasoning_effort="high"', '--model', 'gpt-5.5']);
+    assert.deepEqual(codexArgs, ['--no-alt-screen', '-c', 'model_reasoning_effort="high"', '--model', 'gpt-5.6-terra']);
       assert.deepEqual(claudeArgs, ['--no-alt-screen', '-c', 'model_reasoning_effort="low"', '--model', 'claude-3-7-sonnet']);
       assert.deepEqual(geminiArgs, ['-c', 'model_reasoning_effort="low"', '--model', 'gemini-2.0-pro']);
     } finally {
@@ -4172,7 +4172,7 @@ process.on('SIGTERM', () => process.exit(0));
       assert.match(worker2Instructions, /You are operating as the \*\*writer\*\* role/);
       assert.match(worker2Instructions, /You are Writer\./);
       assert.doesNotMatch(worker2Instructions, /exact gpt-5\.4-mini model/);
-      assert.match(worker2Instructions, /resolved_model: gpt-5\.5/);
+      assert.match(worker2Instructions, /resolved_model: gpt-5\.6-terra/);
 
       let worker1Args: string[] | null = null;
       let worker2Args: string[] | null = null;
@@ -4193,10 +4193,10 @@ process.on('SIGTERM', () => process.exit(0));
       const worker2Joined = worker2Args!.join(' ');
       assert.match(worker1Joined, /model_reasoning_effort="medium"/);
       assert.match(worker1Joined, /model_instructions_file=.*worker-1\/AGENTS\.md/);
-      assert.match(worker1Joined, /--model gpt-5\.5/);
+      assert.match(worker1Joined, /--model gpt-5\.6-terra/);
       assert.match(worker2Joined, /model_reasoning_effort="xhigh"/);
       assert.match(worker2Joined, /model_instructions_file=.*worker-2\/AGENTS\.md/);
-      assert.match(worker2Joined, /--model gpt-5\.5/);
+      assert.match(worker2Joined, /--model gpt-5\.6-terra/);
 
       await shutdownTeam(runtime.teamName, cwd, { force: true });
       runtime = null;

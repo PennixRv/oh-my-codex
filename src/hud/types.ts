@@ -142,6 +142,9 @@ export interface HudRenderContext {
 /** HUD preset names */
 export type HudPreset = 'minimal' | 'focused' | 'full';
 
+/** Native Codex status-line preset names. */
+export type StatusLinePreset = HudPreset | 'model';
+
 export type HudGitDisplay = 'branch' | 'repo-branch';
 
 export interface HudGitConfig {
@@ -152,7 +155,7 @@ export interface HudGitConfig {
 
 /** Status line preset configuration (drives [tui].status_line in ~/.codex/config.toml) */
 export interface HudStatusLineConfig {
-  preset?: HudPreset;
+  preset?: StatusLinePreset;
 }
 
 /** HUD configuration stored in .omx/hud-config.json */
@@ -170,7 +173,7 @@ export interface ResolvedHudGitConfig {
 }
 
 export interface ResolvedHudStatusLineConfig {
-  preset: HudPreset;
+  preset: StatusLinePreset;
 }
 
 export interface ResolvedHudConfig {
@@ -188,7 +191,7 @@ export const DEFAULT_HUD_CONFIG: ResolvedHudConfig = {
     display: 'repo-branch',
   },
   statusLine: {
-    preset: 'focused',
+    preset: 'model',
   },
 };
 
