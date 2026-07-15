@@ -1,15 +1,15 @@
-# oh-my-codex-pennix v0.18.89
+# oh-my-codex-pennix v0.18.90
 
 > Release notes template for the Pennix fork. The tag workflow regenerates this file into the final GitHub release body.
 
 ## Summary
 
-`v0.18.89` makes the managed OMX tmux status bar use concise lowercase telemetry labels and the active Codex session identity.
+`v0.18.90` prevents setup refreshes from discarding user-authored guidance that precedes an otherwise generated AGENTS.md.
 
 ## Fix
 
-- All tmux telemetry labels render in lowercase; `cost` follows `ctx`, `total`, and `cache` as the last left telemetry field without a `$` prefix, while existing colors, separators, and outer gutters remain unchanged.
-- `sess` now uses the first segment of the complete active Codex UUID and leaves the value unknown when no complete UUID is available; it never falls back to an AOE/tmux session name.
+- Setup preserves a prepended user preamble only when the rest of the existing prefix exactly matches the regenerated managed prefix, so stale edits inside OMX-owned guidance are not retained as user policy.
+- Explicit user policy blocks remain preserved without duplication, and plugin-mode setup now has regression coverage for an unmarked Context Continuity preamble during forced defaults refresh.
 
 ## Validation
 
@@ -17,10 +17,10 @@
 - `npm run lint`
 - `npm pack --dry-run`
 - `git diff --check`
-- `node dist/scripts/check-version-sync.js --tag v0.18.89`
+- `node dist/scripts/check-version-sync.js --tag v0.18.90`
 
 ## Contributors
 
 Thanks to the contributors who made this release possible.
 
-**Full Changelog**: [`v0.18.88...v0.18.89`](https://github.com/PennixRv/oh-my-codex/compare/v0.18.88...v0.18.89)
+**Full Changelog**: [`v0.18.89...v0.18.90`](https://github.com/PennixRv/oh-my-codex/compare/v0.18.89...v0.18.90)

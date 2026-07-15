@@ -4,6 +4,14 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+## [0.18.90] - 2026-07-15
+
+Patch release for generated AGENTS.md refresh safety. Plugin and legacy setup refreshes now preserve user-authored guidance prepended to an otherwise generated AGENTS.md, including unmarked Context Continuity contracts, while continuing to refresh the managed defaults and model table.
+
+- Setup retains a preamble only when the remaining old prefix exactly matches the regenerated managed prefix, avoiding accidental retention of stale edits within OMX-owned guidance.
+- Explicit `<!-- USER:OMX:POLICY:* -->` blocks remain preserved without duplication.
+- Plugin-mode regression coverage now recreates a stale generated AGENTS.md with an unmarked continuity preamble and verifies that a forced refresh preserves the preamble while replacing obsolete model defaults.
+
 ## [0.18.89] - 2026-07-15
 
 Patch release for tmux-status identity and telemetry label clarity. The managed OMX tmux status bar now renders lowercase labels, moves `cost` to the end of the left telemetry group without a currency symbol, and shows the first UUID segment of the active Codex session instead of the enclosing AOE/tmux session name.
