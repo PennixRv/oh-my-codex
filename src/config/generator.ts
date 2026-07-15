@@ -131,8 +131,9 @@ export const DEFAULT_SETUP_MODEL_AUTO_COMPACT_TOKEN_LIMIT = 200000;
 
 export function getModelContextRecommendation(
   model: string,
+  modelProvider?: string,
 ): ModelContextRecommendation | null {
-  if (model !== DEFAULT_SETUP_MODEL) return null;
+  if (model !== DEFAULT_SETUP_MODEL || modelProvider?.trim()) return null;
 
   return {
     model,

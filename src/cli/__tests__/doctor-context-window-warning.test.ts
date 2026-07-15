@@ -132,6 +132,30 @@ model_auto_compact_token_limit = 200000
     );
   });
 
+  it('does not apply the default-provider recommendation to an explicit cch provider', async () => {
+    await withConfig(
+      `
+model = "gpt-5.6-terra"
+model_provider = "cch"
+model_context_window = 275000
+model_auto_compact_token_limit = 240000
+
+[model_providers.cch]
+name = "CCH"
+base_url = "https://cch.example/v1"
+`,
+      async ({ wd, home, codexDir, configPath }) => {
+        const before = await readFile(configPath, 'utf-8');
+        const res = runOmx(wd, ['doctor'], { HOME: home, CODEX_HOME: codexDir });
+        if (shouldSkipForSpawnPermissions(res.error)) return;
+
+        assert.equal(res.status, 0, res.stderr || res.stdout);
+        assert.doesNotMatch(res.stdout, /Model context recommendation/);
+        assert.equal(await readFile(configPath, 'utf-8'), before);
+      },
+    );
+  });
+
   it('does not apply the gpt-5.6-terra recommendation warning to other models', async () => {
     await withConfig(
       `

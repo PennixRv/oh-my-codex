@@ -1220,7 +1220,11 @@ async function checkModelContextRecommendation(
 		const model = parsed.model;
 		if (typeof model !== "string") return null;
 
-		const recommendation = getModelContextRecommendation(model);
+		const modelProvider =
+			typeof parsed.model_provider === "string"
+				? parsed.model_provider
+				: undefined;
+		const recommendation = getModelContextRecommendation(model, modelProvider);
 		if (!recommendation) return null;
 
 		const configuredValues: string[] = [];

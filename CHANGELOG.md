@@ -4,6 +4,10 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+## [0.18.87] - 2026-07-15
+
+Patch release for provider-aware model-context diagnostics. `omx doctor` now treats the `250000 / 200000` values as OMX's no-provider setup recommendation rather than a universal `gpt-5.6-terra` limit. Explicit providers such as `cch` keep their user-owned context settings without a false warning.
+
 ## [0.18.86] - 2026-07-14
 
 Patch release that moves model and reasoning display to Codex's native footer while retaining OMX's focused tmux operational status line. New and OMX-managed Codex configurations now use the native model-only status line, and general OMX role defaults move to `gpt-5.6-terra`.
