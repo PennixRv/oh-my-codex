@@ -102,7 +102,7 @@ import {
 	hasOmxAgentsContract,
 	hasOmxManagedAgentsSections,
 	isOmxGeneratedAgentsMd,
-	preserveUserOmxPolicyBlocks,
+	preserveUserAgentsPreamble,
 	upsertManagedAgentsBlock,
 } from "../utils/agents-md.js";
 import { DEFAULT_HUD_CONFIG, type StatusLinePreset } from "../hud/types.js";
@@ -3103,7 +3103,7 @@ export async function setup(options: SetupOptions = {}): Promise<void> {
 					!pluginAgentsMdIsSymlink &&
 					isOmxGeneratedAgentsMd(existingPluginAgentsMd);
 				const pluginAgentsMdContent = pluginAgentsMdExists
-					? preserveUserOmxPolicyBlocks(existingPluginAgentsMd, rewritten)
+					? preserveUserAgentsPreamble(existingPluginAgentsMd, rewritten)
 					: rewritten;
 				const defaultWouldChange = pluginAgentsMdExists
 					? existingPluginAgentsMd !== pluginAgentsMdContent
@@ -3231,7 +3231,7 @@ export async function setup(options: SetupOptions = {}): Promise<void> {
 									modelTableDefinitions,
 								)
 							: existingIsGeneratedAgentsMd
-								? rewritten
+								? preserveUserAgentsPreamble(existing, rewritten)
 								: upsertManagedAgentsBlock(existing, rewritten);
 						canApplyManagedModelRefresh = managedRefreshContent !== existing;
 						canApplyManagedRefreshDuringActiveSession =

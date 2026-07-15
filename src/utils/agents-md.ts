@@ -92,6 +92,34 @@ export function preserveUserOmxPolicyBlocks(
   return `${normalizedNext.trimEnd()}\n\n${missingBlocks.join('\n\n')}\n`
 }
 
+/**
+ * Retain user guidance prepended to a generated AGENTS.md during a refresh.
+ *
+ * A generated file starts with a canonical prefix followed by the generated
+ * marker. Preserve only content before that exact prefix; this avoids treating
+ * changes inside the managed document as user-owned guidance.
+ */
+export function preserveUserAgentsPreamble(
+  existingContent: string,
+  nextContent: string,
+): string {
+  const existingMarkerIndex = existingContent.indexOf(OMX_GENERATED_AGENTS_MARKER)
+  const nextMarkerIndex = nextContent.indexOf(OMX_GENERATED_AGENTS_MARKER)
+  if (existingMarkerIndex < 0 || nextMarkerIndex < 0) {
+    return preserveUserOmxPolicyBlocks(existingContent, nextContent)
+  }
+
+  const existingPrefix = existingContent.slice(0, existingMarkerIndex)
+  const canonicalPrefix = nextContent.slice(0, nextMarkerIndex)
+  if (!existingPrefix.endsWith(canonicalPrefix)) {
+    return preserveUserOmxPolicyBlocks(existingContent, nextContent)
+  }
+
+  const preamble = existingPrefix.slice(0, -canonicalPrefix.length)
+  const managedExistingContent = existingContent.slice(preamble.length)
+  return `${preamble}${preserveUserOmxPolicyBlocks(managedExistingContent, nextContent)}`
+}
+
 export function upsertManagedAgentsBlock(
   existingContent: string,
   managedContent: string,

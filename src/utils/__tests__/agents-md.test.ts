@@ -12,6 +12,7 @@ import {
   OMX_MANAGED_AGENTS_START_MARKER,
   OMX_USER_POLICY_END_MARKER,
   OMX_USER_POLICY_START_MARKER,
+  preserveUserAgentsPreamble,
   preserveUserOmxPolicyBlocks,
 } from '../agents-md.js';
 
@@ -183,5 +184,23 @@ describe('agents-md helpers', () => {
     const regenerated = `${OMX_GENERATED_AGENTS_MARKER}\n${policyBlock}\n`;
 
     assert.equal(preserveUserOmxPolicyBlocks(existing, regenerated), regenerated);
+  });
+
+  it('preserves an unmarked preamble before an otherwise generated document', () => {
+    const canonicalPrefix = [
+      '<!-- AUTONOMY DIRECTIVE — DO NOT REMOVE -->',
+      '<!-- END AUTONOMY DIRECTIVE -->',
+      '',
+    ].join('\n');
+    const preamble = '## Context Continuity\n\nKeep this local policy.\n\n';
+    const existing = `${preamble}${canonicalPrefix}${OMX_GENERATED_AGENTS_MARKER}\n# Old defaults\n`;
+    const refreshed = `${canonicalPrefix}${OMX_GENERATED_AGENTS_MARKER}\n# New defaults\n`;
+
+    const result = preserveUserAgentsPreamble(existing, refreshed);
+
+    assert.equal(
+      result,
+      `${preamble}${canonicalPrefix}${OMX_GENERATED_AGENTS_MARKER}\n# New defaults\n`,
+    );
   });
 });

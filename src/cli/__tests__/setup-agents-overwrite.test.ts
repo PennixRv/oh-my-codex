@@ -916,6 +916,46 @@ describe('omx setup AGENTS refresh behavior', () => {
       await rm(wd, { recursive: true, force: true });
     }
   });
+
+  it('preserves an unmarked preamble during plugin defaults refresh', async () => {
+    const wd = await mkdtemp(join(tmpdir(), 'omx-setup-plugin-agents-preamble-'));
+    const restoreTty = setMockTty(false);
+    const home = join(wd, 'home');
+    const restoreHome = setMockHome(home);
+    const codexAgentsPath = join(home, '.codex', 'AGENTS.md');
+    const template = readFileSync(join(process.cwd(), 'templates', 'AGENTS.md'), 'utf-8');
+    const preamble = '## Context Continuity\n\nNever discard this local contract.\n\n';
+    try {
+      await mkdir(join(wd, '.omx', 'state'), { recursive: true });
+      await mkdir(join(home, '.codex'), { recursive: true });
+      const staleManaged = upsertAgentsModelTable(
+        addGeneratedAgentsMarker(template),
+        {
+          frontierModel: 'legacy-frontier',
+          sparkModel: 'legacy-spark',
+          subagentDefaultModel: 'legacy-frontier',
+        },
+      );
+      await writeFile(codexAgentsPath, `${preamble}${staleManaged}`);
+
+      const output = await runSetupWithCapturedLogs(wd, {
+        scope: 'user',
+        installMode: 'plugin',
+        force: true,
+      });
+      const agents = await readFile(codexAgentsPath, 'utf-8');
+
+      assert.match(output, /Refreshed plugin-mode AGENTS\.md defaults/);
+      assert.match(agents, /^## Context Continuity/);
+      assert.match(agents, /Never discard this local contract\./);
+      assert.doesNotMatch(agents, /legacy-frontier/);
+      assert.doesNotMatch(agents, /legacy-spark/);
+    } finally {
+      restoreHome();
+      restoreTty();
+      await rm(wd, { recursive: true, force: true });
+    }
+  });
 });
 
 describe('omx setup plugin developer_instructions behavior', () => {
