@@ -45,6 +45,7 @@ describe('tmux status left renderer', () => {
       'nord',
     );
 
+    assert.match(rendered, /^  /);
     assert.doesNotMatch(rendered, /Model/);
     assert.doesNotMatch(rendered, /Effort/);
     assert.match(rendered, /Cost/);
@@ -112,6 +113,7 @@ describe('tmux status right renderer', () => {
       'nord',
     );
 
+    assert.match(rendered, /  $/);
     assert.match(rendered, /Sess/);
     assert.match(rendered, /dev/);
     assert.match(rendered, /Path/);

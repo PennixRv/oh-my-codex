@@ -19,6 +19,7 @@ const ROLLOUT_CANDIDATE_SCAN_LIMIT = 48;
 const ROLLOUT_CANDIDATE_CACHE_SECONDS = 10;
 const ROLLOUT_PREVIEW_BYTES = 16 * 1024;
 const OFFICIAL_CONTEXT_BASELINE_TOKENS = 12_000;
+const TMUX_STATUS_OUTER_GUTTER = '  ';
 const CCH_ADMIN_TOKEN_FILE_ENV_VARS = [
   'CCH_ADMIN_TOKEN_FILE',
   'OMX_CCH_ADMIN_TOKEN_FILE',
@@ -379,7 +380,7 @@ export function renderTmuxStatusLeft(
   if (teamSupplement) {
     parts.push(teamSupplement);
   }
-  return parts.join(` ${tmuxSeparator(theme)} `);
+  return `${TMUX_STATUS_OUTER_GUTTER}${parts.join(` ${tmuxSeparator(theme)} `)}`;
 }
 
 function shortenHomePath(path: string): string {
@@ -421,7 +422,7 @@ export function renderTmuxStatusRight(
     );
   }
   parts.push(tmuxStyle(theme.time, snapshot.timeLabel));
-  return parts.join(` ${tmuxSeparator(theme)} `);
+  return `${parts.join(` ${tmuxSeparator(theme)} `)}${TMUX_STATUS_OUTER_GUTTER}`;
 }
 
 function readCacheKeyPath(cacheDir: string, key: string): string {

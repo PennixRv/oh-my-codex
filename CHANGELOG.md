@@ -4,6 +4,10 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+## [0.18.88] - 2026-07-15
+
+Patch release for tmux-status outer gutter parity. OMX's managed tmux status bar now keeps two columns at the outer left and right edges, matching Codex's intentional footer gutter without modifying Codex's native footer or changing the telemetry content.
+
 ## [0.18.87] - 2026-07-15
 
 Patch release for provider-aware model-context diagnostics. `omx doctor` now treats the `250000 / 200000` values as OMX's no-provider setup recommendation rather than a universal `gpt-5.6-terra` limit. Explicit providers such as `cch` keep their user-owned context settings without a false warning.
