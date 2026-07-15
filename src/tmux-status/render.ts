@@ -53,7 +53,6 @@ interface ParsedCodexConfig {
 
 interface PaneContext {
   paneId: string;
-  sessionName: string;
   currentPath: string;
   currentCommand: string;
   startCommand: string;
@@ -122,7 +121,7 @@ export interface TmuxStatusRenderSnapshot {
   totalTokens?: number;
   cacheRate?: number;
   teamSupplement?: TeamSupplement;
-  sessionName: string;
+  codexSessionId?: string;
   panePath: string;
   gitBranch?: string;
   gitDirty?: boolean;
@@ -130,15 +129,15 @@ export interface TmuxStatusRenderSnapshot {
 }
 
 const STATUS_LABELS = {
-  cost: 'Cost',
-  context: 'Ctx',
-  total: 'Total',
-  cache: 'Cache',
-  team: 'Team',
-  worker: 'Wrk',
-  session: 'Sess',
-  path: 'Path',
-  git: 'Git',
+  cost: 'cost',
+  context: 'ctx',
+  total: 'total',
+  cache: 'cache',
+  team: 'team',
+  worker: 'wrk',
+  session: 'sess',
+  path: 'path',
+  git: 'git',
 } as const;
 
 const BASE_THEME_PALETTE: TmuxThemePalette = {
@@ -232,7 +231,7 @@ function formatPercent(value: number | undefined, digits: number = 2): string {
 
 function formatCostUsd(value: number | undefined): string {
   if (value === undefined || !Number.isFinite(value)) return '?';
-  return `$${value.toFixed(2)}`;
+  return value.toFixed(2);
 }
 
 function computeOfficialContextRemainingPercent(
@@ -336,10 +335,12 @@ function renderTeamSupplement(
   );
 }
 
-function normalizeDisplayedSessionName(sessionName: string): string {
-  const sanitized = sanitizeTmuxText(sessionName || '?');
-  if (sanitized === '') return '?';
-  return sanitized.replace(/([_-])[0-9a-f]{8,}$/i, '');
+function formatCodexSessionPrefix(sessionId: string | undefined): string {
+  const sanitized = sanitizeTmuxText(sessionId ?? '');
+  const match = sanitized.match(
+    /^([0-9a-f]{8})-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
+  );
+  return match?.[1] ?? '?';
 }
 
 export function renderTmuxStatusLeft(
@@ -349,12 +350,6 @@ export function renderTmuxStatusLeft(
   if (!snapshot.visible) return '';
   const theme = THEMES[themeName];
   const parts = [
-    renderLabeledSegment(
-      theme,
-      STATUS_LABELS.cost,
-      formatCostUsd(snapshot.costUsd),
-      theme.cost,
-    ),
     renderLabeledSegment(
       theme,
       STATUS_LABELS.context,
@@ -375,6 +370,12 @@ export function renderTmuxStatusLeft(
       formatPercent(snapshot.cacheRate),
       theme.cache,
     ),
+    renderLabeledSegment(
+      theme,
+      STATUS_LABELS.cost,
+      formatCostUsd(snapshot.costUsd),
+      theme.cost,
+    ),
   ];
   const teamSupplement = renderTeamSupplement(snapshot.teamSupplement, theme);
   if (teamSupplement) {
@@ -394,7 +395,7 @@ export function renderTmuxStatusRight(
 ): string {
   const theme = THEMES[themeName];
   const pathLabel = sanitizeTmuxText(shortenHomePath(snapshot.panePath || '.'));
-  const sessionLabel = normalizeDisplayedSessionName(snapshot.sessionName || '?');
+  const sessionLabel = formatCodexSessionPrefix(snapshot.codexSessionId);
   const parts = [
     renderLabeledSegment(
       theme,
@@ -751,17 +752,16 @@ async function readPaneContext(paneId: string): Promise<PaneContext | null> {
     '-p',
     '-t',
     paneId,
-    `#{pane_id}${TMUX_FIELD_SEPARATOR}#{session_name}${TMUX_FIELD_SEPARATOR}#{pane_current_path}${TMUX_FIELD_SEPARATOR}#{pane_current_command}${TMUX_FIELD_SEPARATOR}#{pane_start_command}${TMUX_FIELD_SEPARATOR}#{pane_pid}`,
+    `#{pane_id}${TMUX_FIELD_SEPARATOR}#{pane_current_path}${TMUX_FIELD_SEPARATOR}#{pane_current_command}${TMUX_FIELD_SEPARATOR}#{pane_start_command}${TMUX_FIELD_SEPARATOR}#{pane_pid}`,
   ]);
   if (!output) return null;
-  const [resolvedPaneId, sessionName, currentPath, currentCommand, startCommand, panePid] = output
+  const [resolvedPaneId, currentPath, currentCommand, startCommand, panePid] = output
     .split(TMUX_FIELD_SEPARATOR)
     .map((value) => value ?? '');
   if (!resolvedPaneId) return null;
   const parsedPid = Number.parseInt(panePid, 10);
   return {
     paneId: resolvedPaneId,
-    sessionName,
     currentPath,
     currentCommand,
     startCommand,
@@ -1348,7 +1348,6 @@ async function buildRenderSnapshot(
       config: readTmuxStatusBarConfig(resolve(homedir(), '.codex')),
       snapshot: {
         visible: false,
-        sessionName: '',
         panePath: '',
         timeLabel: new Date().toLocaleTimeString('en-GB', {
           hour: '2-digit',
@@ -1420,7 +1419,7 @@ async function buildRenderSnapshot(
       totalTokens: usage.totalTokens,
       cacheRate: usage.cacheRate,
       teamSupplement,
-      sessionName: pane.sessionName,
+      codexSessionId: exactSessionId,
       panePath: pane.currentPath,
       gitBranch: git.branch,
       gitDirty: git.dirty,

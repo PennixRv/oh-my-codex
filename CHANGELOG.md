@@ -4,6 +4,14 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+## [0.18.89] - 2026-07-15
+
+Patch release for tmux-status identity and telemetry label clarity. The managed OMX tmux status bar now renders lowercase labels, moves `cost` to the end of the left telemetry group without a currency symbol, and shows the first UUID segment of the active Codex session instead of the enclosing AOE/tmux session name.
+
+- All visible status labels are lowercase while preserving the established field set, colors, separators, and outer gutters.
+- `cost` now follows `ctx`, `total`, and `cache` as the last field in the left telemetry group, and renders its numeric USD amount without a `$` prefix.
+- `sess` derives solely from the active Codex UUID resolved from pane-local resume or rollout metadata; it displays the first eight-character segment and never falls back to an AOE session name.
+
 ## [0.18.88] - 2026-07-15
 
 Patch release for tmux-status outer gutter parity. OMX's managed tmux status bar now keeps two columns at the outer left and right edges, matching Codex's intentional footer gutter without modifying Codex's native footer or changing the telemetry content.

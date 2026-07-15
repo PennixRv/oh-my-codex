@@ -22,7 +22,7 @@ function makeSnapshot(
     ctxMax: 250000,
     totalTokens: 2_878_679,
     cacheRate: 37.5,
-    sessionName: 'dev',
+    codexSessionId: '019f4ea7-42b0-7aa3-854a-8138f139cc08',
     panePath: '/home/example/work/repo',
     gitBranch: 'feature/status-bar',
     gitDirty: true,
@@ -48,17 +48,19 @@ describe('tmux status left renderer', () => {
     assert.match(rendered, /^  /);
     assert.doesNotMatch(rendered, /Model/);
     assert.doesNotMatch(rendered, /Effort/);
-    assert.match(rendered, /Cost/);
-    assert.match(rendered, /\$0\.13/);
-    assert.match(rendered, /Ctx/);
+    assert.match(rendered, /cost/);
+    assert.match(rendered, /0\.13/);
+    assert.doesNotMatch(rendered, /\$/);
+    assert.match(rendered, /ctx/);
     assert.match(rendered, /208\.0k\/238\.0k 87\.39%/);
-    assert.match(rendered, /Total/);
+    assert.match(rendered, /total/);
     assert.match(rendered, /2\.88M/);
-    assert.ok(rendered.indexOf('Ctx') < rendered.indexOf('Total'));
-    assert.ok(rendered.indexOf('Total') < rendered.indexOf('Cache'));
-    assert.match(rendered, /Cache/);
+    assert.ok(rendered.indexOf('ctx') < rendered.indexOf('total'));
+    assert.ok(rendered.indexOf('total') < rendered.indexOf('cache'));
+    assert.ok(rendered.indexOf('cache') < rendered.indexOf('cost'));
+    assert.match(rendered, /cache/);
     assert.match(rendered, /37\.50%/);
-    assert.match(rendered, /Team/);
+    assert.match(rendered, /team/);
     assert.match(rendered, /alpha 3\/2/);
   });
 
@@ -76,7 +78,7 @@ describe('tmux status left renderer', () => {
       'dracula',
     );
 
-    assert.match(rendered, /Wrk/);
+    assert.match(rendered, /wrk/);
     assert.match(rendered, /executor\/working/);
     assert.match(rendered, /Patch the tmux status insta/);
     assert.doesNotMatch(rendered, /worker-2/);
@@ -91,7 +93,7 @@ describe('tmux status left renderer', () => {
       'nord',
     );
 
-    assert.match(rendered, /Ctx/);
+    assert.match(rendered, /ctx/);
     assert.match(rendered, /60\.5k\/263\.0k 23\.00%/);
   });
 
@@ -107,33 +109,47 @@ describe('tmux status left renderer', () => {
 });
 
 describe('tmux status right renderer', () => {
-  it('renders session, path, git, and time', () => {
+  it('renders the Codex session prefix, path, git, and time', () => {
     const rendered = renderTmuxStatusRight(
       makeSnapshot(),
       'nord',
     );
 
     assert.match(rendered, /  $/);
-    assert.match(rendered, /Sess/);
-    assert.match(rendered, /dev/);
-    assert.match(rendered, /Path/);
+    assert.match(rendered, /sess/);
+    assert.match(rendered, /019f4ea7/);
+    assert.match(rendered, /path/);
     assert.match(rendered, /\/work\/repo/);
-    assert.match(rendered, /Git/);
+    assert.match(rendered, /git/);
     assert.match(rendered, /feature\/status-bar\*/);
     assert.match(rendered, /14:28/);
     assert.doesNotMatch(rendered, /Time/);
   });
 
-  it('strips transient hash suffixes from tmux session names', () => {
+  it('does not fall back to the tmux or AOE session name', () => {
     const rendered = renderTmuxStatusRight(
       makeSnapshot({
-        sessionName: 'aoe_Armenians_a768005a',
+        codexSessionId: undefined,
       }),
       'nord',
     );
 
-    assert.match(rendered, /aoe_Armenians/);
-    assert.doesNotMatch(rendered, /a768005a/);
+    assert.match(rendered, /sess/);
+    assert.match(rendered, /\?/);
+    assert.doesNotMatch(rendered, /aoe_/);
+  });
+
+  it('rejects incomplete Codex session identifiers', () => {
+    const rendered = renderTmuxStatusRight(
+      makeSnapshot({
+        codexSessionId: '019f4ea7',
+      }),
+      'nord',
+    );
+
+    assert.match(rendered, /sess/);
+    assert.match(rendered, /\?/);
+    assert.doesNotMatch(rendered, /019f4ea7/);
   });
 });
 
